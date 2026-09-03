@@ -2307,7 +2307,7 @@ Create a new content object. The object starts in `draft` status with an initial
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `contentType` | string | yes | One of `quiz`, `bank`, `flashcard`, `written`, `osce`, `library`, `video` |
+| `contentType` | string | yes | One of `quiz`, `bank`, `flashcard`, `written`, `mixed`, `osce`, `library`, `video` |
 | `title` | string | no | Trimmed and truncated to 200 chars; stored as the initial DB title |
 | `language` | string | no | Defaults to `"en"` if omitted |
 | `content` | string | no | Initial draft body written to R2. If omitted, defaults to `JSON.stringify({title: <title or "Untitled">}, null, 2)`. |
@@ -2322,6 +2322,7 @@ The R2 key base is `content/<contentType>/<uuid>`, and the initial draft is writ
 | `bank` | QBank-style question bank (exam-style MCQs) |
 | `flashcard` | Flashcard deck |
 | `written` | Written-answer practice questions |
+| `mixed` | Mixed pack: MCQ (`questions`/`passages`) + written (`prompts`) with optional `chapters` |
 | `osce` | OSCE scenario/case |
 | `library` | Library article / reference material |
 | `video` | Video tutorial (metadata + transcript) |

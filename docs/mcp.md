@@ -163,7 +163,7 @@ The server also exposes **prompts** — these surface in the client's slash
 | `translate_pack` | Translate a pack (schema/ids/images preserved) |
 
 The `instructions` field on `initialize` describes every engine's JSON shape
-(`quiz`, `bank`, `written`, `flashcard`, `osce`, `video`, `library`).
+(`quiz`, `bank`, `written`, `mixed`, `flashcard`, `osce`, `video`, `library`).
 
 ## Example: PDF → QBank pipeline
 

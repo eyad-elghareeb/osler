@@ -989,7 +989,7 @@ Examples:
 | Rule | Value |
 | --- | --- |
 | Draft body max size | 1 MB (`1_000_000` bytes) — enforced on `PUT /v1/admin/content/:id/draft` |
-| Content type | Must be one of: `quiz`, `bank`, `written`, `flashcard`, `osce`, `library`, `video` |
+| Content type | Must be one of: `quiz`, `bank`, `written`, `mixed`, `flashcard`, `osce`, `library`, `video` |
 
 ### 9.6 Sync document size
 

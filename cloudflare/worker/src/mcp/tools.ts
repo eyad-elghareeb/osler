@@ -49,7 +49,7 @@ export interface McpCtx {
 /** Tool-logic failure surfaced to the agent as an isError tool result. */
 export class ToolError extends Error {}
 
-const CONTENT_TYPES = ["quiz", "bank", "written", "flashcard", "osce", "library", "video"] as const;
+const CONTENT_TYPES = ["quiz", "bank", "written", "mixed", "flashcard", "osce", "library", "video"] as const;
 
 // Draft/pack bodies are capped at 2 MB inline (create_content_draft,
 // update_draft_body, create_content_pack). update_published_content and

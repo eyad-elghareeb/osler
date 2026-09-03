@@ -550,7 +550,7 @@ The "+ New content" button opens a dialog asking for three fields:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | Title | Free text | (empty) | Required. Will appear in the browser and as the editor's header. |
-| Content type | Select | `library` | One of: `quiz`, `bank`, `flashcard`, `written`, `osce`, `library`, `video`. |
+| Content type | Select | `library` | One of: `quiz`, `bank`, `flashcard`, `written`, `mixed`, `osce`, `library`, `video`. |
 | Language | Select | `en` | One of: `en` (English), `ar` (العربية). |
 
 On Create:

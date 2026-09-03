@@ -557,12 +557,13 @@ Osler's content is folder-based. Adding a new content pack is the most common wa
 
 ```
 public/osler-content/
-├── qbank/                 ← quiz / bank / written (JSON; type auto-detected from file keys)
+├── qbank/                 ← quiz / bank / written / mixed (JSON; type auto-detected from file keys)
 │   ├── cardiology/
 │   │   ├── arrhythmias/
 │   │   │   ├── questions.json       ← "quiz" (has `questions` key)
 │   │   │   ├── passages.json        ← "bank" (has `passages` key)
 │   │   │   ├── prompts.json         ← "written" (has `prompts` key)
+│   │   │   ├── mixed.json           ← "mixed" (has MCQ `questions`/`passages` + written `prompts`)
 │   │   │   └── images/              ← optional: images referenced by relative path
 │   │   └── ...
 │   └── ...
@@ -650,6 +651,40 @@ Each content type has a schema defined in `src/lib/osler/types.ts`. The schemas 
   ]
 }
 ```
+
+#### Mixed (`mixed.json` — MCQ + written in one pack)
+
+A pack holding MCQ content (`questions` and/or `passages`) alongside written
+`prompts` is typed `"mixed"` (auto-detected when both are present, or set
+explicitly via `"type": "mixed"`). Sessions render each question by shape
+(`correct >= 0` → MCQ, otherwise written) and the Create tab can filter the
+pool by chapter, question type, and difficulty.
+
+```jsonc
+{
+  "meta": { "uid": "mixed-cardiology", "title": "Cardiology Mixed Pack", "lang": "en" },
+  "type": "mixed",
+  "chapters": [
+    { "id": "ch-arr", "title": "Arrhythmias", "start": 1, "end": 20 },
+    { "id": "ch-hf", "title": "Heart Failure", "questionIds": ["q-hf-01", "w-hf-01"] }
+  ],
+  "questions": [ { "id": "q-hf-01", /* …same shape as a quiz question… */ } ],
+  "prompts": [ { "id": "w-hf-01", /* …same shape as a written prompt… */ } ]
+}
+```
+
+Chapter entries support 1-based index ranges (`start`/`end`, `from`/`to`, or
+`range: "1-40"`), explicit `questionIds` / `passageIds`, or per-question
+`chapter` / `chapterId` fields. Any `quiz` / `bank` / `written` pack may also
+carry a top-level `chapters` array — it does not have to be `mixed`.
+
+#### Question images (all qbank types)
+
+`images` / `explanationImages` accept a single item or an array, where each
+item is either `{ "src": "…" }` or a bare string. Sources resolve in order:
+bare filenames against the pack's `images/` subfolder, otherwise absolute
+`https://` (or protocol-relative `//`) CDN URLs and `data:image/…` URIs pass
+through untouched. HTML `<img src="…">` inside rich text is supported too.
 
 #### Flashcard (`cards.json`)
 

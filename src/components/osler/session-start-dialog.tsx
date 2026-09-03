@@ -309,7 +309,7 @@ export function SessionStartDialog({
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto osler-scroll pr-1">
                     {chapters.map((ch) => {
-                      const isSelected = selectedChapters.includes(ch.id);
+                      const isSelected = selectedChapters.length === 0 || selectedChapters.includes(ch.id);
                       return (
                         <button
                           type="button"

@@ -44,6 +44,29 @@ function validateContent(contentType: string, parsed: any): string[] {
       if (!Array.isArray(q.options) || q.options.length < 2) errors.push(`${p}: at least 2 options required`);
       if (typeof q.correct !== "number" || q.correct < 0 || q.correct >= (q.options?.length ?? 0)) errors.push(`${p}: correct index out of bounds`);
     });
+  } else if (contentType === "mixed") {
+    const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
+    const ps = Array.isArray(parsed.passages) ? parsed.passages : [];
+    const ws = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+    if (qs.length === 0 && ps.length === 0 && ws.length === 0) {
+      return ["mixed: at least one of `questions`, `passages`, or `prompts` is required"];
+    }
+    const hasMcq = qs.length > 0 || ps.length > 0;
+    if (!hasMcq || ws.length === 0) {
+      errors.push("mixed: needs both MCQ content (`questions` and/or `passages`) and written `prompts`");
+    }
+    qs.forEach((q: any, i: number) => {
+      const p = `questions[${i}]`;
+      if (!vid(q.id)) errors.push(`${p}: id required`);
+    });
+    ws.forEach((p: any, i: number) => {
+      const prefix = `prompts[${i}]`;
+      if (!vid(p.id)) errors.push(`${prefix}: id required`);
+      if (typeof p.prompt !== "string" || !p.prompt.trim()) errors.push(`${prefix}: prompt required`);
+    });
+    if (parsed.chapters !== undefined && !Array.isArray(parsed.chapters)) {
+      errors.push("mixed: `chapters` must be an array when present");
+    }
   } else if (contentType === "flashcard") {
     const cs = parsed.cards;
     if (!Array.isArray(cs)) return ["flashcard: `cards` array required"];
@@ -149,5 +172,14 @@ describe("validateContent", () => {
   });
   it("returns empty for library (no schema)", () => {
     expect(validateContent("library", {})).toEqual([]);
+  });
+  it("validates mixed packs", () => {
+    const good = {
+      questions: [{ id: "q1" }],
+      prompts: [{ id: "w1", prompt: "Explain." }],
+    };
+    expect(validateContent("mixed", good)).toEqual([]);
+    expect(validateContent("mixed", {}).length).toBeGreaterThan(0);
+    expect(validateContent("mixed", { questions: [{ id: "q1" }] }).length).toBeGreaterThan(0);
   });
 });

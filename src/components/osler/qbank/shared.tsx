@@ -417,7 +417,10 @@ export function saveSession(s: SessionData) {
     if (q.correct >= 0) return false;
     if (!s.revealed[i]) return false;
     if (s.engine === "flashcard") return s.ratings[q.id] === "easy";
-    if (s.engine === "written" || s.engine === "osce") {
+    // Rubric-graded written questions count wherever they appear — pure
+    // written/OSCE sessions as well as quiz/bank/mixed sessions that now
+    // freely include written questions.
+    if (q.rubric && q.rubric.length > 0) {
       const rubric = s.rubricState[q.id] ?? [];
       return (
         q.rubric &&

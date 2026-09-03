@@ -46,6 +46,8 @@ const DATA_TYPE_KEYS = [
  * Read the engine type from a data JSON file.
  * First checks for an explicit `type` field at the top level.
  * Falls back to inferring from data keys (questions → quiz, etc.).
+ * A file holding both MCQ keys (questions/passages) and written `prompts`
+ * is a `mixed` pack (MCQ + written).
  */
 function inferTypeFromData(filePath) {
   try {
@@ -53,6 +55,12 @@ function inferTypeFromData(filePath) {
     const data = JSON.parse(raw);
     // Explicit type field takes priority
     if (data.type && typeof data.type === "string") return data.type;
+    // Mixed pack: MCQ content (questions or passages) alongside written prompts
+    const hasMcq =
+      (Array.isArray(data.questions) && data.questions.length > 0) ||
+      (Array.isArray(data.passages) && data.passages.length > 0);
+    const hasWritten = Array.isArray(data.prompts) && data.prompts.length > 0;
+    if (hasMcq && hasWritten) return "mixed";
     // Fallback: infer from data keys
     for (const { key, type } of DATA_TYPE_KEYS) {
       if (Array.isArray(data[key]) && data[key].length > 0) return type;

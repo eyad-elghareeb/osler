@@ -84,7 +84,8 @@ Your API token has one of two privilege levels:
 \`\`\`
 - \`correct\` is zero-based index (0 to 4).
 - Must have at least 2 options (standard: 5).
-- Image paths: \`images/filename.png\` or \`filename.png\` (relative to the pack folder).
+- Image paths: \`images/filename.png\` or \`filename.png\` (relative to the pack folder). Absolute \`https://\` (or \`//\`) CDN URLs and \`data:image/…\` URIs also pass through; HTML \`<img src="…">\` is supported in rich text.
+- Any quiz/bank/written pack may carry an optional top-level \`chapters\` array (see §3.6 Mixed); sessions let students filter by chapter.
 
 ### 2. Question Bank (Case Passages with Sub-questions)
 \`\`\`json
@@ -174,7 +175,22 @@ Your API token has one of two privilege levels:
 }
 \`\`\`
 
-### 6. Video Lessons
+### 6. Mixed Packs — MCQ + Written with Chapters
+\`\`\`json
+{
+  "type": "mixed",
+  "chapters": [
+    { "id": "ch-arr", "title": "Arrhythmias", "start": 1, "end": 20 },
+    { "id": "ch-hf", "title": "Heart Failure", "questionIds": ["q-hf-01", "w-hf-01"] }
+  ],
+  "questions": [{ "id": "q-hf-01", "question": "…", "options": ["…"], "correct": 2, "explanation": "…" }],
+  "prompts": [{ "id": "w-hf-01", "prompt": "…", "rubric": ["…"], "modelAnswer": "…" }]
+}
+\`\`\`
+- A pack holding MCQ content (\`questions\` and/or \`passages\`) alongside written \`prompts\` is typed \`"mixed"\` (auto-detected when both are present). Validate with contentType \`"mixed"\`: needs BOTH MCQ content and written \`prompts\`.
+- Chapter entries: \`{ id, title, description? }\` plus one addressing mode — 1-based index ranges (\`start\`/\`end\`, \`from\`/\`to\`, or \`range: "1-40"\`), explicit \`questionIds\`/\`passageIds\`, or per-question \`chapter\`/\`chapterId\` fields.
+
+### 7. Video Lessons
 \`\`\`json
 {
   "videos": [
@@ -188,7 +204,7 @@ Your API token has one of two privilege levels:
 }
 \`\`\`
 
-### 7. Library Articles with Sidecar Metadata
+### 8. Library Articles with Sidecar Metadata
 - File format: \`<slug>.md\` or \`<slug>.html\`
 - Sidecar file: \`<slug>.meta.json\` located adjacent to the article file.
 \`\`\`json

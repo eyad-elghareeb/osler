@@ -604,7 +604,7 @@ export const en = {
 
     /* ── Create Test additions ───────────────────────────────────────── */
     "qbank.create.sources": "Source packs",
-    "qbank.create.sourceHint": "Pick one or more packs from any folder. Quiz and bank packs can be mixed; written packs must be taken alone.",
+    "qbank.create.sourceHint": "Pick one or more packs from any folder. Quiz, bank, written, and mixed packs can be freely combined.",
     "qbank.create.onlyMode": "Filter by progress",
     "qbank.create.onlyAll": "All",
     "qbank.create.onlyNew": "New only",
@@ -613,7 +613,6 @@ export const en = {
     "qbank.create.tagQuestionLevel": "Tags (per question)",
     "qbank.create.countStepper": "Number of questions",
     "qbank.create.availableAfterFilter": "{n} available after filters",
-    "qbank.create.writtenMixedBlock": "Written packs can't be combined with quiz/bank packs in a single session.",
     "qbank.create.matchingPacks": "Matching packs",
     "qbank.create.startCustom": "Start custom session",
     "qbank.create.chapters": "Filter by chapter",

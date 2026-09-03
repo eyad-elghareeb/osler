@@ -1,6 +1,6 @@
 ---
 name: osler-content-authoring
-description: Comprehensive authoring and management manual for Osler medical content packs (Quiz, QBank, Flashcards, OSCE stations, Written prompts, Videos, Library articles with HTML & sidecar metadata), MCP tool suite, safeguards, and manifest synchronization.
+description: Comprehensive authoring and management manual for Osler medical content packs (Quiz, QBank, Flashcards, OSCE stations, Written prompts, Mixed MCQ+Written packs with chapters, Videos, Library articles with HTML & sidecar metadata), MCP tool suite, safeguards, and manifest synchronization.
 ---
 
 # Osler Content Authoring & Management Guide
@@ -44,6 +44,9 @@ This skill provides complete schemas, authoring patterns, MCP tool workflows, sa
 ```
 - `correct` is zero-based index (0 to 4).
 - Standard question format has 5 options.
+- **Chapters (optional)**: any quiz pack may carry a top-level `chapters` array — see §Mixed Packs for the chapter schema. Sessions let students filter by chapter.
+- **Images**: `images` / `explanationImages` accept a `ContentImage`, an array, or bare strings. Bare filenames resolve against the pack's `images/` subfolder; absolute `https://` (or protocol-relative `//`) CDN URLs and `data:image/…` URIs pass through. HTML `<img src="…">` in rich text works too.
+- A quiz pack may also carry a top-level `prompts` array (written cross-questions). A pack with both MCQ and written content is typed `mixed` (auto-detected).
 
 ---
 
@@ -76,6 +79,7 @@ This skill provides complete schemas, authoring patterns, MCP tool workflows, sa
   ]
 }
 ```
+- Banks may also carry flat top-level `questions` (no passage) and/or `prompts` (written cross-questions), plus an optional top-level `chapters` array — see §Mixed Packs. A pack with both MCQ and written content is typed `mixed` (auto-detected).
 
 ---
 
@@ -147,7 +151,7 @@ This skill provides complete schemas, authoring patterns, MCP tool workflows, sa
 
 ### E. Written Clinical Prompts (`written`)
 - **Canonical File**: `prompts.json`
-- **Location**: `content-files/written/<category>/<deck-name>/prompts.json`
+- **Location**: `content-files/qbank/<category>/<deck-name>/prompts.json`
 - **Schema**:
 ```json
 {
@@ -165,10 +169,55 @@ This skill provides complete schemas, authoring patterns, MCP tool workflows, sa
   ]
 }
 ```
+- Written packs may also carry an optional top-level `chapters` array and/or MCQ `questions` — see §Mixed Packs.
 
 ---
 
-### F. Video Lessons (`video`)
+### F. Mixed Packs — MCQ + Written with Chapters (`mixed`)
+- **Canonical File**: `mixed.json` (any `.json` name works; type is auto-detected)
+- **Location**: `content-files/qbank/<category>/<deck-name>/mixed.json`
+- **Rule**: a pack holding MCQ content (`questions` and/or `passages`) alongside written `prompts` is typed `"mixed"` — set `"type": "mixed"` explicitly or let the loader/manifest generator auto-detect it.
+- **Schema**:
+```json
+{
+  "title": "Cardiology Mixed Pack",
+  "meta": { "lang": "en", "tags": ["Cardiology"] },
+  "type": "mixed",
+  "chapters": [
+    { "id": "ch-arr", "title": "Arrhythmias", "start": 1, "end": 20 },
+    { "id": "ch-hf", "title": "Heart Failure", "questionIds": ["q-hf-01", "w-hf-01"] }
+  ],
+  "questions": [
+    {
+      "id": "q-hf-01",
+      "question": "Which finding…?",
+      "options": ["A", "B", "C", "D", "E"],
+      "correct": 2,
+      "explanation": "…",
+      "difficulty": "medium",
+      "tags": ["Cardiology"]
+    }
+  ],
+  "prompts": [
+    {
+      "id": "w-hf-01",
+      "prompt": "Describe the management of acute decompensated heart failure.",
+      "rubric": ["Identifies immediate stabilization", "Mentions vasodilators if hypertensive"],
+      "modelAnswer": "Initial stabilization involves…"
+    }
+  ]
+}
+```
+- **Chapter schema** (`ContentChapter`): `{ id, title, description? }` plus ONE addressing mode:
+  - 1-based question index ranges: `start`/`end`, `from`/`to`, or `range: "1-40"` (also accepts `"q1-q40"` and en/em dashes),
+  - explicit `questionIds: [...]` and/or `passageIds: [...]`,
+  - or per-question `chapter` / `chapterId` fields (also works without a root `chapters` array — distinct values become filter chips).
+- **Session behavior**: each question renders by shape (`correct >= 0` → MCQ, otherwise written). The launch dialog offers chapter multi-select; the Create tab adds chapter + question-type (MCQ/written) + difficulty (easy ≤2 / medium 3 / hard ≥4 on the 1–5 scale) filters.
+- **Validation** (`validate_content` with `contentType: "mixed"`): requires at least one of `questions`/`passages`/`prompts`, requires BOTH MCQ content and written `prompts`, and requires `chapters` to be an array when present.
+
+---
+
+### G. Video Lessons (`video`)
 - **Canonical File**: `videos.json`
 - **Location**: `content-files/videos/<category>/<deck-name>/videos.json`
 - **Schema**:
@@ -188,7 +237,7 @@ This skill provides complete schemas, authoring patterns, MCP tool workflows, sa
 
 ---
 
-### G. Library Articles with HTML & Sidecar Metadata (`library`)
+### H. Library Articles with HTML & Sidecar Metadata (`library`)
 - **Canonical File**: `<slug>.md` or `<slug>.html`
 - **Sidecar File**: `<slug>.meta.json` (always placed right next to the article file)
 - **Location**: `content-files/library/<specialty>/<subtopic>/<slug>.md`
@@ -246,7 +295,7 @@ This skill provides complete schemas, authoring patterns, MCP tool workflows, sa
 | `update_draft_body` | All | Update draft JSON or markdown body |
 | `upload_asset` | All | Upload image/diagram/audio asset into pack storage |
 | `delete_asset` | All | Delete asset from pack storage |
-| `validate_content` | All | Validate body against engine schema (all 7 types) |
+| `validate_content` | All | Validate body against engine schema (all 8 types, incl. `mixed`) |
 | `submit_for_review` | All | Snapshot draft to pending review candidate queue |
 | `read_content_file` | All | Read published student file from R2 (returns `bodySha1`) |
 | `list_content_files` | All | List published student-facing keys in R2 |

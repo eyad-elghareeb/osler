@@ -16,7 +16,7 @@
  *   - Tracker tab (for building review sessions from selections)
  *
  * Constraints enforced here (see `osler-qbank-rework-plan.md` §2):
- *   - `buildQuestionPool` merges `quiz` + `bank` + `written` packs freely.
+ *   - `buildQuestionPool` merges `quiz` + `bank` + `written` + `mixed` packs freely.
  *     MCQ and written questions coexist in the same pool; per-question
  *     detection (`correct >= 0` for MCQ, rubric/modelAnswer for written)
  *     drives the rendering branch at runtime.

@@ -605,7 +605,7 @@ export const ar = {
 
     /* ── Create Test additions ───────────────────────────────────────── */
     "qbank.create.sources": "حزم المصدر",
-    "qbank.create.sourceHint": "اختر حزمة أو أكثر من أي مجلد. يمكن خلط اختبارات البنوك مع بعضها؛ الأسئلة المقالية يجب أداؤها منفردة.",
+    "qbank.create.sourceHint": "اختر حزمة أو أكثر من أي مجلد. يمكن دمج حزم الاختيار والبنوك والمقالي والمختلط بحرية.",
     "qbank.create.onlyMode": "تصفية حسب التقدّم",
     "qbank.create.onlyAll": "الكل",
     "qbank.create.onlyNew": "جديد فقط",
@@ -614,7 +614,6 @@ export const ar = {
     "qbank.create.tagQuestionLevel": "الوسوم (لكل سؤال)",
     "qbank.create.countStepper": "عدد الأسئلة",
     "qbank.create.availableAfterFilter": "{n} متوفّر بعد التصفية",
-    "qbank.create.writtenMixedBlock": "لا يمكن دمج الحزم المقالية مع حزم الاختبار/البنك في جلسة واحدة.",
     "qbank.create.matchingPacks": "الحزم المطابقة",
     "qbank.create.startCustom": "ابدأ جلسة مخصّصة",
     "qbank.create.chapters": "تصفية حسب الفصل",

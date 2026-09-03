@@ -1102,7 +1102,7 @@ async function deleteManagedBase(env: Env, base: string): Promise<number> {
 }
 
 const CONTENT_TYPE_TO_CATEGORY: Record<string, string> = {
-  quiz: "qbank", bank: "qbank", written: "qbank",
+  quiz: "qbank", bank: "qbank", written: "qbank", mixed: "qbank",
   flashcard: "flashcard", osce: "osce",
   library: "library", video: "videos",
 };
@@ -1111,7 +1111,7 @@ const CONTENT_TYPE_TO_CATEGORY: Record<string, string> = {
  *  category folder, which content_types might publish into it.
  *  Used by the unified browser's /by-r2-key lookup. */
 const CATEGORY_TYPE_TO_TYPE: Record<string, string[]> = {
-  qbank: ["quiz", "bank", "written"],
+  qbank: ["quiz", "bank", "written", "mixed"],
   flashcard: ["flashcard"],
   osce: ["osce"],
   library: ["library"],
@@ -1137,6 +1137,7 @@ const TYPE_CANONICAL_FILE: Record<string, string> = {
   quiz: "questions.json",
   bank: "passages.json",
   written: "prompts.json",
+  mixed: "questions.json",
   flashcard: "cards.json",
   osce: "stations.json",
   video: "videos.json",
@@ -1379,6 +1380,10 @@ async function inferTypeFromContent(env: Env, category: string, folderPath: stri
       const obj = await env.CONTENT!.get(`content-files/${category}/${folderPath ? `${folderPath}/` : ""}${f}`);
       if (!obj) continue;
       const data = JSON.parse(await obj.text()) as Record<string, any>;
+      const hasMcq = (Array.isArray(data.questions) && data.questions.length > 0) ||
+        (Array.isArray(data.passages) && data.passages.length > 0);
+      const hasWritten = Array.isArray(data.prompts) && data.prompts.length > 0;
+      if (hasMcq && hasWritten) return "mixed";
       if (Array.isArray(data.questions) && data.questions.length) return "quiz";
       if (Array.isArray(data.passages) && data.passages.length) return "bank";
       if (Array.isArray(data.prompts) && data.prompts.length) return "written";
@@ -1900,6 +1905,29 @@ function validateContent(contentType: string, parsed: any): string[] {
       if (typeof p.prompt !== "string" || !p.prompt.trim()) errors.push(`${prefix}: prompt required`);
       if (!Array.isArray(p.rubric)) errors.push(`${prefix}: rubric array required`);
     });
+  } else if (contentType === "mixed") {
+    const qs = Array.isArray(parsed.questions) ? parsed.questions : [];
+    const ps = Array.isArray(parsed.passages) ? parsed.passages : [];
+    const ws = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+    if (qs.length === 0 && ps.length === 0 && ws.length === 0) {
+      return ["mixed: at least one of `questions`, `passages`, or `prompts` is required"];
+    }
+    const hasMcq = qs.length > 0 || ps.length > 0;
+    if (!hasMcq || ws.length === 0) {
+      errors.push("mixed: needs both MCQ content (`questions` and/or `passages`) and written `prompts`");
+    }
+    qs.forEach((q: any, i: number) => {
+      const p = `questions[${i}]`;
+      if (!vid(q.id)) errors.push(`${p}: id required`);
+    });
+    ws.forEach((p: any, i: number) => {
+      const prefix = `prompts[${i}]`;
+      if (!vid(p.id)) errors.push(`${prefix}: id required`);
+      if (typeof p.prompt !== "string" || !p.prompt.trim()) errors.push(`${prefix}: prompt required`);
+    });
+    if (parsed.chapters !== undefined && !Array.isArray(parsed.chapters)) {
+      errors.push("mixed: `chapters` must be an array when present");
+    }
   } else if (contentType === "flashcard") {
     const cs = parsed.cards;
     if (!Array.isArray(cs)) return ["flashcard: `cards` array required"];
@@ -3671,7 +3699,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
               } else if (fileSegment.endsWith(".json")) {
                 try {
                   const j = JSON.parse(text);
-                  if (Array.isArray(j.questions)) contentType = "quiz";
+                  const jHasMcq = (Array.isArray(j.questions) && j.questions.length > 0) ||
+                    (Array.isArray(j.passages) && j.passages.length > 0);
+                  const jHasWritten = Array.isArray(j.prompts) && j.prompts.length > 0;
+                  if (typeof j.type === "string" && j.type.trim()) contentType = j.type.trim();
+                  else if (jHasMcq && jHasWritten) contentType = "mixed";
+                  else if (Array.isArray(j.questions)) contentType = "quiz";
                   else if (Array.isArray(j.passages)) contentType = "bank";
                   else if (Array.isArray(j.prompts)) contentType = "written";
                   else if (Array.isArray(j.cards) || Array.isArray(j.decks) || Array.isArray(j.subdecks)) contentType = "flashcard";
@@ -3756,7 +3789,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       // bounded per invocation; already-deleted orphans vanish from the list,
       // so re-invoking until complete is idempotent.
       const MAX_ORPHAN_DELETES = 30;
-      const prefixes = ["content/quiz/", "content/bank/", "content/written/", "content/flashcard/", "content/osce/", "content/library/", "content/video/"];
+      const prefixes = ["content/quiz/", "content/bank/", "content/written/", "content/mixed/", "content/flashcard/", "content/osce/", "content/library/", "content/video/"];
       let scanned = 0;
       let deleted = 0;
       let remaining = 0;
@@ -3809,7 +3842,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
       const body = await readJson(request);
       const ct = typeof body.contentType === "string" ? body.contentType : "";
-      if (!["quiz","bank","flashcard","written","osce","library","video"].includes(ct)) return json({ error: "Invalid content type" }, 400, origin, log);
+      if (!["quiz","bank","flashcard","written","mixed","osce","library","video"].includes(ct)) return json({ error: "Invalid content type" }, 400, origin, log);
       // Library articles are markdown/html/pdf, not JSON — validating them
       // here reported every article as "Invalid JSON". Nothing structural
       // to check server-side yet; treat them as valid.
@@ -3845,7 +3878,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     if (request.method === "POST" && path === "/v1/admin/content") {
       if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
       const body = await readJson(request);
-      if (!body.contentType || !["quiz","bank","flashcard","written","osce","library","video"].includes(body.contentType)) return json({ error: "Invalid content type" }, 400, origin, log);
+      if (!body.contentType || !["quiz","bank","flashcard","written","mixed","osce","library","video"].includes(body.contentType)) return json({ error: "Invalid content type" }, 400, origin, log);
       const objectId = id();
       const r2Base = "content/" + body.contentType + "/" + objectId;
       const title = typeof body.title === "string" ? body.title.trim().slice(0, 200) : null;
@@ -3988,7 +4021,12 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           // sniff the JSON body for shape hints
           try {
             const j = JSON.parse(text);
-            if (Array.isArray(j.questions)) contentType = "quiz";
+            const jHasMcq = (Array.isArray(j.questions) && j.questions.length > 0) ||
+              (Array.isArray(j.passages) && j.passages.length > 0);
+            const jHasWritten = Array.isArray(j.prompts) && j.prompts.length > 0;
+            if (typeof j.type === "string" && j.type.trim()) contentType = j.type.trim();
+            else if (jHasMcq && jHasWritten) contentType = "mixed";
+            else if (Array.isArray(j.questions)) contentType = "quiz";
             else if (Array.isArray(j.passages)) contentType = "bank";
             else if (Array.isArray(j.prompts)) contentType = "written";
             else if (Array.isArray(j.cards) || Array.isArray(j.decks) || Array.isArray(j.subdecks)) contentType = "flashcard";
@@ -4002,7 +4040,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         const byCat = CATEGORY_TO_DEFAULT_TYPE[category];
         contentType = byCat;
       }
-      if (!contentType || !["quiz","bank","flashcard","written","osce","library","video"].includes(contentType)) {
+      if (!contentType || !["quiz","bank","flashcard","written","mixed","osce","library","video"].includes(contentType)) {
         return json({ error: "Could not infer contentType; pass it explicitly" }, 400, origin, log);
       }
 

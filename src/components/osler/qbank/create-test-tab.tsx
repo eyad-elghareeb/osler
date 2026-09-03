@@ -119,8 +119,8 @@ export function CreateTestTab({
   ) => void;
 }) {
   const { t, rtl } = useI18n();
-  // Source picker state — list of selected pack uids (any folder, any engine
-  // family — but quiz+bank only OR written only, never mixed).
+  // Source picker state — list of selected pack uids (any folder; the
+  // qbank families quiz/bank/written/mixed combine freely in one session).
   const [selectedSourceUids, setSelectedSourceUids] = React.useState<string[]>([]);
   // Tag filter operates on question-level tags (P2-3).
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
@@ -167,7 +167,7 @@ export function CreateTestTab({
    */
   const filteredTree = React.useMemo(() => {
     if (!qbankTree.length) return [] as ContentTreeNode[];
-    const qbankEngineTypes = new Set(["quiz", "bank", "written"]);
+    const qbankEngineTypes = new Set(["quiz", "bank", "written", "mixed"]);
     function walk(list: ContentTreeNode[]): ContentTreeNode[] {
       const out: ContentTreeNode[] = [];
       for (const node of list) {
@@ -226,25 +226,21 @@ export function CreateTestTab({
     [selectedSourceUids, entryByUid],
   );
 
-  // Engine types currently selected — used to enforce the quiz+bank-only merge rule.
+  // Engine types currently selected — used to check pool compatibility
+  // (quiz/bank/written/mixed combine freely; other families are excluded).
   const selectedEngineTypes = React.useMemo(
     () => Array.from(new Set(selectedEntries.map((e) => e.node.type as EngineType))),
     [selectedEntries],
   );
 
-  // The shared pool family — "mcq" (quiz/bank only), "written" (written only),
-  // or null (no selection yet, or a mixed mcq+written session).
+  // The shared pool family — "mcq" (quiz/bank only), "written" (written
+  // only), "mixed" (mixed only), or null (no selection yet, or a
+  // cross-family selection). The session engine itself is derived from the
+  // final pool's composition in handleCreateTest.
   const sharedFamily = React.useMemo(
     () => sharedPoolFamily(selectedEngineTypes),
     [selectedEngineTypes],
   );
-
-  // Whether the current selection contains both mcq and written packs.
-  const isMixedSession = React.useMemo(() => {
-    if (selectedEngineTypes.length === 0) return false;
-    const families = new Set(selectedEngineTypes.map(poolFamilyForEngine).filter(Boolean));
-    return families.has("mcq") && families.has("written");
-  }, [selectedEngineTypes]);
 
   // Build the merged question pool from selected sources (question-level stamped).
   const mergedPool = React.useMemo(
@@ -357,10 +353,13 @@ export function CreateTestTab({
     if (mergedPool.length === 0) return;
     const finalPool = pickQuestions(filteredPool, desiredCount, order);
     if (finalPool.length === 0) return;
-    // The session's engine — for mixed sessions, use the first question's
-    // type. Per-question rendering is driven by qIsMCQ (correct >= 0).
-    const engine = isMixedSession
-      ? (finalPool[0].correct >= 0 ? "quiz" : "written")
+    // The session's engine — derived from the final pool's composition so
+    // mixed packs (and any mcq+written combination) land on "mixed".
+    // Per-question rendering is driven by qIsMCQ (correct >= 0).
+    const poolHasMcq = finalPool.some((q) => q.correct >= 0);
+    const poolHasWritten = finalPool.some((q) => q.correct < 0);
+    const engine: EngineType = poolHasMcq && poolHasWritten
+      ? "mixed"
       : sharedFamily === "written" ? "written" : (selectedEntries[0]?.node.type as EngineType) ?? "quiz";
     const title =
       selectedEntries.length === 1
@@ -441,7 +440,7 @@ export function CreateTestTab({
                   <div className="grid grid-cols-1 gap-2">
                     {selectedFolders.at(-1)?.items
                       .filter((child) => {
-                        const qbankTypes = new Set(["quiz", "bank", "written"]);
+                        const qbankTypes = new Set(["quiz", "bank", "written", "mixed"]);
                         return qbankTypes.has(child.type);
                       })
                       .map((child) => {
