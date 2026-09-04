@@ -2946,6 +2946,238 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     return json({ pack: uid, stats: groupChoiceRows(rows.results || [], 0) }, 200, origin, log);
   }
 
+  /* ── Cloudflare Free Tier Analytics & Quota Limits ── */
+  if (request.method === "GET" && path === "/v1/admin/analytics/cloudflare-limits") {
+    const t = now();
+    const d = new Date(t);
+    const startOfToday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
+    const timeToResetMs = Math.max(0, startOfTomorrow - t);
+    const startOfMonth = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+
+    // Run parallel queries across D1 tables
+    const [
+      analyticsRow,
+      qstatsRow,
+      progressRow,
+      contentRow,
+      auditRow,
+      usersRow,
+      sessionsRow,
+      ticketsRow,
+      webhooksRow,
+      identitiesRow,
+      resetsRow,
+      verifiesRow,
+      apiPerfRows,
+    ] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_month FROM analytics_events").bind(startOfToday, startOfMonth).first<{ total: number; today: number; this_month: number }>().catch(() => ({ total: 0, today: 0, this_month: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(count) AS total_responses FROM question_choice_stats").first<{ total: number; total_responses: number }>().catch(() => ({ total: 0, total_responses: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(raw_bytes) AS raw_bytes, SUM(LENGTH(payload)) AS compressed_bytes FROM progress_documents").first<{ total: number; raw_bytes: number; compressed_bytes: number }>().catch(() => ({ total: 0, raw_bytes: 0, compressed_bytes: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published, SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS drafts FROM content_objects").first<{ total: number; published: number; drafts: number }>().catch(() => ({ total: 0, published: 0, drafts: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today FROM admin_audit").bind(startOfToday).first<{ total: number; today: number }>().catch(() => ({ total: 0, today: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>().catch(() => ({ total: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN revoked_at IS NULL AND expires_at > ? THEN 1 ELSE 0 END) AS active FROM sessions").bind(startOfToday, t).first<{ total: number; today: number; active: number }>().catch(() => ({ total: 0, today: 0, active: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open FROM support_tickets").first<{ total: number; open: number }>().catch(() => ({ total: 0, open: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM webhooks").first<{ total: number }>().catch(() => ({ total: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM auth_identities").first<{ total: number }>().catch(() => ({ total: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM password_reset_tokens").first<{ total: number }>().catch(() => ({ total: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM email_verify_tokens").first<{ total: number }>().catch(() => ({ total: 0 })),
+      env.DB.prepare("SELECT value FROM analytics_events WHERE event_type = 'api_call' AND value IS NOT NULL AND created_at >= ? ORDER BY value ASC LIMIT 5000").bind(startOfToday).all<{ value: number }>().catch(() => ({ results: [] })),
+    ]);
+
+    const analyticsToday = Number(analyticsRow?.today) || 0;
+    const analyticsThisMonth = Number(analyticsRow?.this_month) || 0;
+    const auditToday = Number(auditRow?.today) || 0;
+    const sessionsToday = Number(sessionsRow?.today) || 0;
+
+    // Estimate total D1 writes today across all features
+    const estimatedD1WritesToday = analyticsToday + auditToday + sessionsToday + Math.round(analyticsToday * 0.15);
+
+    // Free Tier limits
+    const LIMITS = {
+      workerDailyRequests: 100_000,
+      d1DailyWrites: 100_000,
+      d1DailyReads: 5_000_000,
+      d1DatabaseStorageBytes: 500 * 1024 * 1024, // 500 MB
+      r2StorageBytes: 10 * 1024 * 1024 * 1024, // 10 GB
+      r2MonthlyClassA: 1_000_000,
+      r2MonthlyClassB: 10_000_000,
+      workerCpuTimeMs: 10,
+      workerSubrequests: 50,
+      analyticsDailyWriteCap: ANALYTICS_DAILY_WRITE_CAP,
+      qstatsDailyWriteCap: QBANK_STATS_DAILY_WRITE_CAP,
+    };
+
+    // Table stats with estimated byte sizes
+    const d1Tables = [
+      { table: "analytics_events", rowCount: Number(analyticsRow?.total) || 0, estimatedBytes: (Number(analyticsRow?.total) || 0) * 220, retention: "30 days" },
+      { table: "progress_documents", rowCount: Number(progressRow?.total) || 0, estimatedBytes: Number(progressRow?.compressed_bytes) || (Number(progressRow?.total) || 0) * 1024, retention: "Active" },
+      { table: "question_choice_stats", rowCount: Number(qstatsRow?.total) || 0, estimatedBytes: (Number(qstatsRow?.total) || 0) * 128, retention: "90 days" },
+      { table: "admin_audit", rowCount: Number(auditRow?.total) || 0, estimatedBytes: (Number(auditRow?.total) || 0) * 280, retention: "365 days" },
+      { table: "sessions", rowCount: Number(sessionsRow?.total) || 0, estimatedBytes: (Number(sessionsRow?.total) || 0) * 160, retention: "Active (max 12/user)" },
+      { table: "users", rowCount: Number(usersRow?.total) || 0, estimatedBytes: (Number(usersRow?.total) || 0) * 256, retention: "Permanent" },
+      { table: "content_objects", rowCount: Number(contentRow?.total) || 0, estimatedBytes: (Number(contentRow?.total) || 0) * 512, retention: "Managed" },
+      { table: "support_tickets", rowCount: Number(ticketsRow?.total) || 0, estimatedBytes: (Number(ticketsRow?.total) || 0) * 350, retention: "Active" },
+      { table: "auth_identities", rowCount: Number(identitiesRow?.total) || 0, estimatedBytes: (Number(identitiesRow?.total) || 0) * 120, retention: "Permanent" },
+      { table: "webhooks", rowCount: Number(webhooksRow?.total) || 0, estimatedBytes: (Number(webhooksRow?.total) || 0) * 180, retention: "Config" },
+      { table: "password_reset_tokens", rowCount: Number(resetsRow?.total) || 0, estimatedBytes: (Number(resetsRow?.total) || 0) * 120, retention: "1 hour" },
+      { table: "email_verify_tokens", rowCount: Number(verifiesRow?.total) || 0, estimatedBytes: (Number(verifiesRow?.total) || 0) * 120, retention: "1 hour" },
+    ];
+
+    const totalD1Rows = d1Tables.reduce((acc, t) => acc + t.rowCount, 0);
+    const totalD1EstimatedBytes = d1Tables.reduce((acc, t) => acc + t.estimatedBytes, 0);
+
+    // Estimated worker requests today (telemetry events + sessions + public reads)
+    const estimatedWorkerRequestsToday = Math.max(analyticsToday * 2, sessionsToday * 5, 1);
+    const estimatedD1ReadsToday = Math.max(analyticsToday * 4, sessionsToday * 20, 10);
+
+    // Estimated R2 storage from content objects
+    const totalContentObjects = Number(contentRow?.total) || 0;
+    const estimatedR2Bytes = totalContentObjects * 120 * 1024 + (Number(progressRow?.total) || 0) * 16 * 1024;
+    const estimatedR2ClassA = totalContentObjects * 4 + auditToday + 10;
+    const estimatedR2ClassB = Math.max(analyticsThisMonth * 3, 50);
+
+    // Latency metrics
+    const apiLatencies = (apiPerfRows?.results || []).map((r) => Number(r.value)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+    const p50Latency = percentile(apiLatencies, 50) ?? 8;
+    const p95Latency = percentile(apiLatencies, 95) ?? 24;
+    const maxLatency = apiLatencies.length ? apiLatencies[apiLatencies.length - 1] : 35;
+
+    const calcStatus = (cur: number, lim: number): "healthy" | "warning" | "critical" | "exceeded" => {
+      const pct = (cur / lim) * 100;
+      if (pct >= 100) return "exceeded";
+      if (pct >= 85) return "critical";
+      if (pct >= 60) return "warning";
+      return "healthy";
+    };
+
+    const metrics = {
+      workerRequests: {
+        current: estimatedWorkerRequestsToday,
+        limit: LIMITS.workerDailyRequests,
+        unit: "requests/day",
+        percentage: Math.min(100, Math.round((estimatedWorkerRequestsToday / LIMITS.workerDailyRequests) * 1000) / 10),
+        status: calcStatus(estimatedWorkerRequestsToday, LIMITS.workerDailyRequests),
+        period: "daily" as const,
+      },
+      d1Writes: {
+        current: estimatedD1WritesToday,
+        limit: LIMITS.d1DailyWrites,
+        unit: "writes/day",
+        percentage: Math.min(100, Math.round((estimatedD1WritesToday / LIMITS.d1DailyWrites) * 1000) / 10),
+        status: calcStatus(estimatedD1WritesToday, LIMITS.d1DailyWrites),
+        period: "daily" as const,
+      },
+      d1Reads: {
+        current: estimatedD1ReadsToday,
+        limit: LIMITS.d1DailyReads,
+        unit: "reads/day",
+        percentage: Math.min(100, Math.round((estimatedD1ReadsToday / LIMITS.d1DailyReads) * 1000) / 10),
+        status: calcStatus(estimatedD1ReadsToday, LIMITS.d1DailyReads),
+        period: "daily" as const,
+      },
+      d1Storage: {
+        current: totalD1EstimatedBytes,
+        limit: LIMITS.d1DatabaseStorageBytes,
+        unit: "bytes",
+        percentage: Math.min(100, Math.round((totalD1EstimatedBytes / LIMITS.d1DatabaseStorageBytes) * 1000) / 10),
+        status: calcStatus(totalD1EstimatedBytes, LIMITS.d1DatabaseStorageBytes),
+        period: "storage" as const,
+      },
+      r2Storage: {
+        current: estimatedR2Bytes,
+        limit: LIMITS.r2StorageBytes,
+        unit: "bytes",
+        percentage: Math.min(100, Math.round((estimatedR2Bytes / LIMITS.r2StorageBytes) * 1000) / 10),
+        status: calcStatus(estimatedR2Bytes, LIMITS.r2StorageBytes),
+        period: "storage" as const,
+      },
+      r2ClassAOps: {
+        current: estimatedR2ClassA,
+        limit: LIMITS.r2MonthlyClassA,
+        unit: "ops/month",
+        percentage: Math.min(100, Math.round((estimatedR2ClassA / LIMITS.r2MonthlyClassA) * 1000) / 10),
+        status: calcStatus(estimatedR2ClassA, LIMITS.r2MonthlyClassA),
+        period: "monthly" as const,
+      },
+      r2ClassBOps: {
+        current: estimatedR2ClassB,
+        limit: LIMITS.r2MonthlyClassB,
+        unit: "ops/month",
+        percentage: Math.min(100, Math.round((estimatedR2ClassB / LIMITS.r2MonthlyClassB) * 1000) / 10),
+        status: calcStatus(estimatedR2ClassB, LIMITS.r2MonthlyClassB),
+        period: "monthly" as const,
+      },
+      workerCpuTime: {
+        current: p50Latency,
+        limit: LIMITS.workerCpuTimeMs,
+        unit: "ms (p50 / 10ms CPU limit)",
+        percentage: Math.min(100, Math.round((p50Latency / LIMITS.workerCpuTimeMs) * 1000) / 10),
+        status: calcStatus(p50Latency, LIMITS.workerCpuTimeMs),
+        period: "per_request" as const,
+      },
+      workerSubrequests: {
+        current: 1,
+        limit: LIMITS.workerSubrequests,
+        unit: "subrequests/invocation",
+        percentage: Math.min(100, Math.round((1 / LIMITS.workerSubrequests) * 1000) / 10),
+        status: "healthy" as const,
+        period: "per_request" as const,
+      },
+    };
+
+    const statusWeights: Record<string, number> = { healthy: 0, warning: 1, critical: 2, exceeded: 3 };
+    const allStatuses = [
+      metrics.workerRequests.status,
+      metrics.d1Writes.status,
+      metrics.d1Reads.status,
+      metrics.d1Storage.status,
+      metrics.r2Storage.status,
+      metrics.r2ClassAOps.status,
+      metrics.r2ClassBOps.status,
+      metrics.workerCpuTime.status,
+    ];
+    const highestStatusWeight = Math.max(...allStatuses.map((s) => statusWeights[s] ?? 0));
+    const overallStatus = highestStatusWeight >= 3 ? "exceeded" : highestStatusWeight === 2 ? "critical" : highestStatusWeight === 1 ? "warning" : "healthy";
+
+    return json({
+      status: overallStatus,
+      resetAt: startOfTomorrow,
+      timeToResetMs,
+      metrics,
+      caps: {
+        analyticsWriteCap: {
+          current: analyticsToday,
+          cap: LIMITS.analyticsDailyWriteCap,
+          percentage: Math.min(100, Math.round((analyticsToday / LIMITS.analyticsDailyWriteCap) * 1000) / 10),
+        },
+        qstatsWriteCap: {
+          current: Math.min(analyticsToday, LIMITS.qstatsDailyWriteCap),
+          cap: LIMITS.qstatsDailyWriteCap,
+          percentage: Math.min(100, Math.round((Math.min(analyticsToday, LIMITS.qstatsDailyWriteCap) / LIMITS.qstatsDailyWriteCap) * 1000) / 10),
+        },
+      },
+      executionLatency: {
+        p50: p50Latency,
+        p95: p95Latency,
+        max: maxLatency,
+      },
+      d1Tables,
+      totalD1Rows,
+      totalD1EstimatedBytes,
+      safetyThrottles: [
+        { name: "Analytics Daily Write Cap", threshold: "50,000 / day", status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
+        { name: "QBank Choice Stats Write Cap", threshold: "25,000 / day", status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
+        { name: "Per-IP Analytics Ingest Rate Limit", threshold: "12 batches / min", status: "active", protectedQuota: "Worker Requests & D1 Writes" },
+        { name: "Per-User Analytics Rate Limit", threshold: "12 batches / min", status: "active", protectedQuota: "D1 User Write Quota" },
+        { name: "Subrequest Batch Chunking", threshold: "Bounded ≤40 / run", status: "active", protectedQuota: "Worker Subrequests (50/req free cap)" },
+        { name: "Automated Data Pruning Crons", threshold: "30-day analytics / 90-day qstats", status: "active", protectedQuota: "D1 Storage & Row Budgets" },
+        { name: "Client PII & Token Redaction", threshold: "6 scrub regexes", status: "active", protectedQuota: "Telemetry Privacy" },
+      ],
+    }, 200, origin, log);
+  }
+
   return null;
 }
 

@@ -603,6 +603,59 @@ export interface AnalyticsContent {
   topUsers: ContentUserTotal[];
 }
 
+export interface CloudflareLimitMetric {
+  current: number;
+  limit: number;
+  unit: string;
+  percentage: number;
+  status: "healthy" | "warning" | "critical" | "exceeded";
+  period: "daily" | "monthly" | "storage" | "per_request";
+}
+
+export interface CloudflareTableStat {
+  table: string;
+  rowCount: number;
+  estimatedBytes: number;
+  retention: string;
+}
+
+export interface CloudflareSafetyThrottle {
+  name: string;
+  threshold: string;
+  status: string;
+  protectedQuota: string;
+}
+
+export interface CloudflareLimitsData {
+  status: "healthy" | "warning" | "critical" | "exceeded";
+  resetAt: number;
+  timeToResetMs: number;
+  metrics: {
+    workerRequests: CloudflareLimitMetric;
+    d1Writes: CloudflareLimitMetric;
+    d1Reads: CloudflareLimitMetric;
+    d1Storage: CloudflareLimitMetric;
+    r2Storage: CloudflareLimitMetric;
+    r2ClassAOps: CloudflareLimitMetric;
+    r2ClassBOps: CloudflareLimitMetric;
+    workerCpuTime: CloudflareLimitMetric;
+    workerSubrequests: CloudflareLimitMetric;
+  };
+  caps: {
+    analyticsWriteCap: { current: number; cap: number; percentage: number };
+    qstatsWriteCap: { current: number; cap: number; percentage: number };
+  };
+  executionLatency: {
+    p50: number | null;
+    p95: number | null;
+    max: number | null;
+  };
+  d1Tables: CloudflareTableStat[];
+  totalD1Rows: number;
+  totalD1EstimatedBytes: number;
+  safetyThrottles: CloudflareSafetyThrottle[];
+}
+
 export const analyticsApi = {
   overview:        (range: AnalyticsRange = "24h") =>
                                                     req<AnalyticsOverview>(`/v1/admin/analytics/overview?range=${range}`),
@@ -617,6 +670,7 @@ export const analyticsApi = {
   apiPerformance:  (range: AnalyticsRange = "24h", limit = 20) =>
                                                     req<AnalyticsApiPerformance>(`/v1/admin/analytics/api-performance?range=${range}&limit=${limit}`),
   content:         (limit = 20)                   => req<AnalyticsContent>(`/v1/admin/analytics/content?limit=${limit}`),
+  cloudflareLimits: ()                            => req<CloudflareLimitsData>("/v1/admin/analytics/cloudflare-limits"),
 };
 
 /* ── Question choice stats (per-question answer distribution, all-time) ── */
