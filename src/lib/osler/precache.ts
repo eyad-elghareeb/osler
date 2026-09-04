@@ -97,7 +97,7 @@ function extractNextAssetsFromHtml(html: string): string[] {
         }
       });
 
-      const links = doc.querySelectorAll('link[rel="stylesheet"][href]');
+      const links = doc.querySelectorAll("link[href]");
       links.forEach((l) => {
         const href = l.getAttribute("href");
         if (href && href.startsWith("/_next/static/")) {
@@ -107,7 +107,7 @@ function extractNextAssetsFromHtml(html: string): string[] {
     } else {
       // Fallback regex in case DOMParser is unavailable
       const scriptRegex = /<script[^>]+src=["'](\/_next\/static\/[^"']+)["']/g;
-      const linkRegex = /<link[^>]+href=["'](\/_next\/static\/[^"']+)["'][^>]*rel=["']stylesheet["']/g;
+      const linkRegex = /<link[^>]+href=["'](\/_next\/static\/[^"']+)["']/g;
       let match: RegExpExecArray | null;
       while ((match = scriptRegex.exec(html)) !== null) {
         if (match[1]) urls.add(match[1]);

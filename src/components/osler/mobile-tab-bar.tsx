@@ -72,7 +72,7 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
   return (
     <nav
       className={cn(
-        "osler-tabbar osler-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex",
+        "osler-vt-tabbar osler-tabbar osler-tap-none md:hidden fixed inset-x-0 bottom-0 z-50 flex",
         immersive && "hidden"
       )}
       role="tablist"

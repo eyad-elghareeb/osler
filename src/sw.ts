@@ -52,12 +52,14 @@ const runtimeCaching: RuntimeCaching[] = [
   },
   // HTML page navigations — NetworkFirst with 1.5s timeout falling back to
   // PAGE_CACHE. Provides instant offline navigation while always picking up
-  // fresh HTML when online.
+  // fresh HTML when online. matchOptions.ignoreSearch allows deep-link URLs
+  // (e.g. /qbank?uid=...) to match the cached /qbank/ HTML shell when offline.
   {
     matcher: ({ request }) => request.mode === "navigate",
     handler: new NetworkFirst({
       cacheName: PAGE_CACHE,
       networkTimeoutSeconds: 1.5,
+      matchOptions: { ignoreSearch: true },
       plugins: [
         {
           cacheWillUpdate: async ({ response }) => {
@@ -225,7 +227,7 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
  *  allowed by path shape regardless of origin. Everything else is refused. */
 function isPrecacheAllowed(rawUrl: string): boolean {
   try {
-    const u = new URL(rawUrl);
+    const u = new URL(rawUrl, self.location.origin);
     if (u.pathname.startsWith("/osler-content/")) {
       return u.origin === self.location.origin;
     }

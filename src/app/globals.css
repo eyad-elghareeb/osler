@@ -1407,6 +1407,23 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* Isolate persistent shell chrome (header & tab bar) so they stay stationary while content slides */
+.osler-vt-header {
+  view-transition-name: app-header;
+}
+.osler-vt-tabbar {
+  view-transition-name: app-tabbar;
+}
+.osler-vt-mobile-topbar {
+  view-transition-name: app-mobile-topbar;
+}
+
+::view-transition-group(app-header),
+::view-transition-group(app-tabbar),
+::view-transition-group(app-mobile-topbar) {
+  animation-duration: 0s;
+}
+
 /* Default (no direction attribute) — simple fade for incidental updates. */
 ::view-transition-old(root) {
   animation: vt-fade-out 280ms ease both;

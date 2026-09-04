@@ -293,7 +293,7 @@ export function AppShell({ children }: AppShellProps) {
       <header className={cn(
         // In-flow bar — nothing scrolls behind it; opaque background avoids
         // a pointless backdrop-filter pass every frame.
-        "z-40 shrink-0 h-14 border-b border-border bg-background safe-pt",
+        "osler-vt-header z-40 shrink-0 h-14 border-b border-border bg-background safe-pt",
         "hidden md:flex",
         isMobile && immersive && "hidden",
       )}>
@@ -666,7 +666,7 @@ function MobileScrollAwayBar({
       }}
       transition={MOTION_TRANSITION.collapseBar}
       className={cn(
-        "md:hidden shrink-0 overflow-hidden",
+        "osler-vt-mobile-topbar md:hidden shrink-0 overflow-hidden",
         // In-flow sibling above the scroller — nothing renders behind it, so
         // a backdrop blur would cost GPU time for no visual effect.
         "bg-background",

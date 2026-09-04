@@ -112,15 +112,15 @@ export function withViewTransition<T>(
  * "new" snapshot honest for async client-side routers like Next.js App
  * Router, whose push() mutates the DOM some time after being called.
  *
- * Caps at ~maxFrames (~650ms) so a stalled navigation can't freeze the
+ * Caps at ~maxFrames (~500ms) so a stalled navigation can't freeze the
  * page behind the transition overlay forever.
  */
-export function waitForRouteChange(beforeUrl: string, maxFrames = 40): Promise<void> {
+export function waitForRouteChange(beforeUrl: string, targetUrl?: string, maxFrames = 30): Promise<void> {
   return new Promise((resolve) => {
     let frames = 0;
     const tick = () => {
       const now = window.location.pathname + window.location.search;
-      if (now !== beforeUrl) {
+      if (now !== beforeUrl || (targetUrl && (now === targetUrl || now === `${targetUrl}/` || `${now}/` === targetUrl))) {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
         return;
       }
@@ -164,7 +164,7 @@ export function pushWithViewTransition(
     const before = window.location.pathname + window.location.search;
     push(path);
     await Promise.race([
-      waitForRouteChange(before),
+      waitForRouteChange(before, path),
       new Promise<void>((resolve) => setTimeout(resolve, COMMIT_BUDGET_MS)),
     ]);
   }, direction);
