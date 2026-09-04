@@ -115,12 +115,12 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
     <div className="space-y-6">
       {/* Top Banner: Status + UTC Countdown */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-muted/40 border border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
             <Cloud className="size-4" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-foreground">
                 {t("admin.analytics.cf.freePlan")}
               </span>
@@ -151,9 +151,9 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-background/80 px-3 py-1.5 rounded-lg border border-border">
-          <Clock className="size-3.5 text-primary" />
-          <span>{t("admin.analytics.cf.resetIn", { time: formatCountdown(msToReset) })}</span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-background/80 px-3 py-1.5 rounded-lg border border-border max-w-full">
+          <Clock className="size-3.5 text-primary shrink-0" />
+          <span className="truncate">{t("admin.analytics.cf.resetIn", { time: formatCountdown(msToReset) })}</span>
         </div>
       </div>
 
@@ -219,15 +219,15 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
           icon={Database}
           extraInfo={
             <div className="mt-3 pt-2.5 border-t border-border/60 text-[11px] text-muted-foreground space-y-1">
-              <div className="flex justify-between">
-                <span>{t("admin.analytics.cf.analyticsCap")}:</span>
-                <span className="font-medium tabular-nums text-foreground">
+              <div className="flex justify-between gap-2">
+                <span className="min-w-0">{t("admin.analytics.cf.analyticsCap")}:</span>
+                <span className="font-medium tabular-nums text-foreground text-end shrink-0">
                   {caps.analyticsWriteCap.current.toLocaleString()} / {caps.analyticsWriteCap.cap.toLocaleString()} ({caps.analyticsWriteCap.percentage}%)
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>{t("admin.analytics.cf.qstatsCap")}:</span>
-                <span className="font-medium tabular-nums text-foreground">
+              <div className="flex justify-between gap-2">
+                <span className="min-w-0">{t("admin.analytics.cf.qstatsCap")}:</span>
+                <span className="font-medium tabular-nums text-foreground text-end shrink-0">
                   {caps.qstatsWriteCap.current.toLocaleString()} / {caps.qstatsWriteCap.cap.toLocaleString()} ({caps.qstatsWriteCap.percentage}%)
                 </span>
               </div>
@@ -258,9 +258,9 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
           status={metrics.d1Storage.status}
           icon={HardDrive}
           extraInfo={
-            <div className="mt-3 pt-2.5 border-t border-border/60 flex justify-between text-[11px] text-muted-foreground">
-              <span>{t("admin.analytics.cf.totalRows", { count: data.totalD1Rows.toLocaleString() })}</span>
-              <span className="font-medium text-foreground">{formatBytes(data.totalD1EstimatedBytes)}</span>
+            <div className="mt-3 pt-2.5 border-t border-border/60 flex justify-between gap-2 text-[11px] text-muted-foreground">
+              <span className="min-w-0 truncate">{t("admin.analytics.cf.totalRows", { count: data.totalD1Rows.toLocaleString() })}</span>
+              <span className="font-medium text-foreground shrink-0">{formatBytes(data.totalD1EstimatedBytes)}</span>
             </div>
           }
         />
@@ -277,15 +277,15 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
           icon={Layers}
           extraInfo={
             <div className="mt-3 pt-2.5 border-t border-border/60 text-[11px] text-muted-foreground space-y-1">
-              <div className="flex justify-between">
-                <span>{t("admin.analytics.cf.r2ClassA")}:</span>
-                <span className="font-medium tabular-nums text-foreground">
+              <div className="flex justify-between gap-2">
+                <span className="min-w-0">{t("admin.analytics.cf.r2ClassA")}:</span>
+                <span className="font-medium tabular-nums text-foreground text-end shrink-0">
                   {metrics.r2ClassAOps.current.toLocaleString()} / 1M ({metrics.r2ClassAOps.percentage}%)
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>{t("admin.analytics.cf.r2ClassB")}:</span>
-                <span className="font-medium tabular-nums text-foreground">
+              <div className="flex justify-between gap-2">
+                <span className="min-w-0">{t("admin.analytics.cf.r2ClassB")}:</span>
+                <span className="font-medium tabular-nums text-foreground text-end shrink-0">
                   {metrics.r2ClassBOps.current.toLocaleString()} / 10M ({metrics.r2ClassBOps.percentage}%)
                 </span>
               </div>
@@ -306,15 +306,15 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
           badgeText={cpuLive ? undefined : t("admin.analytics.cf.p95badge", { ms: data.executionLatency.p95 ?? "—" })}
           extraInfo={
             <div className="mt-3 pt-2.5 border-t border-border/60 text-[11px] text-muted-foreground space-y-1">
-              <div className="flex justify-between">
-                <span>p50 / p95 latency:</span>
-                <span className="font-medium tabular-nums text-foreground">
+              <div className="flex justify-between gap-2">
+                <span className="min-w-0">p50 / p95 latency:</span>
+                <span className="font-medium tabular-nums text-foreground text-end shrink-0">
                   {data.executionLatency.p50 ?? "—"}ms / {data.executionLatency.p95 ?? "—"}ms
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>{t("admin.analytics.cf.subrequests")}:</span>
-                <span className="font-medium tabular-nums text-success">
+              <div className="flex justify-between gap-2">
+                <span className="min-w-0">{t("admin.analytics.cf.subrequests")}:</span>
+                <span className="font-medium tabular-nums text-success text-end shrink-0">
                   ≤ 40 / 50 cap (bounded)
                 </span>
               </div>
@@ -324,20 +324,20 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
       </div>
 
       {/* D1 Tables & Safety Throttles Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-w-0">
         {/* D1 Storage & Row Breakdown */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Database className="size-4 text-primary" />
-              {t("admin.analytics.cf.d1Breakdown")}
+        <div className="rounded-xl border border-border bg-card p-4 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 min-w-0">
+              <Database className="size-4 text-primary shrink-0" />
+              <span className="truncate">{t("admin.analytics.cf.d1Breakdown")}</span>
             </h3>
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="text-xs text-muted-foreground tabular-nums shrink-0">
               {t("admin.analytics.cf.totalSize", { size: formatBytes(data.totalD1EstimatedBytes) })}
             </span>
           </div>
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
+          <div className="max-h-64 overflow-auto rounded-lg border border-border">
+            <table className="w-full min-w-[540px] text-xs">
               <thead className="bg-muted/50 text-muted-foreground sticky top-0 border-b border-border">
                 <tr>
                   <th className="py-2 px-3 text-left font-medium">{t("admin.analytics.cf.col.table")}</th>
@@ -361,15 +361,15 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
         </div>
 
         {/* Safety Defenses & Throttles */}
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-card p-4 min-w-0">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <ShieldCheck className="size-4 text-success" />
-              {t("admin.analytics.cf.safetyThrottles")}
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 min-w-0">
+              <ShieldCheck className="size-4 text-success shrink-0" />
+              <span className="truncate">{t("admin.analytics.cf.safetyThrottles")}</span>
             </h3>
           </div>
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
+          <div className="max-h-64 overflow-auto rounded-lg border border-border">
+            <table className="w-full min-w-[460px] text-xs">
               <thead className="bg-muted/50 text-muted-foreground sticky top-0 border-b border-border">
                 <tr>
                   <th className="py-2 px-3 text-left font-medium">{t("admin.analytics.cf.col.defense")}</th>
@@ -426,7 +426,7 @@ function QuotaCard({
   const colors = getStatusColor(status);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/30">
+    <div className="rounded-xl border border-border bg-card p-4 min-w-0 transition-all hover:border-primary/30">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -444,9 +444,9 @@ function QuotaCard({
       </div>
 
       <div className="my-2.5">
-        <div className="flex items-baseline justify-between text-xs mb-1.5">
-          <span className="font-bold text-base tabular-nums text-foreground">{current}</span>
-          <span className="text-muted-foreground tabular-nums text-xs">/ {limit}</span>
+        <div className="flex items-baseline justify-between gap-2 text-xs mb-1.5">
+          <span className="font-bold text-base tabular-nums text-foreground truncate">{current}</span>
+          <span className="text-muted-foreground tabular-nums text-xs shrink-0">/ {limit}</span>
         </div>
         <Progress value={Math.min(100, percentage)} className="h-1.5" />
       </div>
