@@ -3063,8 +3063,11 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
   try {
     const rows = cpu?.viewer?.accounts?.[0]?.c;
     const q = (Array.isArray(rows) ? rows[0]?.quantiles : rows?.quantiles) ?? {};
+    // cpuTimeP50 is reported in MICROseconds (a healthy worker reads in the
+    // thousands here while errors stay zero) — convert to ms for the 10ms
+    // CPU limit comparison.
     const p50 = Number(q?.cpuTimeP50);
-    if (Number.isFinite(p50) && p50 >= 0) { out.cpuP50Ms = p50; out.connected = true; }
+    if (Number.isFinite(p50) && p50 >= 0) { out.cpuP50Ms = Math.round(p50 / 10) / 100; out.connected = true; }
   } catch { /* estimated fallback */ }
   try {
     const groups = ops?.viewer?.accounts?.[0]?.r;

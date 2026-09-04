@@ -19,7 +19,7 @@ query fails, that section falls back to its estimate and the rest stay live.
 | Metric | Estimated (no token) | Live (token configured) |
 | --- | --- | --- |
 | Workers requests/day | Heuristic: `analytics batches × 2`, `sessions × 5` | `workersInvocationsAdaptive` sum, account-level, since UTC midnight |
-| Worker CPU p50 | Shown as client-measured API latency, **never** percented against the 10 ms limit (any real RTT would false-alarm) | `workersInvocationsAdaptive` CPU p50 vs the 10 ms limit |
+| Worker CPU p50 | Shown as client-measured API latency, **never** percented against the 10 ms limit (any real RTT would false-alarm) | `workersInvocationsAdaptive` CPU p50 (reported in µs, converted to ms) vs the 10 ms limit |
 | D1 row writes/day | Today's `analytics_events` + `admin_audit` + `sessions` rows + 15% headroom | Still estimated — D1 row metering has no confirmed per-database usage schema; use Workers & Pages → D1 → Metrics for the billed number |
 | D1 row reads/day | Heuristic from telemetry volume | Still estimated (same reason) |
 | D1 storage | Real row counts × per-table byte estimates vs the **5 GB** free limit | Same (row counts are real; byte sizes are estimates) |
