@@ -9,6 +9,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
+import { startBackgroundPrecaching } from "@/lib/osler/precache";
 import { WelcomeStep } from "./welcome-step";
 import { TourStep } from "./tour-step";
 import { GoalStep } from "./goal-step";
@@ -53,6 +54,11 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const total = STEPS.length;
   const isLast = index === total - 1;
   const Step = STEPS[index];
+
+  // Precache full site in background while the user steps through onboarding
+  React.useEffect(() => {
+    void startBackgroundPrecaching();
+  }, []);
 
   // Signal that the first-run wizard is active (consent is handled here,
   // so no separate cookie banner is needed — see the removal in layout.tsx).

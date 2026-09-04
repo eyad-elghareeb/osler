@@ -73,7 +73,7 @@ export function Dashboard({
 }: DashboardProps) {
   const { t, rtl } = useI18n();
   const session = useOslerSession();
-  const { navigate } = useOslerRouter();
+  const { navigate, prefetch } = useOslerRouter();
 
   const rawUsername = propUsername || session.username || "User";
   const username = rawUsername.charAt(0).toUpperCase() + rawUsername.slice(1);
@@ -445,24 +445,28 @@ export function Dashboard({
             icon={ListChecks}
             title={t("dash.qa.qbank.title")}
             subtitle={t("dash.qa.qbank.sub")}
+            onPrefetch={() => prefetch("qbank")}
             onClick={() => onViewChange("qbank")}
           />
           <QuickAction
             icon={Layers}
             title={t("dash.qa.flashcards.title")}
             subtitle={t("dash.qa.flashcards.sub")}
+            onPrefetch={() => prefetch("flashcards")}
             onClick={() => onViewChange("flashcards")}
           />
           <QuickAction
             icon={BookOpen}
             title={t("dash.qa.library.title")}
             subtitle={t("dash.qa.library.sub", { n: articleCount || "…" })}
+            onPrefetch={() => prefetch("library")}
             onClick={() => onViewChange("library")}
           />
           <QuickAction
             icon={PlayCircle}
             title={t("dash.qa.videos.title")}
             subtitle={t("dash.qa.videos.sub", { n: videoCount || "…" })}
+            onPrefetch={() => prefetch("videos")}
             onClick={() => onViewChange("videos")}
           />
         </Stagger>
@@ -628,17 +632,22 @@ function QuickAction({
   title,
   subtitle,
   onClick,
+  onPrefetch,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
   onClick: () => void;
+  onPrefetch?: () => void;
 }) {
   const { rtl } = useI18n();
   return (
     <motion.button
       type="button"
       onClick={onClick}
+      onPointerEnter={onPrefetch}
+      onTouchStart={onPrefetch}
+      onFocus={onPrefetch}
       variants={fadeUp}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}

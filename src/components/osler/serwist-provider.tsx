@@ -2,8 +2,11 @@
 
 import * as React from "react";
 
+import { startBackgroundPrecaching, initBackgroundSyncListeners, triggerSilentRecache } from "@/lib/osler/precache";
+
 /**
- * Registers the service worker at `/sw.js`.
+ * Registers the service worker at `/sw.js` and manages full site background
+ * precaching and silent recaching on updates.
  *
  * The SW is built separately by `scripts/build-sw.js` (esbuild) into
  * `public/sw.js` before `next build` runs. This avoids the
@@ -16,18 +19,29 @@ import * as React from "react";
  * user having to navigate twice.
  *
  * Registration is deferred until after the page is interactive to avoid
- * competing with first-paint network requests.
+ * competing with first-paint network requests, followed by silent idle precaching.
  */
 export function SerwistProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // Attach listeners for background controller and content changes
+    initBackgroundSyncListeners();
+
+    // Start background precaching on idle (works both with and without SW)
+    void startBackgroundPrecaching();
+
     if (!("serviceWorker" in navigator)) return;
     // Only register in production — dev builds have a non-minified SW
     // that adds noise to the console and competes with HMR.
     if (process.env.NODE_ENV !== "production") return;
 
     let registration: ServiceWorkerRegistration | null = null;
-    const update = () => void registration?.update().catch(() => {});
+    const update = () => {
+      void registration?.update().then(() => {
+        // If an update was found and waiting worker took over, controllerchange fires
+      }).catch(() => {});
+    };
 
     const register = () => {
       navigator.serviceWorker

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LoginScreen } from "@/components/osler/login-screen";
 import { OnboardingWizard, isOnboardingComplete } from "@/components/osler/onboarding/onboarding-wizard";
 import { useOslerSession } from "@/lib/osler/session-context";
+import { startBackgroundPrecaching } from "@/lib/osler/precache";
 
 /**
  * Validate that a `next` redirect target is a same-origin relative path.
@@ -28,6 +29,10 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, username, loading } = useOslerSession();
+
+  React.useEffect(() => {
+    void startBackgroundPrecaching();
+  }, []);
 
   // Read & validate `next` once. The RouteGuard already validates this when
   // redirecting logged-in users away from /login, but we re-validate here so

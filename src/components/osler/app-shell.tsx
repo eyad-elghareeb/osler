@@ -132,6 +132,7 @@ import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter, prefetchTopLevelRoutes } from "@/lib/osler/navigation";
 import { loadCategoryTrees, loadContentByUid } from "@/lib/osler/content";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
+import { startBackgroundPrecaching } from "@/lib/osler/precache";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
 interface AppShellProps {
@@ -145,7 +146,7 @@ export function AppShell({ children }: AppShellProps) {
   const immersive = useImmersiveMode();
   const { username, cloudSession: sessionContextCloudSession, logout } = useOslerSession();
   const view = useCurrentView();
-  const { navigate } = useOslerRouter();
+  const { navigate, prefetch } = useOslerRouter();
 
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -185,7 +186,7 @@ export function AppShell({ children }: AppShellProps) {
     setVtActive(isViewTransitionsSupported());
   }, []);
 
-  // Warm the router cache for every top-level route once the shell is idle.
+  // Warm the router cache and precache full site static files once the shell is idle.
   // Programmatic navigation (buttons → router.push) never gets <Link>-style
   // prefetching, so without this the first push to each view pays a payload
   // fetch + chunk load while a view transition holds the page frozen. The
@@ -203,6 +204,7 @@ export function AppShell({ children }: AppShellProps) {
     idle(() => {
       prefetchTopLevelRoutes((href) => navRouter.prefetch(href));
       void loadCategoryTrees().catch(() => {});
+      void startBackgroundPrecaching().catch(() => {});
     });
   }, [navRouter]);
 
@@ -300,6 +302,9 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={() => handleViewChange("dashboard")}
+              onPointerEnter={() => prefetch("dashboard")}
+              onTouchStart={() => prefetch("dashboard")}
+              onFocus={() => prefetch("dashboard")}
               aria-label={t("app.name")}
               className="flex items-center gap-2.5 shrink-0"
             >
@@ -318,6 +323,7 @@ export function AppShell({ children }: AppShellProps) {
               <NavButton
                 active={isDashboard}
                 onClick={() => handleViewChange("dashboard")}
+                onPrefetch={() => prefetch("dashboard")}
                 icon={LayoutDashboard}
                 label={t("nav.dashboard")}
                 layoutId="nav-active"
@@ -325,6 +331,7 @@ export function AppShell({ children }: AppShellProps) {
               <NavButton
                 active={isQbank}
                 onClick={() => handleViewChange("qbank")}
+                onPrefetch={() => prefetch("qbank")}
                 icon={ListChecks}
                 label={t("nav.qbank")}
                 layoutId="nav-active"
@@ -332,6 +339,7 @@ export function AppShell({ children }: AppShellProps) {
               <NavButton
                 active={isLearnActive}
                 onClick={() => handleViewChange("learn")}
+                onPrefetch={() => prefetch("learn")}
                 icon={GraduationCap}
                 label={t("nav.learn")}
                 layoutId="nav-active"
@@ -490,12 +498,14 @@ export function AppShell({ children }: AppShellProps) {
 function NavButton({
   active,
   onClick,
+  onPrefetch,
   icon: Icon,
   label,
   layoutId,
 }: {
   active: boolean;
   onClick: () => void;
+  onPrefetch?: () => void;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   layoutId: string;
@@ -503,6 +513,9 @@ function NavButton({
   return (
     <button
       onClick={onClick}
+      onPointerEnter={onPrefetch}
+      onTouchStart={onPrefetch}
+      onFocus={onPrefetch}
       className={cn(
         "relative h-9 px-3 rounded-md text-sm font-medium transition-colors flex items-center gap-2 active:scale-[0.97]",
         active

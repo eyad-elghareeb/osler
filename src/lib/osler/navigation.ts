@@ -162,6 +162,18 @@ export function useOslerRouter() {
   const router = useRouter();
   const currentView = useCurrentView();
 
+  const prefetch = React.useCallback(
+    (view: OslerView, params?: OslerRouteParams) => {
+      try {
+        const targetPath = routeFor(view, params);
+        router.prefetch(targetPath);
+      } catch {
+        // Ignore prefetch error
+      }
+    },
+    [router]
+  );
+
   const navigate = React.useCallback(
     (view: OslerView, params?: OslerRouteParams) => {
       const targetPath = routeFor(view, params);
@@ -189,5 +201,5 @@ export function useOslerRouter() {
     [currentView, router]
   );
 
-  return { navigate, routeFor, currentView };
+  return { navigate, prefetch, routeFor, currentView };
 }

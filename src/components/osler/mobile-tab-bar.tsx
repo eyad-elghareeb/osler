@@ -59,7 +59,7 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
   const immersive = useImmersiveMode();
   const { t } = useI18n();
   const currentView = useCurrentView();
-  const { navigate } = useOslerRouter();
+  const { navigate, prefetch } = useOslerRouter();
 
   const [pendingView, setPendingView] = React.useState<OslerView | null>(null);
   const activeView = pendingView ?? propView ?? currentView;
@@ -88,6 +88,9 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
             role="tab"
             aria-selected={active}
             aria-label={t(tab.labelKey)}
+            onPointerEnter={() => prefetch(tab.id)}
+            onTouchStart={() => prefetch(tab.id)}
+            onFocus={() => prefetch(tab.id)}
             onClick={() => {
               if (active) return;
               setPendingView(tab.id);

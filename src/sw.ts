@@ -30,6 +30,7 @@ declare const __OSLER_SW_BUILD_ID__: string;
 const CONTENT_CACHE = "osler-content-v1";
 const STATIC_CACHE = "osler-static-v1";
 const IMAGE_CACHE = "osler-images-v1";
+const PAGE_CACHE = "osler-pages-v1";
 
 const runtimeCaching: RuntimeCaching[] = [
   // App shell code — hashed /_next/static/* is immutable but CacheFirst
@@ -38,6 +39,48 @@ const runtimeCaching: RuntimeCaching[] = [
   {
     matcher: ({ url }) => url.pathname.startsWith("/_next/static/"),
     handler: new CacheFirst({
+      cacheName: STATIC_CACHE,
+      plugins: [
+        {
+          cacheWillUpdate: async ({ response }) => {
+            if (response && response.status === 200) return response;
+            return null;
+          },
+        },
+      ],
+    }),
+  },
+  // HTML page navigations — NetworkFirst with 1.5s timeout falling back to
+  // PAGE_CACHE. Provides instant offline navigation while always picking up
+  // fresh HTML when online.
+  {
+    matcher: ({ request }) => request.mode === "navigate",
+    handler: new NetworkFirst({
+      cacheName: PAGE_CACHE,
+      networkTimeoutSeconds: 1.5,
+      plugins: [
+        {
+          cacheWillUpdate: async ({ response }) => {
+            if (response && response.status === 200) return response;
+            return null;
+          },
+        },
+      ],
+    }),
+  },
+  // Core static assets and config — StaleWhileRevalidate so updates are picked
+  // up silently in the background while loads are instant.
+  {
+    matcher: ({ url }) => {
+      const p = url.pathname;
+      return (
+        p.startsWith("/assets/") ||
+        p.startsWith("/fonts/") ||
+        p === "/manifest.webmanifest" ||
+        p === "/osler.config.json"
+      );
+    },
+    handler: new StaleWhileRevalidate({
       cacheName: STATIC_CACHE,
       plugins: [
         {
@@ -125,12 +168,15 @@ const serwist = new Serwist({
 
 serwist.addEventListeners();
 
-/* ── Custom message API (content cache) ──────────────────────────────────
+/* ── Custom message API (content cache & precaching) ─────────────────────
  *
  * Preserved from the original hand-rolled sw.js so the offline content
- * download feature continues to work via useContentCache hook.
+ * download feature continues to work via useContentCache hook, plus app shell
+ * background precaching.
  *
  * Messages from the page: { type, ...payload }
+ *   GET_SW_BUILD
+ *   PRECACHE_APP_SHELL     { urls }
  *   PRECACHE_CONTENT       { packId, urls }
  *   CHECK_CONTENT_CACHED   { packId, urls }
  *   REMOVE_CONTENT         { packId, urls }
@@ -147,6 +193,9 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
   switch (data.type) {
     case "GET_SW_BUILD":
       source?.postMessage({ type: "SW_BUILD", buildId: __OSLER_SW_BUILD_ID__ });
+      break;
+    case "PRECACHE_APP_SHELL":
+      event.waitUntil(precacheAppShell(source, data.urls));
       break;
     case "PRECACHE_CONTENT":
       event.waitUntil(precacheContent(source, data.packId, data.urls));
@@ -187,6 +236,43 @@ function isPrecacheAllowed(rawUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+async function precacheAppShell(client: Client | null, urls: string[]) {
+  if (!Array.isArray(urls) || urls.length === 0) return;
+
+  const staticCache = await caches.open(STATIC_CACHE);
+  const pageCache = await caches.open(PAGE_CACHE);
+  const contentCache = await caches.open(CONTENT_CACHE);
+
+  for (const rawUrl of urls) {
+    try {
+      const u = new URL(rawUrl, self.location.origin);
+      if (u.origin !== self.location.origin && !isPrecacheAllowed(rawUrl)) {
+        continue;
+      }
+
+      let targetCache = staticCache;
+      const p = u.pathname;
+      if (p.startsWith("/osler-content/") || p.startsWith("/v1/content/")) {
+        targetCache = contentCache;
+      } else if (!p.includes(".") || p.endsWith(".html") || p === "/") {
+        targetCache = pageCache;
+      }
+
+      const existing = await targetCache.match(u.href);
+      if (!existing) {
+        const res = await fetch(u.href, { cache: "default" });
+        if (res.ok) {
+          await targetCache.put(u.href, res.clone());
+        }
+      }
+    } catch {
+      // Ignore individual resource errors
+    }
+  }
+
+  client?.postMessage({ type: "APP_SHELL_PRECACHED", count: urls.length });
 }
 
 async function precacheContent(
