@@ -46,3 +46,14 @@ ALLOWED_ORIGIN = "http://localhost:3000"
 TURNSTILE_ENABLED = "false"
 # The Worker callback base URL. Replace after first deployment.
 WORKER_URL = "http://localhost:8787"
+
+# ── Optional: live Cloudflare quota data (admin analytics panel) ──
+# Without these, GET /v1/admin/analytics/cloudflare-limits serves D1-derived
+# estimates and the panel shows "Estimated" + connect steps. To go live:
+#   1. Paste your 32-hex-char Cloudflare account ID below.
+#   2. Set the token as a SECRET (never commit it here):
+#        npx wrangler secret put CF_ANALYTICS_TOKEN
+#      The token needs one permission: Account → Account Analytics → Read.
+#   3. Redeploy the Worker. Full guide: docs/cloudflare-analytics.md
+# CF_ACCOUNT_ID = "00000000000000000000000000000000"
+# CF_R2_BUCKET = "osler-content"

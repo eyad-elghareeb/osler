@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   Activity,
   Zap,
+  Unplug,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,9 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
   }
 
   const { metrics, caps, resetAt, d1Tables, safetyThrottles } = data;
+  // Older Workers omit `connected`/`sources` — treat everything as estimated.
+  const connected = data.connected === true;
+  const cpuLive = data.sources?.workerCpuTime === "live";
   const isApproachingLimits =
     metrics.workerRequests.status !== "healthy" ||
     metrics.d1Writes.status !== "healthy" ||
@@ -128,6 +132,18 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
                 {data.status !== "healthy" && <AlertTriangle className="size-3 mr-1" />}
                 {t(`admin.analytics.cf.status.${data.status}`)}
               </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-xs font-medium border",
+                  connected
+                    ? "bg-success/15 text-success border-success/30"
+                    : "bg-muted/60 text-muted-foreground border-border",
+                )}
+              >
+                {connected ? <Activity className="size-3 mr-1" /> : <Unplug className="size-3 mr-1" />}
+                {t(connected ? "admin.analytics.cf.source.live" : "admin.analytics.cf.source.estimated")}
+              </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               {t("admin.analytics.cf.resetAtUtc")}
@@ -140,6 +156,27 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
           <span>{t("admin.analytics.cf.resetIn", { time: formatCountdown(msToReset) })}</span>
         </div>
       </div>
+
+      {/* Connect banner when serving estimates */}
+      {!connected && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-info/10 border border-info/30 text-foreground">
+          <Unplug className="size-5 text-info shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <h3 className="font-semibold text-sm text-info mb-0.5">
+              {t("admin.analytics.cf.connect.title")}
+            </h3>
+            <p className="text-muted-foreground mb-1.5">
+              {t("admin.analytics.cf.connect.desc")}
+            </p>
+            <ol className="list-decimal ms-4 space-y-1 text-muted-foreground">
+              <li>{t("admin.analytics.cf.connect.step1")}</li>
+              <li>{t("admin.analytics.cf.connect.step2")}</li>
+              <li>{t("admin.analytics.cf.connect.step3")}</li>
+            </ol>
+            <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">docs/cloudflare-analytics.md</p>
+          </div>
+        </div>
+      )}
 
       {/* Warning Banner if approaching limits */}
       {isApproachingLimits && (
@@ -260,12 +297,13 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
         <QuotaCard
           title={t("admin.analytics.cf.cpuLimit")}
           subtitle={t("admin.analytics.cf.cpuLimitDesc")}
-          current={`${data.executionLatency.p50 ?? "—"} ms`}
-          limit="10 ms CPU"
+          current={cpuLive ? `${metrics.workerCpuTime.current} ms` : `${data.executionLatency.p50 ?? "—"} ms`}
+          limit={cpuLive ? "10 ms CPU" : t("admin.analytics.cf.latencyMedian")}
           unit=""
-          percentage={metrics.workerCpuTime.percentage}
+          percentage={cpuLive ? metrics.workerCpuTime.percentage : 0}
           status={metrics.workerCpuTime.status}
           icon={Cpu}
+          badgeText={cpuLive ? undefined : t("admin.analytics.cf.p95badge", { ms: data.executionLatency.p95 ?? "—" })}
           extraInfo={
             <div className="mt-3 pt-2.5 border-t border-border/60 text-[11px] text-muted-foreground space-y-1">
               <div className="flex justify-between">
@@ -369,6 +407,9 @@ interface QuotaCardProps {
   status: CloudflareLimitMetric["status"];
   icon: React.ElementType;
   extraInfo?: React.ReactNode;
+  /** Overrides the `{percentage}%` badge — used when the headline number has
+   *  no quota to percent against (e.g. client-measured latency). */
+  badgeText?: string;
 }
 
 function QuotaCard({
@@ -380,6 +421,7 @@ function QuotaCard({
   status,
   icon: Icon,
   extraInfo,
+  badgeText,
 }: QuotaCardProps) {
   const colors = getStatusColor(status);
 
@@ -397,7 +439,7 @@ function QuotaCard({
           variant="outline"
           className={cn("text-[11px] font-bold tabular-nums shrink-0", colors.badge)}
         >
-          {percentage}%
+          {badgeText ?? `${percentage}%`}
         </Badge>
       </div>
 

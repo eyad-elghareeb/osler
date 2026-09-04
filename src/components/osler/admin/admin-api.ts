@@ -626,10 +626,24 @@ export interface CloudflareSafetyThrottle {
   protectedQuota: string;
 }
 
+export type QuotaSource = "live" | "estimated";
+
+export type QuotaSourceMap = Record<
+  "workerRequests" | "d1Writes" | "d1Reads" | "d1Storage" | "r2Storage" | "r2ClassAOps" | "r2ClassBOps" | "workerCpuTime",
+  QuotaSource
+>;
+
 export interface CloudflareLimitsData {
   status: "healthy" | "warning" | "critical" | "exceeded";
   resetAt: number;
   timeToResetMs: number;
+  /** True when at least one section came from the Cloudflare GraphQL API
+   *  (CF_ACCOUNT_ID + CF_ANALYTICS_TOKEN configured on the Worker). */
+  connected: boolean;
+  /** Isolate timestamp of the cached live payload, or null when estimated. */
+  liveAt: number | null;
+  /** Per-metric provenance. Absent on older Workers — treat as all-estimated. */
+  sources?: QuotaSourceMap;
   metrics: {
     workerRequests: CloudflareLimitMetric;
     d1Writes: CloudflareLimitMetric;

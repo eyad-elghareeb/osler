@@ -38,6 +38,18 @@ APP_ORIGIN=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# ─── Optional: live Cloudflare quota data (admin analytics panel) ─────────
+
+# Without these, GET /v1/admin/analytics/cloudflare-limits serves D1-derived
+# estimates. To show live Workers/R2 usage in Admin → Analytics:
+# 32-hex-char account ID (dash sidebar or URL when logged in to Cloudflare).
+CF_ACCOUNT_ID=
+# API token with ONE permission: Account → Account Analytics → Read.
+# Create at: Cloudflare dashboard → My Profile → API Tokens → Create Token.
+CF_ANALYTICS_TOKEN=
+# R2 bucket the live ops/storage queries are scoped to.
+CF_R2_BUCKET=osler-content
+
 # ─── Optional: Field-level encryption (AES-256-GCM for Gemini keys) ─────────
 
 # 32-byte base64url-encoded key used to encrypt sensitive per-user fields

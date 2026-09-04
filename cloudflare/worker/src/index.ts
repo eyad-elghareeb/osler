@@ -197,6 +197,15 @@ interface Env {
   CONTENT_ONLY_MANAGED?: string | boolean;
   /** Minimum respondents before students see peer percentages (default 5). */
   QBANK_STATS_MIN_SAMPLE?: string;
+  /** Cloudflare account ID (32 hex chars) for live GraphQL usage queries. */
+  CF_ACCOUNT_ID?: string;
+  /** API token with Account Analytics:Read (a SECRET — set via
+   *  `wrangler secret put CF_ANALYTICS_TOKEN`, never in wrangler.toml).
+   *  Enables live quota numbers in GET /v1/admin/analytics/cloudflare-limits;
+   *  without it the endpoint serves D1-derived estimates. */
+  CF_ANALYTICS_TOKEN?: string;
+  /** R2 bucket name for live ops/storage queries (default "osler-content"). */
+  CF_R2_BUCKET?: string;
 }
 
 function isManagedOnly(env: Env): boolean {
@@ -2455,6 +2464,7 @@ function groupChoiceRows(rows: Array<{ qid: string; choice: number; options_coun
  *   GET /v1/admin/analytics/top-pages?range=24h|7d|30d&limit=20
  *   GET /v1/admin/analytics/errors?range=24h|7d|30d&limit=20
  *   GET /v1/admin/analytics/api-performance?range=24h|7d|30d&limit=20
+ *   GET /v1/admin/analytics/cloudflare-limits
  */
 const ANALYTICS_RANGES: Record<string, number> = {
   "24h": 24 * 60 * 60 * 1000,
@@ -2946,7 +2956,175 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     return json({ pack: uid, stats: groupChoiceRows(rows.results || [], 0) }, 200, origin, log);
   }
 
-  /* ── Cloudflare Free Tier Analytics & Quota Limits ── */
+  /* ── Live Cloudflare usage (GraphQL Analytics API) ──
+ *
+ * The admin quota panel needs REAL account usage, not just D1-derived
+ * guesses. When CF_ACCOUNT_ID + CF_ANALYTICS_TOKEN (secret) are configured,
+ * fetchCfLiveUsage pulls the same datasets the Cloudflare dashboard uses:
+ *   workersInvocationsAdaptive → requests today (+ CPU p50, best effort)
+ *   r2OperationsAdaptiveGroups → this month's ops grouped by actionType
+ *   r2StorageAdaptiveGroups    → stored bytes (point-in-time gauge)
+ * Each query is isolated (own try/catch): a schema drift in one dataset
+ * degrades that section to the estimate instead of failing the endpoint.
+ * Results are cached in-isolate for 5 minutes; one panel load costs at most
+ * 4 subrequests. D1 row metering has no confirmed per-database GraphQL
+ * schema, so D1 reads/writes stay estimated from real table counts — check
+ * the dashboard (Workers & Pages → D1 → Metrics) for the billed numbers.
+ * Full setup: docs/cloudflare-analytics.md.
+ */
+const CF_GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
+const CF_LIVE_TTL_MS = 5 * 60 * 1000;
+const CF_GRAPHQL_TIMEOUT_MS = 8000;
+const CF_R2_LIST_PAGE_CAP = 40;
+
+interface CfLiveUsage {
+  connected: boolean;
+  /** Isolate timestamp of the (possibly cached) live fetch, null when estimated. */
+  at: number | null;
+  workersRequestsToday: number | null;
+  cpuP50Ms: number | null;
+  r2ClassAOpsMonth: number | null;
+  r2ClassBOpsMonth: number | null;
+  r2Bytes: number | null;
+}
+
+const CF_LIVE_NONE: CfLiveUsage = {
+  connected: false, at: null, workersRequestsToday: null, cpuP50Ms: null,
+  r2ClassAOpsMonth: null, r2ClassBOpsMonth: null, r2Bytes: null,
+};
+let cfLiveCache: { at: number; data: CfLiveUsage } | null = null;
+
+/** POST one GraphQL query; null on any failure (network/timeout/non-2xx/GraphQL errors). */
+async function cfGraphql(token: string, query: string, variables: Record<string, unknown>): Promise<any> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CF_GRAPHQL_TIMEOUT_MS);
+  try {
+    const res = await fetch(CF_GRAPHQL_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { data?: any; errors?: unknown[] };
+    if (!body || (Array.isArray(body.errors) && body.errors.length > 0)) return null;
+    return body.data ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Classify an R2 GraphQL actionType into its billed op class. Deletes are
+ *  free (excluded from both). Unknown actions land in Class A — the scarcer
+ *  quota — so a new action type can only over-alert, never hide usage. */
+function r2ActionClass(action: unknown): "A" | "B" | "free" {
+  const a = String(action ?? "").toLowerCase();
+  if (a.includes("delete")) return "free";
+  if (a.startsWith("get") || a.startsWith("head")) return "B";
+  if (
+    a.startsWith("put") || a.startsWith("post") || a.startsWith("copy") ||
+    a.startsWith("upload") || a.startsWith("complete") || a.startsWith("abort") ||
+    a.startsWith("list")
+  ) return "A";
+  return "A";
+}
+
+async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: string, nowIso: string): Promise<CfLiveUsage> {
+  const token = (env.CF_ANALYTICS_TOKEN ?? "").trim();
+  const account = (env.CF_ACCOUNT_ID ?? "").trim();
+  if (!token || !account) return CF_LIVE_NONE;
+  const t = now();
+  if (cfLiveCache && t - cfLiveCache.at < CF_LIVE_TTL_MS) return cfLiveCache.data;
+  const bucket = (env.CF_R2_BUCKET ?? "").trim() || "osler-content";
+  const weekAgoIso = new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const [inv, cpu, ops, stor] = await Promise.all([
+    cfGraphql(token,
+      `query W($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
+      { a: account, s: dayStartIso, e: nowIso }),
+    cfGraphql(token,
+      `query C($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){c:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){quantiles{cpuTimeP50}}}}}`,
+      { a: account, s: dayStartIso, e: nowIso }),
+    cfGraphql(token,
+      `query R($a: string!, $m: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){r:r2OperationsAdaptiveGroups(limit:10000,filter:{datetime_geq:$m,datetime_leq:$e,bucketName:$b}){sum{requests}dimensions{actionType}}}}}`,
+      { a: account, m: monthStartIso, e: nowIso, b: bucket }),
+    cfGraphql(token,
+      `query S($a: string!, $w: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:100,filter:{datetime_geq:$w,datetime_leq:$e,bucketName:$b}){max{payloadSize}}}}}`,
+      { a: account, w: weekAgoIso, e: nowIso, b: bucket }),
+  ]);
+  const out: CfLiveUsage = { ...CF_LIVE_NONE };
+  try {
+    const rows = inv?.viewer?.accounts?.[0]?.w;
+    const sum = Array.isArray(rows) ? rows[0]?.sum : rows?.sum;
+    const req = Number(sum?.requests);
+    if (Number.isFinite(req) && req >= 0) { out.workersRequestsToday = Math.round(req); out.connected = true; }
+  } catch { /* estimated fallback */ }
+  try {
+    const rows = cpu?.viewer?.accounts?.[0]?.c;
+    const q = (Array.isArray(rows) ? rows[0]?.quantiles : rows?.quantiles) ?? {};
+    const p50 = Number(q?.cpuTimeP50);
+    if (Number.isFinite(p50) && p50 >= 0) { out.cpuP50Ms = p50; out.connected = true; }
+  } catch { /* estimated fallback */ }
+  try {
+    const groups = ops?.viewer?.accounts?.[0]?.r;
+    if (Array.isArray(groups) && groups.length > 0) {
+      let a = 0, b = 0, seen = false;
+      for (const g of groups) {
+        const n = Number(g?.sum?.requests);
+        if (!Number.isFinite(n) || n < 0) continue;
+        seen = true;
+        const cls = r2ActionClass(g?.dimensions?.actionType);
+        if (cls === "A") a += n; else if (cls === "B") b += n;
+      }
+      if (seen) { out.r2ClassAOpsMonth = Math.round(a); out.r2ClassBOpsMonth = Math.round(b); out.connected = true; }
+    }
+  } catch { /* estimated fallback */ }
+  try {
+    const groups = stor?.viewer?.accounts?.[0]?.s;
+    if (Array.isArray(groups)) {
+      let best: number | null = null;
+      for (const g of groups) {
+        const v = Number(g?.max?.payloadSize);
+        if (Number.isFinite(v) && v >= 0 && (best === null || v > best)) best = v;
+      }
+      if (best !== null) { out.r2Bytes = Math.round(best); out.connected = true; }
+    }
+  } catch { /* estimated fallback */ }
+  out.at = t;
+  cfLiveCache = { at: t, data: out };
+  return out;
+}
+
+/** Real bucket size via R2 list() (no API token needed). The page walk is
+ *  capped so a huge bucket can't blow the free 50-subrequest cap; past the
+ *  cap the partial sum is still a real lower bound — better than guessing. */
+async function r2BucketBytes(env: Env): Promise<number | null> {
+  if (!env.CONTENT) return null;
+  try {
+    let bytes = 0, cursor: string | undefined = undefined, pages = 0;
+    for (;;) {
+      const listed = await env.CONTENT.list({ limit: 1000, cursor });
+      const objs = (listed as unknown as { objects?: Array<{ size?: unknown }> }).objects;
+      if (Array.isArray(objs)) {
+        for (const o of objs) {
+          const s = Number(o?.size);
+          if (Number.isFinite(s) && s > 0) bytes += s;
+        }
+      }
+      pages++;
+      const meta = listed as unknown as { truncated?: boolean; cursor?: string };
+      if (!meta.truncated || pages >= CF_R2_LIST_PAGE_CAP) break;
+      if (!meta.cursor) break;
+      cursor = meta.cursor;
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/* ── Cloudflare Free Tier Analytics & Quota Limits ── */
   if (request.method === "GET" && path === "/v1/admin/analytics/cloudflare-limits") {
     const t = now();
     const d = new Date(t);
@@ -2959,6 +3137,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const [
       analyticsRow,
       qstatsRow,
+      qstatsTodayRow,
       progressRow,
       contentRow,
       auditRow,
@@ -2973,6 +3152,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     ] = await Promise.all([
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_month FROM analytics_events").bind(startOfToday, startOfMonth).first<{ total: number; today: number; this_month: number }>().catch(() => ({ total: 0, today: 0, this_month: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(count) AS total_responses FROM question_choice_stats").first<{ total: number; total_responses: number }>().catch(() => ({ total: 0, total_responses: 0 })),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?").bind(startOfToday).first<{ n: number }>().catch(() => ({ n: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(raw_bytes) AS raw_bytes, SUM(LENGTH(payload)) AS compressed_bytes FROM progress_documents").first<{ total: number; raw_bytes: number; compressed_bytes: number }>().catch(() => ({ total: 0, raw_bytes: 0, compressed_bytes: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published, SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS drafts FROM content_objects").first<{ total: number; published: number; drafts: number }>().catch(() => ({ total: 0, published: 0, drafts: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today FROM admin_audit").bind(startOfToday).first<{ total: number; today: number }>().catch(() => ({ total: 0, today: 0 })),
@@ -2990,16 +3170,25 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const analyticsThisMonth = Number(analyticsRow?.this_month) || 0;
     const auditToday = Number(auditRow?.today) || 0;
     const sessionsToday = Number(sessionsRow?.today) || 0;
+    const qstatsToday = Number(qstatsTodayRow?.n) || 0;
+
+    // Live Cloudflare usage (all-null + connected:false when no API token is
+    // configured) and real R2 bucket bytes via list() as the storage fallback
+    // chain: GraphQL gauge → list() sum → size estimate.
+    const live = await fetchCfLiveUsage(env, new Date(startOfToday).toISOString(), new Date(startOfMonth).toISOString(), new Date(t).toISOString());
+    const listedR2Bytes = live.r2Bytes !== null ? null : await r2BucketBytes(env);
 
     // Estimate total D1 writes today across all features
     const estimatedD1WritesToday = analyticsToday + auditToday + sessionsToday + Math.round(analyticsToday * 0.15);
 
-    // Free Tier limits
+    // Free Tier limits (verified against the pricing docs 2026-09: D1 is
+    // 5M reads/day, 100k writes/day, 5 GB storage; Workers 100k reqs/day,
+    // 10ms CPU, 50 subrequests; R2 10 GB-mo, 1M Class A, 10M Class B).
     const LIMITS = {
       workerDailyRequests: 100_000,
       d1DailyWrites: 100_000,
       d1DailyReads: 5_000_000,
-      d1DatabaseStorageBytes: 500 * 1024 * 1024, // 500 MB
+      d1DatabaseStorageBytes: 5 * 1024 * 1024 * 1024, // 5 GB
       r2StorageBytes: 10 * 1024 * 1024 * 1024, // 10 GB
       r2MonthlyClassA: 1_000_000,
       r2MonthlyClassB: 10_000_000,
@@ -3028,21 +3217,33 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const totalD1Rows = d1Tables.reduce((acc, t) => acc + t.rowCount, 0);
     const totalD1EstimatedBytes = d1Tables.reduce((acc, t) => acc + t.estimatedBytes, 0);
 
-    // Estimated worker requests today (telemetry events + sessions + public reads)
+    // Worker requests: live GraphQL sum when connected, else the D1-telemetry
+    // heuristic (analytics batches ×2, sessions ×5 — public reads included).
     const estimatedWorkerRequestsToday = Math.max(analyticsToday * 2, sessionsToday * 5, 1);
+    const workerRequestsToday = live.workersRequestsToday ?? estimatedWorkerRequestsToday;
+    // D1 reads have no confirmed per-database usage API — estimated from
+    // telemetry volume (no confirmed schema yet; see block comment above).
     const estimatedD1ReadsToday = Math.max(analyticsToday * 4, sessionsToday * 20, 10);
 
-    // Estimated R2 storage from content objects
+    // R2 storage: GraphQL gauge → real list() sum → content-object estimate.
     const totalContentObjects = Number(contentRow?.total) || 0;
     const estimatedR2Bytes = totalContentObjects * 120 * 1024 + (Number(progressRow?.total) || 0) * 16 * 1024;
-    const estimatedR2ClassA = totalContentObjects * 4 + auditToday + 10;
-    const estimatedR2ClassB = Math.max(analyticsThisMonth * 3, 50);
+    const r2Bytes = live.r2Bytes ?? listedR2Bytes ?? estimatedR2Bytes;
+    const r2ClassA = live.r2ClassAOpsMonth ?? (totalContentObjects * 4 + auditToday + 10);
+    const r2ClassB = live.r2ClassBOpsMonth ?? Math.max(analyticsThisMonth * 3, 50);
 
     // Latency metrics
     const apiLatencies = (apiPerfRows?.results || []).map((r) => Number(r.value)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
     const p50Latency = percentile(apiLatencies, 50) ?? 8;
     const p95Latency = percentile(apiLatencies, 95) ?? 24;
     const maxLatency = apiLatencies.length ? apiLatencies[apiLatencies.length - 1] : 35;
+
+    // CPU time: live p50 when connected. Otherwise we only have CLIENT-measured
+    // API latency — never compare that to the 10ms CPU limit (any real network
+    // RTT would false-alarm), so the metric reports healthy/0 and the UI shows
+    // the latency framing instead (see sources.workerCpuTime).
+    const cpuLive = live.cpuP50Ms !== null;
+    const cpuCurrent = live.cpuP50Ms ?? p50Latency;
 
     const calcStatus = (cur: number, lim: number): "healthy" | "warning" | "critical" | "exceeded" => {
       const pct = (cur / lim) * 100;
@@ -3054,11 +3255,11 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
 
     const metrics = {
       workerRequests: {
-        current: estimatedWorkerRequestsToday,
+        current: workerRequestsToday,
         limit: LIMITS.workerDailyRequests,
         unit: "requests/day",
-        percentage: Math.min(100, Math.round((estimatedWorkerRequestsToday / LIMITS.workerDailyRequests) * 1000) / 10),
-        status: calcStatus(estimatedWorkerRequestsToday, LIMITS.workerDailyRequests),
+        percentage: Math.min(100, Math.round((workerRequestsToday / LIMITS.workerDailyRequests) * 1000) / 10),
+        status: calcStatus(workerRequestsToday, LIMITS.workerDailyRequests),
         period: "daily" as const,
       },
       d1Writes: {
@@ -3086,35 +3287,35 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
         period: "storage" as const,
       },
       r2Storage: {
-        current: estimatedR2Bytes,
+        current: r2Bytes,
         limit: LIMITS.r2StorageBytes,
         unit: "bytes",
-        percentage: Math.min(100, Math.round((estimatedR2Bytes / LIMITS.r2StorageBytes) * 1000) / 10),
-        status: calcStatus(estimatedR2Bytes, LIMITS.r2StorageBytes),
+        percentage: Math.min(100, Math.round((r2Bytes / LIMITS.r2StorageBytes) * 1000) / 10),
+        status: calcStatus(r2Bytes, LIMITS.r2StorageBytes),
         period: "storage" as const,
       },
       r2ClassAOps: {
-        current: estimatedR2ClassA,
+        current: r2ClassA,
         limit: LIMITS.r2MonthlyClassA,
         unit: "ops/month",
-        percentage: Math.min(100, Math.round((estimatedR2ClassA / LIMITS.r2MonthlyClassA) * 1000) / 10),
-        status: calcStatus(estimatedR2ClassA, LIMITS.r2MonthlyClassA),
+        percentage: Math.min(100, Math.round((r2ClassA / LIMITS.r2MonthlyClassA) * 1000) / 10),
+        status: calcStatus(r2ClassA, LIMITS.r2MonthlyClassA),
         period: "monthly" as const,
       },
       r2ClassBOps: {
-        current: estimatedR2ClassB,
+        current: r2ClassB,
         limit: LIMITS.r2MonthlyClassB,
         unit: "ops/month",
-        percentage: Math.min(100, Math.round((estimatedR2ClassB / LIMITS.r2MonthlyClassB) * 1000) / 10),
-        status: calcStatus(estimatedR2ClassB, LIMITS.r2MonthlyClassB),
+        percentage: Math.min(100, Math.round((r2ClassB / LIMITS.r2MonthlyClassB) * 1000) / 10),
+        status: calcStatus(r2ClassB, LIMITS.r2MonthlyClassB),
         period: "monthly" as const,
       },
       workerCpuTime: {
-        current: p50Latency,
+        current: cpuCurrent,
         limit: LIMITS.workerCpuTimeMs,
         unit: "ms (p50 / 10ms CPU limit)",
-        percentage: Math.min(100, Math.round((p50Latency / LIMITS.workerCpuTimeMs) * 1000) / 10),
-        status: calcStatus(p50Latency, LIMITS.workerCpuTimeMs),
+        percentage: cpuLive ? Math.min(100, Math.round((cpuCurrent / LIMITS.workerCpuTimeMs) * 1000) / 10) : 0,
+        status: cpuLive ? calcStatus(cpuCurrent, LIMITS.workerCpuTimeMs) : ("healthy" as const),
         period: "per_request" as const,
       },
       workerSubrequests: {
@@ -3136,7 +3337,9 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
       metrics.r2Storage.status,
       metrics.r2ClassAOps.status,
       metrics.r2ClassBOps.status,
-      metrics.workerCpuTime.status,
+      // CPU only counts when it's real: the estimated placeholder is always
+      // healthy and must never drive the banner.
+      ...(cpuLive ? [metrics.workerCpuTime.status] : []),
     ];
     const highestStatusWeight = Math.max(...allStatuses.map((s) => statusWeights[s] ?? 0));
     const overallStatus = highestStatusWeight >= 3 ? "exceeded" : highestStatusWeight === 2 ? "critical" : highestStatusWeight === 1 ? "warning" : "healthy";
@@ -3145,6 +3348,21 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
       status: overallStatus,
       resetAt: startOfTomorrow,
       timeToResetMs,
+      // Live wiring state: the panel shows a Live badge vs the connect-steps
+      // banner off this. Older workers omit these fields — the UI treats a
+      // missing `sources` as all-estimated.
+      connected: live.connected,
+      liveAt: live.connected ? live.at : null,
+      sources: {
+        workerRequests: live.workersRequestsToday !== null ? "live" : "estimated",
+        d1Writes: "estimated",
+        d1Reads: "estimated",
+        d1Storage: "estimated",
+        r2Storage: live.r2Bytes !== null || listedR2Bytes !== null ? "live" : "estimated",
+        r2ClassAOps: live.r2ClassAOpsMonth !== null ? "live" : "estimated",
+        r2ClassBOps: live.r2ClassBOpsMonth !== null ? "live" : "estimated",
+        workerCpuTime: cpuLive ? "live" : "estimated",
+      },
       metrics,
       caps: {
         analyticsWriteCap: {
@@ -3153,9 +3371,9 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
           percentage: Math.min(100, Math.round((analyticsToday / LIMITS.analyticsDailyWriteCap) * 1000) / 10),
         },
         qstatsWriteCap: {
-          current: Math.min(analyticsToday, LIMITS.qstatsDailyWriteCap),
+          current: qstatsToday,
           cap: LIMITS.qstatsDailyWriteCap,
-          percentage: Math.min(100, Math.round((Math.min(analyticsToday, LIMITS.qstatsDailyWriteCap) / LIMITS.qstatsDailyWriteCap) * 1000) / 10),
+          percentage: Math.min(100, Math.round((qstatsToday / LIMITS.qstatsDailyWriteCap) * 1000) / 10),
         },
       },
       executionLatency: {
