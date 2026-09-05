@@ -442,6 +442,11 @@ export function SpotlightWalkthrough({
       {/* ── 4. Interactive Floating Coach Mark Card ── */}
       <motion.div
         layout
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="osler-walkthrough-title"
+        aria-describedby="osler-walkthrough-desc"
+        tabIndex={-1}
         initial={{ opacity: 0, scale: 0.94, y: dir * 12 }}
         animate={{
           opacity: 1,
@@ -454,16 +459,30 @@ export function SpotlightWalkthrough({
         exit={{ opacity: 0, scale: 0.94 }}
         transition={MOTION_TRANSITION.normal}
         className={cn(
-          "absolute z-30 rounded-2xl border border-border/80 bg-card shadow-2xl overflow-hidden",
+          "absolute z-30 rounded-2xl border border-border/80 bg-card shadow-2xl overflow-visible",
           "max-h-[85vh] flex flex-col pointer-events-auto",
-          "focus-visible:outline-none focus:ring-2 focus:ring-primary"
+          "focus-visible:outline-none"
         )}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Directional arrow notch pointing to spotlight */}
+        {spotlightRect.found && cardPosition.placement === "bottom" && (
+          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 border-t border-l border-border/80 bg-card z-20 pointer-events-none" />
+        )}
+        {spotlightRect.found && cardPosition.placement === "top" && (
+          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 border-b border-r border-border/80 bg-card z-20 pointer-events-none" />
+        )}
+        {spotlightRect.found && cardPosition.placement === "right" && (
+          <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 size-3 rotate-45 border-b border-l border-border/80 bg-card z-20 pointer-events-none" />
+        )}
+        {spotlightRect.found && cardPosition.placement === "left" && (
+          <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 size-3 rotate-45 border-t border-r border-border/80 bg-card z-20 pointer-events-none" />
+        )}
+
         {/* Ambient Top Glow */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-40"
+          className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden opacity-40"
           style={{
             background:
               "radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 70%)",
@@ -517,10 +536,10 @@ export function SpotlightWalkthrough({
               <StepMainIcon className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-snug">
+              <h3 id="osler-walkthrough-title" className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-snug">
                 {t(currentStep.titleKey)}
               </h3>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
+              <p id="osler-walkthrough-desc" className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
                 {t(currentStep.subtitleKey)}
               </p>
             </div>
