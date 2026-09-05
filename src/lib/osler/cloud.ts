@@ -13,9 +13,13 @@ const SESSION_STORAGE_KEY = "osler-cloud-session-v1";
 export const SESSION_EXPIRED_FLAG = "osler-cloud-session-expired";
 const SYNC_DEBOUNCE_MS = 4_000;
 const MIN_SYNC_INTERVAL_MS = 20_000;
+// Foreground (visibility) pulls are a backstop for pokes missed while the
+// socket was closed — a tab that flip-flops between apps must not burn a
+// reconcile request per switch. Poke pulls and pushes stay instant.
+const FOREGROUND_PULL_MIN_MS = 60_000;
 // Realtime pokes arrive per pushing device — a burst of N devices pushing at
-// once would otherwise trigger N full pull cycles. One trailing pull covers
-// them all (each pull HEADs the server for what actually changed).
+// once would otherwise trigger N pull cycles. One trailing targeted pull
+// covers them all (the poke frame lists exactly which kinds changed).
 const POKE_PULL_DEBOUNCE_MS = 1_500;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
@@ -697,22 +701,65 @@ export function startCloudSync(session: CloudSession): () => void {
   const dirtyKindsDuringSync = new Set<SyncKind>();
   let syncing = false;
   let pokePending = false;
+  // Union of kinds announced by realtime pokes since the last cycle — lets a
+  // poke pull GET exactly what changed instead of HEADing the server first.
+  const pokeKindsBuffer = new Set<SyncKind>();
   let pokeTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSyncAt = 0;
   const serverUpdatedAt: Record<string, number> = {};
   let retryCount = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // Set when a cycle must reconcile against the server's full kind-timestamp
+  // list first (startup, Sync Now, offline→online, 401/409 recovery): run the
+  // HEAD → pull → push sequence instead of the cheaper targeted pull / direct push.
+  let forceReconcile = false;
 
-  const runSync = async (pullOnly = false) => {
+  const ingestQuota = (quota?: { usedBytes?: number; limitBytes?: number }) => {
+    if (typeof quota?.usedBytes === "number" && typeof quota.limitBytes === "number") {
+      syncQuota = { usedBytes: quota.usedBytes, limitBytes: quota.limitBytes };
+      window.dispatchEvent(new CustomEvent("osler-cloud-sync-quota", { detail: syncQuota }));
+    }
+  };
+
+  const pullableKind = (kind: SyncKind): boolean => {
+    // settings is account-level and always synced, even when other content
+    // kinds are disabled — it carries the sync-enabled flag itself so a new
+    // device picks it up on its next login.
+    if (kind === "settings") return true;
+    if (kind === "qbank") return getConfig().cloud.syncQbank;
+    if (kind === "flashcards") return getConfig().cloud.syncFlashcards;
+    return getConfig().cloud.syncContent;
+  };
+
+  /** GET the given kinds (deduped, config-gated) and merge them locally. */
+  const pullKinds = async (kinds: SyncKind[]): Promise<void> => {
+    const pullable = Array.from(new Set(kinds)).filter(pullableKind);
+    if (pullable.length === 0) return;
+    const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(`/v1/sync?kinds=${pullable.join(",")}`, {}, currentSession.token);
+    if (!getConfig().cloud.syncQbank) delete remote.qbank;
+    if (!getConfig().cloud.syncFlashcards) delete remote.flashcards;
+    if (!getConfig().cloud.syncContent) {
+      delete remote.sessions;
+      delete remote.notes;
+      delete remote.articleHighlights;
+      delete remote.bookmarks;
+    }
+    await storage.mergeCloudSnapshot(remote);
+    for (const kind of SYNC_KINDS) {
+      if (remote[kind]) serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? 0;
+    }
+  };
+
+  const runSync = async (pullOnly = false, pokeKinds?: SyncKind[]) => {
     if (stopped || syncing) return;
     if (!pullOnly && dirtyKinds.size === 0) return;
     if (!navigator.onLine) {
-      timer = setTimeout(() => void runSync(pullOnly), SYNC_DEBOUNCE_MS);
+      timer = setTimeout(() => void runSync(pullOnly, pokeKinds), SYNC_DEBOUNCE_MS);
       return;
     }
     const sinceLastSync = Date.now() - lastSyncAt;
     if (sinceLastSync < MIN_SYNC_INTERVAL_MS) {
-      timer = setTimeout(() => void runSync(pullOnly), MIN_SYNC_INTERVAL_MS - sinceLastSync);
+      timer = setTimeout(() => void runSync(pullOnly, pokeKinds), MIN_SYNC_INTERVAL_MS - sinceLastSync);
       return;
     }
     syncing = true;
@@ -727,74 +774,56 @@ export function startCloudSync(session: CloudSession): () => void {
         if (refreshed) currentSession = refreshed;
       }
 
-      const config = getConfig();
+      // 1. Pull.
+      //   - Poke pulls know exactly which kinds changed — GET them directly,
+      //     no HEAD round-trip.
+      //   - Reconcile cycles (startup, Sync Now, offline→online, 401/409
+      //     recovery, foreground backstop) HEAD the server for the
+      //     authoritative per-kind timestamps, then pull only what's stale.
+      //   - Plain push cycles skip the HEAD entirely: the server merge is
+      //     monotonic, so pushing without pulling never loses data — a stale
+      //     push is either merged losslessly or rejected via the
+      //     x-sync-since-* 409 below, which re-enters a reconcile cycle.
+      const poked = pokeKinds?.filter((kind) => (SYNC_KINDS as readonly string[]).includes(kind)) ?? [];
+      if (forceReconcile || (pullOnly && poked.length === 0)) {
+        const head = await request<{
+          timestamps?: Record<string, number>;
+          quota?: { usedBytes: number; limitBytes: number };
+        }>("/v1/sync?head=true", {}, currentSession.token);
 
-      // 1. Lightweight HEAD check to inspect server timestamps and quota
-      const head = await request<{
-        timestamps?: Record<string, number>;
-        quota?: { usedBytes: number; limitBytes: number };
-      }>("/v1/sync?head=true", {}, currentSession.token);
+        ingestQuota(head.quota);
 
-      if (typeof head.quota?.usedBytes === "number" && typeof head.quota?.limitBytes === "number") {
-        syncQuota = { usedBytes: head.quota.usedBytes, limitBytes: head.quota.limitBytes };
-        window.dispatchEvent(new CustomEvent("osler-cloud-sync-quota", { detail: syncQuota }));
-      }
-
-      const remoteTimestamps = head.timestamps || {};
-      const kindsToPull: SyncKind[] = [];
-      for (const kind of SYNC_KINDS) {
-        const remoteTime = remoteTimestamps[kind] ?? 0;
-        const localServerTime = serverUpdatedAt[kind] ?? 0;
-        if (remoteTime > localServerTime) {
-          // settings is account-level and always synced, even when other
-          // content kinds are disabled — it carries the sync-enabled flag
-          // itself so a new device picks it up on its next login.
-          if (kind === "settings") {
-            kindsToPull.push(kind as SyncKind);
-            continue;
+        const remoteTimestamps = head.timestamps || {};
+        const kindsToPull: SyncKind[] = [];
+        for (const kind of SYNC_KINDS) {
+          const remoteTime = remoteTimestamps[kind] ?? 0;
+          const localServerTime = serverUpdatedAt[kind] ?? 0;
+          if (remoteTime > localServerTime && pullableKind(kind)) {
+            kindsToPull.push(kind);
           }
-          if (kind === "qbank" && !config.cloud.syncQbank) continue;
-          if (kind === "flashcards" && !config.cloud.syncFlashcards) continue;
-          if (kind !== "qbank" && kind !== "flashcards" && !config.cloud.syncContent) continue;
-          kindsToPull.push(kind as SyncKind);
         }
+
+        if (kindsToPull.length > 0) {
+          await pullKinds(kindsToPull);
+        } else {
+          for (const kind of SYNC_KINDS) {
+            if (remoteTimestamps[kind] != null) serverUpdatedAt[kind] = remoteTimestamps[kind];
+          }
+        }
+        forceReconcile = false;
+      } else if (poked.length > 0) {
+        await pullKinds(poked);
       }
 
-      // 2. Pull only outdated kinds (if any)
-      if (kindsToPull.length > 0) {
-        const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(`/v1/sync?kinds=${kindsToPull.join(",")}`, {}, currentSession.token);
-        if (!config.cloud.syncQbank) delete remote.qbank;
-        if (!config.cloud.syncFlashcards) delete remote.flashcards;
-        if (!config.cloud.syncContent) {
-          delete remote.sessions;
-          delete remote.notes;
-          delete remote.highlights;
-          delete remote.articleHighlights;
-          delete remote.writtenDrafts;
-          delete remote.bookmarks;
-        }
-        await storage.mergeCloudSnapshot(remote);
-        for (const kind of SYNC_KINDS) {
-          if (remote[kind]) serverUpdatedAt[kind] = remote[kind]?.updatedAt ?? remoteTimestamps[kind] ?? 0;
-        }
-      } else {
-        for (const kind of SYNC_KINDS) {
-          if (remoteTimestamps[kind] != null) serverUpdatedAt[kind] = remoteTimestamps[kind];
-        }
-      }
-
-      // 3. Selective Push — settings always pushes (account-level).
+      // 3. Selective Push — direct PUT with per-kind optimistic concurrency
+      // headers (the HEAD the old flow ran first was only metadata).
       if (kindsToPush.size > 0) {
         const activeKindsToPush: SyncKind[] = [];
         for (const kind of kindsToPush) {
-          if (kind === "settings") {
-            activeKindsToPush.push(kind);
-            continue;
-          }
-          if (kind === "qbank" && !config.cloud.syncQbank) continue;
-          if (kind === "flashcards" && !config.cloud.syncFlashcards) continue;
-          if (kind !== "qbank" && kind !== "flashcards" && !config.cloud.syncContent) continue;
-          activeKindsToPush.push(kind);
+          if (pullableKind(kind)) activeKindsToPush.push(kind);
+          // Gated off on this instance — it can never be pushed here, so
+          // drop it instead of retry-looping forever.
+          else dirtyKinds.delete(kind);
         }
 
         if (activeKindsToPush.length > 0) {
@@ -806,7 +835,7 @@ export function startCloudSync(session: CloudSession): () => void {
           // pushed; it doesn't need to pull its own change back).
           headers["x-osler-realtime-conn"] = getRealtimeConnId();
           const payload = storage.exportSyncSnapshot(activeKindsToPush);
-          const pushedResult = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>("/v1/sync", {
+          const pushedResult = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }> & { quota?: { usedBytes: number; limitBytes: number } }>("/v1/sync", {
             method: "PUT",
             headers,
             body: JSON.stringify(payload),
@@ -818,6 +847,7 @@ export function startCloudSync(session: CloudSession): () => void {
             }
             dirtyKinds.delete(kind);
           }
+          ingestQuota(pushedResult.quota);
           lastSyncAt = Date.now();
           notifySyncStatus("synced", lastSyncAt);
         }
@@ -838,35 +868,39 @@ export function startCloudSync(session: CloudSession): () => void {
             for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
             for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
             lastSyncAt = 0;
+            forceReconcile = true;
           } else {
             clearCloudSession();
             window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
             stopped = true;
           }
         } else if (error.status === 409) {
+          // Our per-kind baselines are stale — re-fetch everything before the
+          // next direct push instead of 409-looping on it.
           for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
           for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
           lastSyncAt = 0;
+          forceReconcile = true;
         }
       } else {
         notifySyncStatus("offline");
       }
     } finally {
       syncing = false;
-      // A poke arrived while this cycle was running — one deferred pull
-      // covers it. (When dirty kinds remain, the retry below pulls too.)
-      if (pokePending) {
-        pokePending = false;
-        if (dirtyKinds.size === 0 && !stopped && navigator.onLine) {
-          if (timer) clearTimeout(timer);
-          timer = setTimeout(() => void runSync(true), 1_000);
-        }
-      }
-      if (dirtyKinds.size > 0 && !stopped && navigator.onLine) {
+      // A poke arrived while this cycle was running — one deferred cycle
+      // covers it (and any kinds it announced).
+      const pendingPokeKinds = Array.from(pokeKindsBuffer);
+      pokeKindsBuffer.clear();
+      pokePending = false;
+      if (!stopped && navigator.onLine && (pendingPokeKinds.length > 0 || dirtyKinds.size > 0)) {
         if (timer) clearTimeout(timer);
-        const backoff = Math.min(RETRY_BASE_MS * 2 ** retryCount, RETRY_MAX_MS);
-        retryCount += 1;
-        timer = setTimeout(() => void runSync(), backoff);
+        if (dirtyKinds.size > 0) {
+          const backoff = Math.min(RETRY_BASE_MS * 2 ** retryCount, RETRY_MAX_MS);
+          retryCount += 1;
+          timer = setTimeout(() => void runSync(false, pendingPokeKinds), backoff);
+        } else {
+          timer = setTimeout(() => void runSync(true, pendingPokeKinds), 1_000);
+        }
       }
     }
   };
@@ -886,13 +920,22 @@ export function startCloudSync(session: CloudSession): () => void {
     timer = setTimeout(() => void runSync(), SYNC_DEBOUNCE_MS);
   };
 
-  const onOnline = () => schedule();
+  // Coming back online must re-sync in BOTH directions — changes pushed by
+  // other devices while offline are only discovered by a reconcile.
+  const onOnline = () => {
+    forceReconcile = true;
+    schedule();
+  };
 
-  // One pull when the tab returns to the foreground — covers pokes missed
-  // while the realtime socket was closed (hidden tab, offline). Event-driven,
-  // not a cadence: an idle visible tab makes no sync requests at all.
+  // One pull when the tab returns to the foreground — a backstop for pokes
+  // missed while hidden/offline. Event-driven, not a cadence: an idle visible
+  // tab makes no sync requests, and quick app-switches within
+  // FOREGROUND_PULL_MIN_MS of the last sync make none either (pokes and
+  // pushes keep data fresh in between; "Sync Now" bypasses the throttle).
   const onVisible = () => {
-    if (document.visibilityState === "visible" && !syncing) void runSync(true);
+    if (document.visibilityState === "visible" && !syncing && Date.now() - lastSyncAt >= FOREGROUND_PULL_MIN_MS) {
+      void runSync(true);
+    }
   };
 
   const syncEvents = [
@@ -916,7 +959,10 @@ export function startCloudSync(session: CloudSession): () => void {
     isEnabled: () => syncEnabledPref && !stopped,
     getApiUrl: () => resolvedApiUrl(),
     getAccessToken: () => currentSession?.token ?? null,
-    onSyncPoke: () => {
+    onSyncPoke: (kinds) => {
+      for (const kind of kinds) {
+        if ((SYNC_KINDS as readonly string[]).includes(kind)) pokeKindsBuffer.add(kind as SyncKind);
+      }
       if (syncing) {
         pokePending = true;
         return;
@@ -924,7 +970,9 @@ export function startCloudSync(session: CloudSession): () => void {
       if (pokeTimer) clearTimeout(pokeTimer);
       pokeTimer = setTimeout(() => {
         pokeTimer = null;
-        void runSync(true);
+        const poked = Array.from(pokeKindsBuffer);
+        pokeKindsBuffer.clear();
+        void runSync(true, poked);
       }, POKE_PULL_DEBOUNCE_MS);
     },
   });
@@ -935,6 +983,7 @@ export function startCloudSync(session: CloudSession): () => void {
     for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
     lastSyncAt = 0;
     retryCount = 0;
+    forceReconcile = true;
     if (timer) clearTimeout(timer);
     void runSync();
   };

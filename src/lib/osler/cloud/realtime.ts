@@ -40,7 +40,9 @@ interface RealtimeOptions {
   isEnabled: () => boolean;
   getApiUrl: () => string | null;
   getAccessToken: () => string | null;
-  onSyncPoke: () => void;
+  /** Called with the SYNC_KIND names the hub says changed on the server, so
+   *  the sync loop can pull exactly those kinds instead of HEADing first. */
+  onSyncPoke: (kinds: string[]) => void;
 }
 
 let opts: RealtimeOptions | null = null;
@@ -199,7 +201,8 @@ async function connect(): Promise<void> {
       try {
         const frame = JSON.parse(event.data) as { t?: unknown; kinds?: unknown };
         if (frame?.t === "sync" && Array.isArray(frame.kinds)) {
-          if (frame.kinds.some((k) => typeof k === "string")) o.onSyncPoke();
+          const kinds = frame.kinds.filter((k): k is string => typeof k === "string").slice(0, MAX_POKE_KINDS);
+          if (kinds.length > 0) o.onSyncPoke(kinds);
         }
       } catch { /* non-JSON frame ("pong" heartbeat or junk) */ }
     };
