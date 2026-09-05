@@ -1840,6 +1840,12 @@ export function QuizView({
                         active={notesOpen}
                         onClick={() => { haptic("light"); setToolsOpen(false); onToggleNotes(); }}
                       />
+                      <SessionToolRow
+                        icon={Compass}
+                        label={t("walkthrough.trigger")}
+                        active={walkthroughOpen}
+                        onClick={() => { haptic("selection"); setToolsOpen(false); setWalkthroughOpen(true); }}
+                      />
                       {submitted && session.mode === "tutor" && (
                         <SessionToolRow
                           icon={RotateCcw}

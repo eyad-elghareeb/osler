@@ -11,6 +11,18 @@ import {
   Sparkles,
   Sliders,
   MessageSquareWarning,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  Calculator,
+  FlaskConical,
+  NotebookPen,
+  Highlighter,
+  FileText,
+  Type,
+  Printer,
+  CloudDownload,
+  BookmarkCheck,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,7 +30,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
-import { getTourSteps, type TourId } from "./walkthrough-steps";
+import { getTourSteps, type TourId, type WalkthroughStep } from "./walkthrough-steps";
 
 const STORAGE_PREFIX = "osler-walkthrough-completed-";
 
@@ -55,6 +67,193 @@ interface WalkthroughDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Step-specific interactive visual preview mini-widget
+ * Gives rich visual cues for key features like settings, bug reporting,
+ * peer statistics, clinical tools, and typography.
+ */
+function StepVisualPreview({ stepId }: { stepId: string }) {
+  const { t } = useI18n();
+
+  switch (stepId) {
+    case "qbank-settings":
+      return (
+        <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-primary">
+            <span className="flex items-center gap-1.5">
+              <Sliders className="size-3.5" />
+              {t("qbank.settings.title")}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 font-mono">
+              Live Preview
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-card border border-border">
+              <span className="text-muted-foreground">{t("qbank.session.tutorMode")}</span>
+              <span className="font-semibold text-success flex items-center gap-1">
+                <Check className="size-3" /> ON
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-lg bg-card border border-border">
+              <span className="text-muted-foreground">{t("library.fontSize")}</span>
+              <span className="font-semibold font-mono text-foreground">16px</span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "qbank-reporting":
+      return (
+        <div className="rounded-xl border border-warning/20 bg-warning/[0.03] p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-warning">
+            <span className="flex items-center gap-1.5">
+              <MessageSquareWarning className="size-3.5" />
+              {t("support.title")}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/10 font-medium">
+              Instant Sync
+            </span>
+          </div>
+          <div className="p-2 rounded-lg bg-card border border-border space-y-1 text-[11px] text-muted-foreground font-mono">
+            <div className="flex items-center justify-between">
+              <span>{t("support.contextQuestionId")}:</span>
+              <span className="text-foreground font-medium">#Q-8492</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>{t("support.attachContext")}:</span>
+              <span className="text-success font-medium">Auto-Attached</span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "qbank-explanations":
+      return (
+        <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+            <span>{t("qbank.session.explanation")}</span>
+            <span className="text-[10px] text-muted-foreground font-medium">78% Peer Accuracy</span>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="size-5 rounded bg-success/15 text-success font-semibold flex items-center justify-center text-[10px]">
+                A
+              </span>
+              <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                <div className="bg-success h-full rounded-full" style={{ width: "78%" }} />
+              </div>
+              <span className="text-[11px] font-mono font-medium text-success">78%</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs opacity-60">
+              <span className="size-5 rounded bg-muted text-muted-foreground font-semibold flex items-center justify-center text-[10px]">
+                B
+              </span>
+              <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                <div className="bg-muted-foreground/40 h-full rounded-full" style={{ width: "14%" }} />
+              </div>
+              <span className="text-[11px] font-mono">14%</span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "qbank-tools":
+      return (
+        <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+          <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <Sparkles className="size-3.5 text-primary" />
+            <span>Clinical Tools Toolbar</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
+              <Calculator className="size-3 text-primary" /> Calculator
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
+              <FlaskConical className="size-3 text-primary" /> Lab Values
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
+              <NotebookPen className="size-3 text-primary" /> Notes
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
+              <Highlighter className="size-3 text-primary" /> Highlighter
+            </span>
+          </div>
+        </div>
+      );
+
+    case "library-display":
+      return (
+        <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-primary">
+            <span className="flex items-center gap-1.5">
+              <Type className="size-3.5" />
+              {t("library.display")}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 font-mono">
+              Customizable
+            </span>
+          </div>
+          <div className="flex items-center justify-between p-2 rounded-lg bg-card border border-border text-[11px]">
+            <span className="text-muted-foreground">{t("library.fontFamily")}:</span>
+            <div className="flex gap-1">
+              <span className="px-2 py-0.5 rounded bg-primary text-primary-foreground font-serif text-[10px]">
+                Serif
+              </span>
+              <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground font-sans text-[10px]">
+                Sans
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "library-reporting":
+      return (
+        <div className="rounded-xl border border-warning/20 bg-warning/[0.03] p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-warning">
+            <span className="flex items-center gap-1.5">
+              <MessageSquareWarning className="size-3.5" />
+              {t("support.reportProblem")}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/10 font-medium">
+              Editorial Review
+            </span>
+          </div>
+          <div className="p-2 rounded-lg bg-card border border-border text-[11px] text-muted-foreground">
+            <span className="text-foreground font-medium">Active Article Title & Specialty</span> automatically attached to ticket for verified clinicians.
+          </div>
+        </div>
+      );
+
+    case "library-offline-pdf":
+      return (
+        <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+          <div className="text-xs font-semibold text-foreground flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <CloudDownload className="size-3.5 text-primary" />
+              Offline & Export
+            </span>
+            <span className="text-[10px] text-success font-medium flex items-center gap-0.5">
+              <Check className="size-3" /> Ready
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="p-2 rounded-lg bg-muted flex items-center gap-1.5 font-medium">
+              <CloudDownload className="size-3.5 text-primary" /> Offline Storage
+            </div>
+            <div className="p-2 rounded-lg bg-muted flex items-center gap-1.5 font-medium">
+              <Printer className="size-3.5 text-primary" /> Export to PDF
+            </div>
+          </div>
+        </div>
+      );
+
+    default:
+      return null;
+  }
+}
+
 export function WalkthroughDialog({
   tour,
   open,
@@ -69,6 +268,33 @@ export function WalkthroughDialog({
   const currentStep = steps[index] ?? steps[0];
   const isFirst = index === 0;
   const isLast = index === total - 1;
+
+  // Touch gesture swipe handling for mobile
+  const touchStartX = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchEndX - touchStartX.current;
+    const threshold = 45; // px
+
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0) {
+        // Swipe Right
+        if (rtl) handleNext();
+        else handlePrev();
+      } else {
+        // Swipe Left
+        if (rtl) handlePrev();
+        else handleNext();
+      }
+    }
+    touchStartX.current = null;
+  };
 
   // Reset index when opened
   React.useEffect(() => {
@@ -120,9 +346,9 @@ export function WalkthroughDialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, rtl, handleNext, handlePrev]);
 
-  // Slide animation tuned for walkthrough cards
+  // Directional slide variants
   const slideVariants = React.useMemo(() => {
-    const x = dir * (rtl ? -30 : 30);
+    const x = dir * (rtl ? -28 : 28);
     return {
       initial: { opacity: 0, x },
       animate: { opacity: 1, x: 0, transition: MOTION_TRANSITION.normal },
@@ -135,18 +361,30 @@ export function WalkthroughDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-xl max-h-[90vh] overflow-hidden p-0 rounded-2xl border border-border bg-card shadow-2xl flex flex-col"
+        className={cn(
+          "w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[88dvh] sm:max-h-[640px] p-0 rounded-2xl border border-border bg-card shadow-2xl flex flex-col overflow-hidden",
+          "focus-visible:outline-none"
+        )}
         showCloseButton={false}
       >
-        {/* Top Accent Gradient Header */}
-        <div className="relative border-b border-border bg-muted/30 px-6 pt-5 pb-4">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
-                <Compass className="size-3.5" />
-                {t(currentStep.badgeKey)}
+        {/* Top Header with ambient subtle glow */}
+        <div className="relative border-b border-border bg-muted/30 px-4 sm:px-6 pt-4 pb-3 sm:pt-5 sm:pb-4 shrink-0 overflow-hidden">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-40"
+            style={{
+              background:
+                "radial-gradient(ellipse 70% 60% at 50% 0%, color-mix(in oklch, var(--primary) 18%, transparent), transparent 70%)",
+            }}
+          />
+
+          <div className="flex items-center justify-between gap-2 mb-3 relative z-10">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-primary/10 text-primary border border-primary/20 truncate">
+                <Compass className="size-3.5 shrink-0" />
+                <span className="truncate">{t(currentStep.badgeKey)}</span>
               </span>
-              <span className="text-xs text-muted-foreground tabular-nums">
+              <span className="text-[11px] sm:text-xs text-muted-foreground tabular-nums shrink-0">
                 {t("walkthrough.step", { current: index + 1, total })}
               </span>
             </div>
@@ -156,15 +394,16 @@ export function WalkthroughDialog({
               variant="ghost"
               size="sm"
               onClick={handleSkip}
-              className="text-muted-foreground hover:text-foreground text-xs h-7 px-2.5 rounded-lg"
+              className="text-muted-foreground hover:text-foreground text-xs h-7 px-2.5 rounded-lg shrink-0"
+              title={t("walkthrough.skip")}
             >
-              {t("walkthrough.skip")}
+              <span>{t("walkthrough.skip")}</span>
               <X className="size-3.5 ms-1" />
             </Button>
           </div>
 
           {/* Animated Progress Bar */}
-          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden flex gap-1">
+          <div className="w-full bg-muted/80 rounded-full h-1.5 overflow-hidden flex gap-1 relative z-10">
             {steps.map((_, i) => (
               <div
                 key={i}
@@ -177,27 +416,34 @@ export function WalkthroughDialog({
           </div>
         </div>
 
-        {/* Dialog Body with Animated Step Transitions */}
-        <div className="flex-1 overflow-y-auto osler-scroll px-6 py-5">
+        {/* Dialog Body with Smooth Scroll & Touch Gesture Support */}
+        <div
+          className="flex-1 overflow-y-auto osler-scroll px-4 sm:px-6 py-4 sm:py-5 overscroll-contain"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <AnimatePresence mode="wait">
-            <motion.div key={currentStep.id} {...slideVariants} className="space-y-5">
+            <motion.div key={currentStep.id} {...slideVariants} className="space-y-4 sm:space-y-5">
               {/* Step Title Header */}
-              <div className="flex items-start gap-3.5">
-                <div className="size-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-sm border border-primary/20">
-                  <StepMainIcon className="size-6" />
+              <div className="flex items-start gap-3 sm:gap-3.5">
+                <div className="size-10 sm:size-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-sm border border-primary/20">
+                  <StepMainIcon className="size-5 sm:size-6" />
                 </div>
-                <div>
-                  <DialogTitle className="text-lg md:text-xl font-bold tracking-tight text-foreground">
+                <div className="min-w-0">
+                  <DialogTitle className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-foreground leading-snug">
                     {t(currentStep.titleKey)}
                   </DialogTitle>
-                  <DialogDescription className="text-xs md:text-sm text-muted-foreground mt-1 leading-relaxed">
+                  <DialogDescription className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
                     {t(currentStep.subtitleKey)}
                   </DialogDescription>
                 </div>
               </div>
 
+              {/* Interactive Visual Preview Mini-Widget */}
+              <StepVisualPreview stepId={currentStep.id} />
+
               {/* Feature Cards Grid */}
-              <div className="grid gap-2.5 sm:grid-cols-1">
+              <div className="grid gap-2 sm:gap-2.5">
                 {currentStep.features.map((feat, fIdx) => {
                   const FeatIcon = feat.icon;
                   const isSpecialSettings = feat.isSpecial === "settings";
@@ -207,17 +453,17 @@ export function WalkthroughDialog({
                     <div
                       key={fIdx}
                       className={cn(
-                        "rounded-xl border p-3.5 transition-all text-start flex items-start gap-3",
+                        "rounded-xl border p-3 sm:p-3.5 transition-all text-start flex items-start gap-2.5 sm:gap-3",
                         isSpecialSettings
-                          ? "bg-primary/5 border-primary/30 shadow-xs"
+                          ? "bg-primary/[0.04] border-primary/30 shadow-xs"
                           : isSpecialReport
-                          ? "bg-warning/5 border-warning/30 shadow-xs"
+                          ? "bg-warning/[0.04] border-warning/30 shadow-xs"
                           : "bg-muted/40 border-border hover:border-primary/30 hover:bg-muted/60"
                       )}
                     >
                       <div
                         className={cn(
-                          "size-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
+                          "size-7 sm:size-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
                           isSpecialSettings
                             ? "bg-primary/15 text-primary"
                             : isSpecialReport
@@ -225,12 +471,12 @@ export function WalkthroughDialog({
                             : "bg-background text-muted-foreground border border-border"
                         )}
                       >
-                        <FeatIcon className="size-4" />
+                        <FeatIcon className="size-3.5 sm:size-4" />
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs md:text-sm font-semibold text-foreground leading-tight">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs sm:text-sm font-semibold text-foreground leading-tight">
                             {t(feat.titleKey)}
                           </h4>
                           {feat.tag && (
@@ -288,21 +534,21 @@ export function WalkthroughDialog({
           </AnimatePresence>
         </div>
 
-        {/* Footer Navigation Bar */}
-        <div className="border-t border-border bg-card px-6 py-3.5 flex items-center justify-between gap-3">
+        {/* Footer Navigation Bar with Safe Area Support */}
+        <div className="border-t border-border bg-card px-4 sm:px-6 py-3 sm:py-3.5 flex items-center justify-between gap-2 shrink-0 safe-pb">
           <Button
             variant="outline"
             size="sm"
             onClick={handlePrev}
             disabled={isFirst}
-            className="h-9 px-3.5 rounded-xl gap-1.5 text-xs"
+            className="h-8 sm:h-9 px-3 sm:px-3.5 rounded-xl gap-1 text-xs"
           >
             <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
-            {t("walkthrough.back")}
+            <span>{t("walkthrough.back")}</span>
           </Button>
 
           {/* Dots Indicator */}
-          <div className="hidden sm:flex items-center gap-1.5">
+          <div className="hidden xs:flex sm:flex items-center gap-1.5">
             {steps.map((_, i) => (
               <button
                 key={i}
@@ -313,8 +559,8 @@ export function WalkthroughDialog({
                   haptic("selection");
                 }}
                 className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  i === index ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                  "h-1.5 rounded-full transition-all duration-300",
+                  i === index ? "w-5 sm:w-6 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
                 )}
                 aria-label={`Go to step ${i + 1}`}
               />
@@ -324,16 +570,16 @@ export function WalkthroughDialog({
           <Button
             size="sm"
             onClick={handleNext}
-            className="h-9 px-4 rounded-xl gap-1.5 text-xs font-semibold"
+            className="h-8 sm:h-9 px-3.5 sm:px-4 rounded-xl gap-1 text-xs font-semibold"
           >
             {isLast ? (
               <>
                 <Check className="size-3.5" />
-                {t("walkthrough.finish")}
+                <span>{t("walkthrough.finish")}</span>
               </>
             ) : (
               <>
-                {t("walkthrough.next")}
+                <span>{t("walkthrough.next")}</span>
                 <ArrowRight className={cn("size-3.5", rtl && "rtl-flip-x")} />
               </>
             )}
