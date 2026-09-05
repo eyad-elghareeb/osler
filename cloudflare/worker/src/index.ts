@@ -251,6 +251,93 @@ function d1ShardCount(env: Env): number {
   return 1 + (env.DB_SYNC ? 1 : 0) + (env.DB_TELEMETRY ? 1 : 0);
 }
 
+// ── Shard schema bootstrap ───────────────────────────────────────────────────
+//
+// A shard binding pointed at a database without its schema (bindings added
+// before migrations ran, a recreated database, a restored backup, or plain
+// local dev) would turn every sync/telemetry query into a 500. The worker
+// therefore bootstraps its own shard schemas: the statements below are
+// byte-identical to migrations-sync/ + migrations-telemetry/ (keep both in
+// sync), idempotent with them, and run at most once per isolate per shard.
+// Migrations remain the source of truth (`npm run db:migrate:shards`) — the
+// bootstrap only guarantees the worker never hard-fails on an empty shard.
+
+const SHARD_SCHEMA_SQL: Record<"sync" | "telemetry", string[]> = {
+  sync: [
+    `CREATE TABLE IF NOT EXISTS progress_documents (
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  compressed INTEGER NOT NULL DEFAULT 0,
+  raw_bytes INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, kind)
+)`,
+  ],
+  telemetry: [
+    `CREATE TABLE IF NOT EXISTS analytics_events (
+  id           TEXT PRIMARY KEY,
+  session_id   TEXT NOT NULL,
+  event_type   TEXT NOT NULL CHECK (event_type IN (
+    'page_view', 'web_vital', 'js_error', 'api_call', 'route_change'
+  )),
+  path         TEXT,
+  metric_name  TEXT,
+  value        REAL,
+  detail       TEXT,
+  browser      TEXT,
+  device       TEXT,
+  connection   TEXT,
+  created_at   INTEGER NOT NULL
+)`,
+    "CREATE INDEX IF NOT EXISTS analytics_events_type_time ON analytics_events(event_type, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS analytics_events_time      ON analytics_events(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS analytics_events_session   ON analytics_events(session_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS analytics_events_path      ON analytics_events(path, created_at DESC)",
+    `CREATE TABLE IF NOT EXISTS question_choice_stats (
+  uid           TEXT NOT NULL,
+  qid           TEXT NOT NULL,
+  choice        INTEGER NOT NULL,
+  options_count INTEGER NOT NULL DEFAULT 0,
+  count         INTEGER NOT NULL DEFAULT 0,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (uid, qid, choice)
+)`,
+    "CREATE INDEX IF NOT EXISTS question_choice_stats_updated ON question_choice_stats(updated_at)",
+    `CREATE TABLE IF NOT EXISTS question_choice_respondents (
+  aid        TEXT NOT NULL,
+  uid        TEXT NOT NULL,
+  qid        TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (aid, uid, qid)
+)`,
+    "CREATE INDEX IF NOT EXISTS question_choice_respondents_created ON question_choice_respondents(created_at)",
+    `CREATE TABLE IF NOT EXISTS daily_counters (
+  name TEXT NOT NULL,
+  day  TEXT NOT NULL,
+  n    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (name, day)
+)`,
+  ],
+};
+
+const shardSchemaReady: Partial<Record<"sync" | "telemetry", Promise<void>>> = {};
+
+/** Idempotently create the shard's tables if missing (once per isolate).
+ *  Rejects only when the database itself is unreachable — a missing schema
+ *  heals here, a dead binding still fails loudly on the real query. */
+function ensureShardSchema(env: Env, shard: "sync" | "telemetry"): Promise<void> {
+  const cached = shardSchemaReady[shard];
+  if (cached) return cached;
+  const db = shard === "sync" ? syncDb(env) : telemetryDb(env);
+  const run = db.batch(SHARD_SCHEMA_SQL[shard].map((sql) => db.prepare(sql))).then(() => undefined);
+  shardSchemaReady[shard] = run;
+  // A failed bootstrap is never cached — the next request retries, so a
+  // transient D1 blip can't wedge the isolate until recycle.
+  run.catch(() => { delete shardSchemaReady[shard]; });
+  return run;
+}
+
 function isManagedOnly(env: Env): boolean {
   return env.CONTENT_ONLY_MANAGED === "true" || env.CONTENT_ONLY_MANAGED === "1" || env.CONTENT_ONLY_MANAGED === true;
 }
@@ -789,6 +876,7 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
 // mergeQbank / mergeFlashcards now live in ./sync-docs (pure, unit-tested).
 
 async function getDocument(env: Env, userId: string, kind: string): Promise<{ records: Record<string, any>; updatedAt: number }> {
+  await ensureShardSchema(env, "sync");
   const row = await syncDb(env).prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(userId, kind).first<{ payload: string; compressed: number; updated_at: number }>();
   if (!row || !row.payload) return { records: {}, updatedAt: 0 };
   try {
@@ -814,6 +902,7 @@ async function getSelectedDocuments(env: Env, userId: string, kinds: string[]): 
 }
 
 async function getSyncHead(env: Env, userId: string): Promise<{ timestamps: Record<string, number>; usedBytes: number }> {
+  await ensureShardSchema(env, "sync");
   const rows = await syncDb(env).prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(userId).all<{ kind: string; updated_at: number; raw_bytes: number }>();
   const timestamps: Record<string, number> = {};
   for (const k of SYNC_KINDS) timestamps[k] = 0;
@@ -1067,6 +1156,7 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
     // Telemetry tables live in the telemetry shard when bound (falls back to
     // the primary DB otherwise), so they are pruned in their own batch — a
     // D1 batch cannot span two databases.
+    await ensureShardSchema(env, "telemetry");
     await telemetryDb(env).batch([
       telemetryDb(env).prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
       // Daily write-cap counters: keep ~90 days for trend debugging, then drop.
@@ -2245,6 +2335,7 @@ function sanitizeAnalyticsDetail(raw: unknown): string | null {
  * Abuse is bounded by the per-IP rate limit and the global daily write cap.
  */
 async function handleAnalyticsIngest(request: Request, env: Env, origin: string, log: Logger): Promise<Response> {
+  await ensureShardSchema(env, "telemetry");
   // Pre-check Content-Length to avoid parsing a huge body that we'll reject
   // anyway. 20 events * ~1KB each ≈ 20KB; reject anything over 100KB to
   // leave headroom for JSON overhead.
@@ -2349,6 +2440,7 @@ function sanitizeStatsId(raw: unknown): string | null {
 }
 
 async function handleQuestionStatsReport(request: Request, env: Env, session: Session | null, origin: string, log: Logger): Promise<Response> {
+  await ensureShardSchema(env, "telemetry");
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (contentLength > 100_000) {
     return json({ error: "Request body too large" }, 413, origin, log);
@@ -2440,6 +2532,7 @@ async function handleQuestionStatsReport(request: Request, env: Env, session: Se
 }
 
 async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: Logger): Promise<Response> {
+  await ensureShardSchema(env, "telemetry");
   const uid = sanitizeStatsId(url.searchParams.get("uid"));
   if (!uid) return json({ error: "Missing uid" }, 400, origin, log);
 
@@ -2767,6 +2860,9 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
 }
 
 async function handleAnalytics(request: Request, env: Env, url: URL, origin: string, log: Logger): Promise<Response | null> {
+  // Every branch below reads the sync/telemetry shards (dashboards, choice
+  // stats, quota panel) — bootstrap both once per isolate before querying.
+  await Promise.all([ensureShardSchema(env, "sync"), ensureShardSchema(env, "telemetry")]);
   const path = url.pathname;
 
   /* ── Overview ── */
@@ -3063,8 +3159,9 @@ async function cfD1FileBytes(token: string, account: string): Promise<number | n
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), CF_GRAPHQL_TIMEOUT_MS);
   try {
-    // The free tier caps accounts at 10 D1 databases — one page covers it.
-    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database?per_page=25`, {
+    // The free tier caps accounts at 10 D1 databases; per_page=100 covers
+    // any realistic account in one request.
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database?per_page=100`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: ctrl.signal,
     });
@@ -3259,8 +3356,10 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
     // every other live query.
     const measuredD1Bytes = live.d1FileBytesTotal;
 
-    // Estimate total D1 writes today across all features
-    const estimatedD1WritesToday = analyticsToday + auditToday + sessionsToday + Math.round(analyticsToday * 0.15);
+    // Estimate total D1 writes today across all features: the two measured
+    // telemetry counters, audit/session activity, plus 15% headroom for
+    // sync pushes and misc single-row writes.
+    const estimatedD1WritesToday = analyticsToday + qstatsToday + auditToday + sessionsToday + Math.round(analyticsToday * 0.15);
 
     // Free Tier limits (verified against the pricing docs 2026-09: D1 is
     // 5M reads/day, 100k writes/day, 500 MB storage PER DATABASE; Workers
@@ -3804,6 +3903,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         // cannot cascade across databases — delete it explicitly, after the
         // core removal succeeded (an orphaned progress row is inert; a
         // deleted user who still owns one is a storage leak).
+        await ensureShardSchema(env, "sync");
         await syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(targetId).run();
         await auditLog(env, session.user.id, "delete_user", targetId, { username: user.username, contentReassignedTo: session.user.id }, log);
         return json({ ok: true }, 200, origin, log);
@@ -5660,6 +5760,7 @@ export default {
           env.DB.prepare("DELETE FROM users WHERE id = ?").bind(session.user.id),
         ]);
         // Sync shard: no FK cascade across databases (see admin user delete).
+        await ensureShardSchema(env, "sync");
         await syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(session.user.id).run();
         return json({ ok: true }, 200, origin, log);
       }
@@ -5725,6 +5826,7 @@ export default {
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
+        await ensureShardSchema(env, "sync");
         const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const changedKinds: string[] = []; const response: Record<string, any> = {};
         const bodyKinds = new Set<string>();
         for (const kind of SYNC_KINDS) if (body[kind] && typeof body[kind] === "object") bodyKinds.add(kind);

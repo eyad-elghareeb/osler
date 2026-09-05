@@ -70,8 +70,15 @@ for (const shard of SHARDS) {
 const ids = Object.fromEntries(
   JSON.parse(wrangler(["d1", "list", "--json"])).map((db) => [db.name, db.uuid]),
 );
+if (!ids[CORE_DB]) throw new Error(`${CORE_DB} not found in this Cloudflare account — create it first`);
 for (const shard of SHARDS) {
   if (!ids[shard.database]) throw new Error(`${shard.database} not found after create/list`);
+}
+// Two bindings pointing at the same physical database would report tripled
+// storage headroom while everything still shares one 500 MB file.
+const allIds = SHARDS.map((s) => ids[s.database]).concat(ids[CORE_DB]);
+if (new Set(allIds).size !== allIds.length) {
+  throw new Error("duplicate database id across bindings — each binding must point at its own database");
 }
 
 console.log("── 2/5 · Activating shard bindings in wrangler.toml");
@@ -108,6 +115,7 @@ for (const shard of SHARDS) {
 }
 
 console.log("── 4/5 · Copying tables from the primary database");
+console.log("   (d1 export briefly pauses queries on the primary DB — run in a low-traffic window)");
 const tmpDir = mkdtempSync(join(tmpdir(), "osler-shard-"));
 try {
   for (const shard of SHARDS) {

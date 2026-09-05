@@ -86,6 +86,8 @@ npm run db:shard -- --prune   # after verifying the app, drop the copied rows
 
 The ID changes to wrangler.toml stay local (git keeps placeholders, same as the primary database ID). Shard schema lives in `migrations-sync/` and `migrations-telemetry/`; future changes there are applied with `npm run db:migrate:shards` (or `npx wrangler d1 migrations apply osler-sync --local` for `wrangler dev`).
 
+Two safety properties worth knowing: the worker **bootstraps shard schemas itself** (idempotent `CREATE IF NOT EXISTS`, once per isolate), so a binding pointed at an empty database — bindings added before migrations, a recreated DB, local dev — self-heals instead of 500ing every sync request; migrations stay the source of truth. And `d1 export` briefly pauses queries on the primary database, so run `npm run db:shard` in a low-traffic window.
+
 ## Scripts
 
 | Script | Description |
