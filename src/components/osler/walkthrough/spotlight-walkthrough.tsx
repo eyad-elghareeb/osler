@@ -84,6 +84,9 @@ export function SpotlightWalkthrough({
   const total = steps.length;
   const currentStep = steps[index] ?? steps[0];
   const isLast = index === total - 1;
+  // Index of the last step auto-skipped via skipIfMissing — guards the
+  // skip timer so each step skips at most once.
+  const skippedRef = React.useRef(-1);
 
   React.useEffect(() => { setMounted(true); }, []);
 
@@ -91,6 +94,7 @@ export function SpotlightWalkthrough({
     if (open) {
       setIndex(0);
       setPulseKey(0);
+      skippedRef.current = -1;
     }
   }, [open]);
 
@@ -102,17 +106,30 @@ export function SpotlightWalkthrough({
   }, [open, index]);
 
   // ── Target bounding box ──────────────────────────────────────────────────
+  // Responsive duplicates (e.g. desktop + mobile footers both mounted with
+  // one `display:none`) share one data-walkthrough key — pick the first
+  // element with a non-zero rect so the spotlight lands on what's visible.
+  const pickTarget = (selector: string): HTMLElement | null => {
+    try {
+      const all = Array.from(document.querySelectorAll<HTMLElement>(selector));
+      return (
+        all.find((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        }) ?? null
+      );
+    } catch {
+      return null;
+    }
+  };
+
   const updateTargetRect = React.useCallback(() => {
     if (!open || !currentStep) return;
-    let el: HTMLElement | null = null;
-    if (currentStep.targetSelector) {
-      try { el = document.querySelector<HTMLElement>(currentStep.targetSelector); } catch { /* ignore */ }
-    }
+    const el = currentStep.targetSelector ? pickTarget(currentStep.targetSelector) : null;
     if (el) {
       const r = el.getBoundingClientRect();
       const p = currentStep.highlightPadding ?? 8;
       const visible =
-        r.width > 0 && r.height > 0 &&
         r.top >= 0 && r.bottom <= window.innerHeight &&
         r.left >= 0 && r.right <= window.innerWidth;
       if (!visible) el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -133,7 +150,7 @@ export function SpotlightWalkthrough({
     let obs: ResizeObserver | null = null;
     if (currentStep?.targetSelector) {
       try {
-        const el = document.querySelector<HTMLElement>(currentStep.targetSelector);
+        const el = pickTarget(currentStep.targetSelector);
         if (el && typeof ResizeObserver !== "undefined") {
           obs = new ResizeObserver(onUpdate);
           obs.observe(el);
@@ -182,6 +199,19 @@ export function SpotlightWalkthrough({
     window.addEventListener("click", onCapture, { capture: true });
     return () => window.removeEventListener("click", onCapture, { capture: true });
   }, [open, spotlightRect, handleNext]);
+
+  // ── skipIfMissing: conditional targets (dialog sections, desktop-only
+  // toggles) vanish gracefully — after a beat for tab switches and dialog
+  // animations, a still-missing target auto-advances (or finishes on last).
+  React.useEffect(() => {
+    if (!open || !currentStep?.skipIfMissing || spotlightRect.found) return;
+    if (skippedRef.current === index) return;
+    const t = setTimeout(() => {
+      skippedRef.current = index;
+      handleNext();
+    }, 600);
+    return () => clearTimeout(t);
+  }, [open, index, currentStep, spotlightRect.found, handleNext]);
 
   // ── Backdrop click: pulse the halo instead of advancing ──────────────────
   const handleBackdropClick = React.useCallback(() => {

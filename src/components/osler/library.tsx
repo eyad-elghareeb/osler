@@ -24,7 +24,6 @@ import {
   MessageSquareWarning,
   Share2,
   Link2,
-  Compass,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -345,11 +344,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     }
   }, []);
 
-  const onOpenWalkthrough = React.useCallback(() => {
-    haptic("selection");
-    setWalkthroughOpen(true);
-  }, []);
-
   const reportContext: TicketContext | undefined = activeArticle
     ? { articleTitle: activeArticle.title, articleFile: activeFile ?? activeArticle.file }
     : undefined;
@@ -555,7 +549,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           activeFile={activeFile}
           onOpenArticle={openArticleByFile}
           onToggleBookmark={toggleBookmark}
-          onOpenWalkthrough={onOpenWalkthrough}
         />
       }
       subpage={
@@ -576,7 +569,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             onExportPdf={() => setPdfDialogOpen(true)}
             onReport={onReportProblem}
             onShare={handleShareArticle}
-            onOpenWalkthrough={onOpenWalkthrough}
           />
         ) : null
       }
@@ -651,7 +643,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                 bookmarkedArticles={bookmarkedArticles}
                 fullScreen={!activeFile}
                 onClose={activeFile ? () => setSidebarOpen(false) : undefined}
-                onOpenWalkthrough={onOpenWalkthrough}
               />
             </motion.div>
           </motion.div>
@@ -670,7 +661,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           sidebarTab={sidebarTab}
           onTabChange={setSidebarTab}
           bookmarkedArticles={bookmarkedArticles}
-          onOpenWalkthrough={onOpenWalkthrough}
         />
       </aside>
 
@@ -689,7 +679,6 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               onReport={onReportProblem}
               onShare={handleShareArticle}
               onCopyLink={handleCopyArticleLink}
-              onOpenWalkthrough={onOpenWalkthrough}
             />
             <div className="flex-1 overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
@@ -789,7 +778,6 @@ function MobileHub({
   activeFile,
   onOpenArticle,
   onToggleBookmark,
-  onOpenWalkthrough,
 }: {
   allArticles: ArticleMeta[];
   bookmarks: Set<string>;
@@ -797,7 +785,6 @@ function MobileHub({
   activeFile: string | null;
   onOpenArticle: (file: string) => void;
   onToggleBookmark: (file: string) => void;
-  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
@@ -844,15 +831,6 @@ function MobileHub({
             {t("library.bookmarked")} ({bookmarkedArticles.length})
           </button>
           <div className="flex-1" />
-          <button
-            data-walkthrough="library-guide-btn"
-            onClick={onOpenWalkthrough}
-            className="size-8 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 shadow-xs"
-            title={t("walkthrough.trigger")}
-            aria-label={t("walkthrough.trigger")}
-          >
-            <Compass className="size-4 text-primary" />
-          </button>
         </div>
       </div>
 
@@ -974,7 +952,6 @@ function MobileReader({
   onExportPdf,
   onReport,
   onShare,
-  onOpenWalkthrough,
 }: {
   article: Article;
   articlePath: string;
@@ -991,7 +968,6 @@ function MobileReader({
   onExportPdf: () => void;
   onReport: () => void;
   onShare: () => void;
-  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
   // NOTE: The swipe-to-go-back gesture is now handled by the parent
@@ -1170,11 +1146,8 @@ function MobileReader({
                 <MessageSquareWarning className="size-4" />
               </button>
 
-              <button data-walkthrough="library-guide-btn" onClick={onOpenWalkthrough} className={toolbarBtn} title={t("walkthrough.trigger")} aria-label={t("walkthrough.trigger")}>
-                <Compass className="size-4 text-primary" />
-              </button>
-
               <button
+                data-walkthrough="library-bookmark"
                 onClick={onToggleBookmark}
                 className={cn(
                   "size-9 rounded-full flex items-center justify-center transition-colors",
@@ -1211,7 +1184,6 @@ function SidebarContent({
   bookmarkedArticles,
   fullScreen,
   onClose,
-  onOpenWalkthrough,
 }: {
   tree: ContentTreeNode[];
   articleCount: number;
@@ -1225,7 +1197,6 @@ function SidebarContent({
   bookmarkedArticles: ArticleMeta[];
   fullScreen?: boolean;
   onClose?: () => void;
-  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
   return (
@@ -1274,15 +1245,6 @@ function SidebarContent({
               title={t("library.bookmarks")}
             >
               <Bookmark className="size-3.5" />
-            </button>
-            <button
-              data-walkthrough="library-guide-btn"
-              onClick={onOpenWalkthrough}
-              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-primary transition-colors"
-              title={t("walkthrough.trigger")}
-              aria-label={t("walkthrough.trigger")}
-            >
-              <Compass className="size-3.5" />
             </button>
           </div>
         </div>
@@ -1558,7 +1520,6 @@ function ArticleHeader({
   onReport,
   onShare,
   onCopyLink,
-  onOpenWalkthrough,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -1571,7 +1532,6 @@ function ArticleHeader({
   onReport: () => void;
   onShare: () => void;
   onCopyLink: () => void;
-  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
 
@@ -1676,16 +1636,7 @@ function ArticleHeader({
         </button>
 
         <button
-          data-walkthrough="library-guide-btn"
-          onClick={onOpenWalkthrough}
-          className="osler-icon-btn size-8"
-          title={t("walkthrough.trigger")}
-          aria-label={t("walkthrough.trigger")}
-        >
-          <Compass className="size-4 text-primary" />
-        </button>
-
-        <button
+          data-walkthrough="library-bookmark"
           onClick={onToggleBookmark}
           className={cn(
             "size-9 rounded-md flex items-center justify-center transition-colors shrink-0",

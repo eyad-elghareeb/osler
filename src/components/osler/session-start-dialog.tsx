@@ -226,7 +226,7 @@ export function SessionStartDialog({
             <SectionItem>
               <div>
                 <SectionLabel icon={Sparkles}>{t("qbank.launch.modeTitle")}</SectionLabel>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5" data-walkthrough="launch-mode">
                   <SelectableCard
                     active={mode === "tutor"}
                     icon={Sparkles}
@@ -307,7 +307,7 @@ export function SessionStartDialog({
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto osler-scroll pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto osler-scroll pr-1" data-walkthrough="launch-chapters">
                     {chapters.map((ch) => {
                       const isSelected = selectedChapters.length === 0 || selectedChapters.includes(ch.id);
                       return (
@@ -359,7 +359,7 @@ export function SessionStartDialog({
               <SectionItem>
                 <div>
                   <SectionLabel icon={Flag}>{t("qbank.create.onlyMode")}</SectionLabel>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2" data-walkthrough="launch-filters">
                     {ONLY_MODE_OPTIONS.map((opt) => (
                       <Pill
                         key={opt.id}
@@ -380,7 +380,7 @@ export function SessionStartDialog({
               <SectionItem>
                 <div>
                   <SectionLabel icon={Layers}>{t("qbank.create.countStepper")}</SectionLabel>
-                  <div className="flex flex-nowrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+                  <div className="flex flex-nowrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3" data-walkthrough="launch-count">
                     {/* Questions count stepper */}
                     <div className="flex items-center gap-2.5 shrink-0">
                       <span className="text-xs font-medium text-foreground">{t("qbank.launch.questions")}</span>
@@ -481,7 +481,7 @@ export function SessionStartDialog({
                   </Button>
                 )}
               </div>
-              <Button type="button" onClick={handleStart} disabled={totalQuestions === 0}>
+              <Button type="button" onClick={handleStart} disabled={totalQuestions === 0} data-walkthrough="launch-start">
                 {isBank ? t("qbank.launch.startSession") : t("qbank.launch.start")}
               </Button>
             </div>

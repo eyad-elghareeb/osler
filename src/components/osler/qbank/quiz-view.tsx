@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
-import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning, Compass } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning } from "lucide-react";
 import { ENGINE_META } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import type { ContentTreeNode } from "@/lib/osler/types";
@@ -1703,7 +1703,6 @@ export function QuizView({
                     </Popover>
                   )}
                   <ToolButton onClick={() => setShowShortcuts((s) => !s)} icon={Keyboard} active={showShortcuts} title={t("qbank.session.keyboardShortcuts")} />
-                  <ToolButton data-walkthrough="qbank-guide-btn" onClick={() => { haptic("selection"); setWalkthroughOpen(true); }} icon={Compass} active={walkthroughOpen} title={t("walkthrough.trigger")} />
                 </div>
 
                 <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
@@ -1784,6 +1783,7 @@ export function QuizView({
                 <Button
                   variant="outline" size="icon"
                   onClick={onToggleFlag}
+                  data-walkthrough="qbank-navigator"
                   className={`size-10 rounded-lg shrink-0 osler-touch-target ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
@@ -1793,6 +1793,7 @@ export function QuizView({
                 <Button
                   variant="outline" size="icon"
                   onClick={() => { haptic("light"); setReportOpen(true); }}
+                  data-walkthrough="qbank-reporting"
                   className="size-10 rounded-lg shrink-0 osler-touch-target"
                   title={t("support.reportQuestion")}
                   aria-label={t("support.reportQuestion")}
@@ -1809,6 +1810,7 @@ export function QuizView({
                     <Button
                       variant="outline" size="icon"
                       onClick={() => { haptic("selection"); setToolsOpen(true); }}
+                      data-walkthrough="qbank-tools"
                       className="size-10 rounded-lg shrink-0 osler-touch-target"
                       title={t("qbank.session.tools")}
                       aria-label={t("qbank.session.tools")}
@@ -1852,12 +1854,6 @@ export function QuizView({
                         label={t("qbank.notes.title")}
                         active={notesOpen}
                         onClick={() => { haptic("light"); setToolsOpen(false); onToggleNotes(); }}
-                      />
-                      <SessionToolRow
-                        icon={Compass}
-                        label={t("walkthrough.trigger")}
-                        active={walkthroughOpen}
-                        onClick={() => { haptic("selection"); setToolsOpen(false); setWalkthroughOpen(true); }}
                       />
                       {submitted && session.mode === "tutor" && (
                         <SessionToolRow

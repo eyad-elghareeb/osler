@@ -388,7 +388,7 @@ export function CreateTestTab({
       {/* Builder column */}
       <div className="lg:col-span-2 space-y-5">
         {/* Test Mode */}
-        <OslerCard>
+        <OslerCard data-walkthrough="qbank-create-mode">
           <SectionHeading
             number={1}
             icon={TimerIcon}
@@ -921,7 +921,7 @@ export function CreateTestTab({
 
           {/* Selected packs preview */}
           {selectedEntries.length > 0 && (
-            <OslerCard>
+          <OslerCard data-walkthrough="qbank-create-start">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
                 <ListChecks className="size-4 text-primary" />
                 {t("qbank.create.matchingPacks")}
