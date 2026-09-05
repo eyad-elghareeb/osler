@@ -1,12 +1,16 @@
--- 0001_schema.sql - Osler Cloud D1 schema for the OPTIONAL sync shard.
+-- 0001_schema.sql - Osler Cloud D1 schema for the OPTIONAL sync shard pool.
 --
--- Holds exactly one table: progress_documents, the per-user sync payloads —
--- the largest user-facing data in the deployment. Isolating it gives it its
--- own free-tier storage ceiling (500 MB) so telemetry churn can never crowd
--- it out. Created, populated (copied from the primary database), and
--- verified by `npm run db:shard` (scripts/shard-d1.mjs); without the DB_SYNC
--- binding in wrangler.toml the worker keeps this table in the primary
--- database and this file is unused.
+-- Holds exactly one table: progress_documents, the per-user sync payloads.
+-- The pool is PARTITIONED BY USER: every kind of a user's sync data lives in
+-- exactly one of up to six identical databases (this file applies to each of
+-- them), and users.sync_shard on the core database names the owner. That
+-- gives the pool its own free-tier storage ceilings (6 × 500 MB ≈ 2.5 GB
+-- usable) while keeping every per-user sync request a single-database
+-- operation. Created, populated, and verified by `npm run db:shard`
+-- (scripts/shard-d1.mjs); without the DB_SYNC_* bindings in wrangler.toml
+-- the worker keeps this table in the primary database and this file is
+-- unused. The worker also self-bootstraps this schema (CREATE IF NOT
+-- EXISTS) — migrations remain the source of truth.
 --
 -- NOTE: deliberately NO FOREIGN KEY on user_id. SQLite cannot enforce a
 -- reference across databases, so the FK that exists on single-database

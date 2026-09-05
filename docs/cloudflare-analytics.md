@@ -91,10 +91,12 @@ throttles" table lists every guard and which quota it protects.
 ## D1 sharding
 
 The D1 storage ceiling is **per database**. Osler can split its data across
-up to three bound databases — core (`DB`: users, sessions, content),
-sync (`DB_SYNC`: `progress_documents`), and telemetry (`DB_TELEMETRY`:
-`analytics_events` + choice stats) — each with its own 500 MB. Read/write
-row quotas are account-wide and do **not** multiply with sharding.
+up to eight bound databases — core (`DB`: users, sessions, content), a
+six-database sync pool (`DB_SYNC_1..6`: `progress_documents`, partitioned
+user-by-user with the owner recorded on `users.sync_shard`), and telemetry
+(`DB_TELEMETRY`: `analytics_events` + choice stats) — each with its own
+500 MB (≈ 2.5 GB usable for sync). Read/write row quotas are account-wide
+and do **not** multiply with sharding.
 
 The quota panel reflects the setup automatically: it scales the storage
 gauge by the number of bound databases and labels each table row with its

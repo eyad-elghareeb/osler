@@ -8,7 +8,7 @@
     "db:migrate": "wrangler d1 migrations apply osler-cloud --remote",
     "db:migrate:local": "wrangler d1 migrations apply osler-cloud --local",
     "db:shard": "node scripts/shard-d1.mjs",
-    "db:migrate:shards": "wrangler d1 migrations apply osler-sync --remote && wrangler d1 migrations apply osler-telemetry --remote",
+    "db:migrate:shards": "wrangler d1 migrations apply osler-sync-1 --remote && wrangler d1 migrations apply osler-sync-2 --remote && wrangler d1 migrations apply osler-sync-3 --remote && wrangler d1 migrations apply osler-sync-4 --remote && wrangler d1 migrations apply osler-sync-5 --remote && wrangler d1 migrations apply osler-sync-6 --remote && wrangler d1 migrations apply osler-telemetry --remote",
     "db:list": "wrangler d1 migrations list osler-cloud",
     "tail": "wrangler tail",
     "secret:list": "wrangler secret list",

@@ -179,10 +179,16 @@ let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys
 
 interface Env {
   DB: D1Database;
-  /** Optional sync shard — holds progress_documents (per-user sync payloads).
-   *  Absent ⇒ progress_documents stays in DB (single-database mode). See
-   *  wrangler.toml "Optional D1 shards" + `npm run db:shard`. */
-  DB_SYNC?: D1Database;
+  /** Optional sync shard pool — progress_documents is partitioned user-by-user
+   *  across up to SYNC_SHARD_COUNT databases; users.sync_shard (core) names the
+   *  owner. All six absent ⇒ progress_documents stays in DB (single-database
+   *  mode). See wrangler.toml "Optional D1 shards" + `npm run db:shard`. */
+  DB_SYNC_1?: D1Database;
+  DB_SYNC_2?: D1Database;
+  DB_SYNC_3?: D1Database;
+  DB_SYNC_4?: D1Database;
+  DB_SYNC_5?: D1Database;
+  DB_SYNC_6?: D1Database;
   /** Optional telemetry shard — holds analytics_events, question_choice_*,
    *  and daily_counters. Absent ⇒ telemetry stays in DB (single-database
    *  mode). */
@@ -223,16 +229,58 @@ interface Env {
 // The D1 free tier allows 500 MB of storage PER DATABASE, but the read/write
 // row quotas (5M reads / 100K writes per day) are ACCOUNT-WIDE — splitting
 // into multiple databases multiplies only the storage ceiling. That is still
-// decisive: it isolates the table most likely to fill up fastest
-// (analytics_events) from the table users actually care about protecting
-// (progress_documents), and both from the small-but-precious auth/content
-// tables. Shard bindings are optional — these accessors fall back to the
-// single primary DB, so a deployment without the extra databases behaves
-// exactly as before.
+// decisive: it isolates the tables most likely to fill up fastest from the
+// tables users actually care about protecting, and both from the small-but-
+// precious auth/content tables. Shard bindings are optional — every accessor
+// falls back to the single primary DB, so a deployment without the extra
+// databases behaves exactly as before.
+//
+// The sync pool is partitioned USER-BY-USER, not by table: every kind of a
+// given user's progress_documents lives in exactly ONE shard, so a
+// per-user read/write is a single-database operation. Ownership is recorded
+// on the user row itself (users.sync_shard, core DB) — which every
+// authenticated request already loads — and new users are assigned
+// deterministically by hash of their id. Six shards × 500 MB free-tier
+// ceiling ≈ 2.5 GB of usable sync storage.
 
-/** Sync shard: progress_documents (per-user sync payloads). */
-function syncDb(env: Env): D1Database {
-  return env.DB_SYNC ?? env.DB;
+/** Number of sync shard databases in the pool. */
+const SYNC_SHARD_COUNT = 6;
+
+/** The sync shard bindings actually present in this deployment. */
+function boundSyncDbs(env: Env): D1Database[] {
+  return [env.DB_SYNC_1, env.DB_SYNC_2, env.DB_SYNC_3, env.DB_SYNC_4, env.DB_SYNC_5, env.DB_SYNC_6]
+    .filter((db): db is D1Database => !!db);
+}
+
+/** Every sync shard a whole-pool scan must cover (single DB when unsharded). */
+function allSyncDbs(env: Env): D1Database[] {
+  const bound = boundSyncDbs(env);
+  return bound.length ? bound : [env.DB];
+}
+
+/** The sync shard database that owns `shard`'s users. Out-of-range or
+ *  partial bindings fold into the bound pool rather than failing. */
+function syncDb(env: Env, shard: number): D1Database {
+  const bound = boundSyncDbs(env);
+  if (bound.length === 0) return env.DB;
+  const n = Number.isInteger(shard) && shard >= 1 ? shard : 1;
+  return bound[(n - 1) % bound.length];
+}
+
+/** The shard number recorded on a user row, normalized for pre-backfill
+ *  rows (sync_shard is NULL until `npm run db:shard` assigns it). */
+function userSyncShard(user: { sync_shard?: number | null }): number {
+  const n = Number(user?.sync_shard);
+  return Number.isInteger(n) && n >= 1 && n <= SYNC_SHARD_COUNT ? n : 1;
+}
+
+/** Deterministic user→shard assignment (djb2 over the user id). MUST stay
+ *  in sync with the copy in scripts/shard-d1.mjs — both decide where a
+ *  user's rows live. */
+function syncShardForUserId(id: string): number {
+  let h = 5381;
+  for (let i = 0; i < id.length; i++) h = ((h * 33) ^ id.charCodeAt(i)) >>> 0;
+  return (h % SYNC_SHARD_COUNT) + 1;
 }
 
 /** Telemetry shard: analytics_events, question_choice_* + their daily
@@ -245,10 +293,11 @@ function telemetryDb(env: Env): D1Database {
 /** Free-tier storage ceiling per D1 database. */
 const D1_FREE_TIER_DB_BYTES = 500 * 1024 * 1024;
 
-/** Number of D1 databases this deployment binds (1 unsharded, 3 fully
- *  sharded). Only the STORAGE quota scales with this. */
+/** Number of D1 databases this deployment binds (1 unsharded, up to 8
+ *  fully sharded: core + 6 sync + telemetry). Only the STORAGE quota
+ *  scales with this. */
 function d1ShardCount(env: Env): number {
-  return 1 + (env.DB_SYNC ? 1 : 0) + (env.DB_TELEMETRY ? 1 : 0);
+  return 1 + boundSyncDbs(env).length + (env.DB_TELEMETRY ? 1 : 0);
 }
 
 // ── Shard schema bootstrap ───────────────────────────────────────────────────
@@ -321,20 +370,23 @@ const SHARD_SCHEMA_SQL: Record<"sync" | "telemetry", string[]> = {
   ],
 };
 
-const shardSchemaReady: Partial<Record<"sync" | "telemetry", Promise<void>>> = {};
+const shardSchemaReady: Partial<Record<string, Promise<void>>> = {};
 
 /** Idempotently create the shard's tables if missing (once per isolate).
- *  Rejects only when the database itself is unreachable — a missing schema
- *  heals here, a dead binding still fails loudly on the real query. */
-function ensureShardSchema(env: Env, shard: "sync" | "telemetry"): Promise<void> {
-  const cached = shardSchemaReady[shard];
+ *  Sync bootstrap applies per pool shard (`index`); telemetry is a single
+ *  database. Rejects only when the database itself is unreachable — a
+ *  missing schema heals here, a dead binding still fails loudly on the
+ *  real query. */
+function ensureShardSchema(env: Env, kind: "sync" | "telemetry", index = 1): Promise<void> {
+  const key = `${kind}:${index}`;
+  const cached = shardSchemaReady[key];
   if (cached) return cached;
-  const db = shard === "sync" ? syncDb(env) : telemetryDb(env);
-  const run = db.batch(SHARD_SCHEMA_SQL[shard].map((sql) => db.prepare(sql))).then(() => undefined);
-  shardSchemaReady[shard] = run;
+  const db = kind === "sync" ? syncDb(env, index) : telemetryDb(env);
+  const run = db.batch(SHARD_SCHEMA_SQL[kind].map((sql) => db.prepare(sql))).then(() => undefined);
+  shardSchemaReady[key] = run;
   // A failed bootstrap is never cached — the next request retries, so a
   // transient D1 blip can't wedge the isolate until recycle.
-  run.catch(() => { delete shardSchemaReady[shard]; });
+  run.catch(() => { delete shardSchemaReady[key]; });
   return run;
 }
 
@@ -357,6 +409,9 @@ interface UserRow {
   gemini_model?: string | null;
   gemini_max_wait?: number | null;
   email_verified_at?: number | null;
+  /** Which sync shard owns this user's progress_documents (1-based).
+   *  NULL until `npm run db:shard` assigns it — treated as shard 1. */
+  sync_shard?: number | null;
 }
 
 interface SessionRow {
@@ -874,10 +929,17 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
 
 // ─── Sync merging ────────────────────────────────────────────────────────────
 // mergeQbank / mergeFlashcards now live in ./sync-docs (pure, unit-tested).
+// The sync helpers take the USER ROW, not a bare id: users.sync_shard names
+// the owning shard, and the row is already in memory on every authenticated
+// request — the partition costs zero extra queries.
 
-async function getDocument(env: Env, userId: string, kind: string): Promise<{ records: Record<string, any>; updatedAt: number }> {
-  await ensureShardSchema(env, "sync");
-  const row = await syncDb(env).prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(userId, kind).first<{ payload: string; compressed: number; updated_at: number }>();
+/** Minimal user shape the sync helpers need. */
+type SyncUser = Pick<UserRow, "id" | "sync_shard">;
+
+async function getDocument(env: Env, user: SyncUser, kind: string): Promise<{ records: Record<string, any>; updatedAt: number }> {
+  const shard = userSyncShard(user);
+  await ensureShardSchema(env, "sync", shard);
+  const row = await syncDb(env, shard).prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(user.id, kind).first<{ payload: string; compressed: number; updated_at: number }>();
   if (!row || !row.payload) return { records: {}, updatedAt: 0 };
   try {
     const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
@@ -885,25 +947,26 @@ async function getDocument(env: Env, userId: string, kind: string): Promise<{ re
   } catch { return { records: {}, updatedAt: 0 }; }
 }
 
-async function getAllDocuments(env: Env, userId: string): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+async function getAllDocuments(env: Env, user: SyncUser): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
   const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
-  const results = await Promise.all(SYNC_KINDS.map((kind) => getDocument(env, userId, kind)));
+  const results = await Promise.all(SYNC_KINDS.map((kind) => getDocument(env, user, kind)));
   SYNC_KINDS.forEach((kind, i) => { docs[kind] = results[i]; });
   return docs;
 }
 
-async function getSelectedDocuments(env: Env, userId: string, kinds: string[]): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+async function getSelectedDocuments(env: Env, user: SyncUser, kinds: string[]): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
   const validKinds = new Set<string>(SYNC_KINDS);
   const kindsToFetch = kinds.filter((kind) => validKinds.has(kind));
   const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
-  const results = await Promise.all(kindsToFetch.map((kind) => getDocument(env, userId, kind)));
+  const results = await Promise.all(kindsToFetch.map((kind) => getDocument(env, user, kind)));
   kindsToFetch.forEach((kind, i) => { docs[kind] = results[i]; });
   return docs;
 }
 
-async function getSyncHead(env: Env, userId: string): Promise<{ timestamps: Record<string, number>; usedBytes: number }> {
-  await ensureShardSchema(env, "sync");
-  const rows = await syncDb(env).prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(userId).all<{ kind: string; updated_at: number; raw_bytes: number }>();
+async function getSyncHead(env: Env, user: SyncUser): Promise<{ timestamps: Record<string, number>; usedBytes: number }> {
+  const shard = userSyncShard(user);
+  await ensureShardSchema(env, "sync", shard);
+  const rows = await syncDb(env, shard).prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(user.id).all<{ kind: string; updated_at: number; raw_bytes: number }>();
   const timestamps: Record<string, number> = {};
   for (const k of SYNC_KINDS) timestamps[k] = 0;
   let usedBytes = 0;
@@ -914,6 +977,27 @@ async function getSyncHead(env: Env, userId: string): Promise<{ timestamps: Reco
     usedBytes += Number(row.raw_bytes || 0);
   }
   return { timestamps, usedBytes };
+}
+
+/** Whole-pool progress_documents totals for the quota panel: one COUNT/SUM
+ *  per sync shard, reduced to the single-row shape the panel expects.
+ *  SUMs are NULL on an empty shard — coerced to 0 here. */
+async function syncDbProgressTotals(env: Env): Promise<{ total: number; raw_bytes: number; compressed_bytes: number }> {
+  const rows = await Promise.all(
+    allSyncDbs(env).map((db) =>
+      db.prepare("SELECT COUNT(*) AS total, SUM(raw_bytes) AS raw_bytes, SUM(LENGTH(payload)) AS compressed_bytes FROM progress_documents")
+        .first<{ total: number; raw_bytes: number | null; compressed_bytes: number | null }>()
+        .catch(() => null),
+    ),
+  );
+  return rows.reduce<{ total: number; raw_bytes: number; compressed_bytes: number }>(
+    (acc, r) => ({
+      total: acc.total + (Number(r?.total) || 0),
+      raw_bytes: acc.raw_bytes + (Number(r?.raw_bytes) || 0),
+      compressed_bytes: acc.compressed_bytes + (Number(r?.compressed_bytes) || 0),
+    }),
+    { total: 0, raw_bytes: 0, compressed_bytes: 0 },
+  );
 }
 
 // ─── Google OAuth ────────────────────────────────────────────────────────────
@@ -983,8 +1067,8 @@ async function googleUser(env: Env, claims: any): Promise<UserRow | null> {
     const generatedPassword = await passwordHash(`${id()}${id()}`);
     const userId = id();
     try {
-      await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)")
-        .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, now(), now()).run();
+      await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, sync_shard, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)")
+        .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, syncShardForUserId(userId), now(), now()).run();
     } catch {
       // Lost the race: an account now exists for this email (email is UNIQUE).
       // Fail closed rather than link onto it or half-create a user.
@@ -2636,9 +2720,14 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
   const cached = contentAnalyticsCache.get(cacheKey);
   if (cached && now() - cached.at < CONTENT_ANALYTICS_CACHE_TTL_MS) return cached.data;
 
+  // The doc scan fans out across every sync shard — user rows are
+  // partitioned one shard each, so the pool scan is N parallel queries.
+  const syncPool = allSyncDbs(env);
+  await Promise.all(syncPool.map((_db, i) => ensureShardSchema(env, "sync", i + 1)));
   const [userRows, docRows] = await Promise.all([
     env.DB.prepare("SELECT id, username, display_name FROM users").all<{ id: string; username: string | null; display_name: string | null }>(),
-    syncDb(env).prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind IN ('qbank','flashcards')").all<{ user_id: string; kind: string; payload: string; compressed: number }>(),
+    Promise.all(syncPool.map((db) => db.prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind IN ('qbank','flashcards')").all<{ user_id: string; kind: string; payload: string; compressed: number }>()))
+      .then((parts) => ({ results: parts.flatMap((part) => part.results || []) })),
   ]);
 
   const userNames = new Map<string, string>();
@@ -2861,8 +2950,11 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
 
 async function handleAnalytics(request: Request, env: Env, url: URL, origin: string, log: Logger): Promise<Response | null> {
   // Every branch below reads the sync/telemetry shards (dashboards, choice
-  // stats, quota panel) — bootstrap both once per isolate before querying.
-  await Promise.all([ensureShardSchema(env, "sync"), ensureShardSchema(env, "telemetry")]);
+  // stats, quota panel) — bootstrap the whole pool once per isolate first.
+  await Promise.all([
+    ...allSyncDbs(env).map((_db, i) => ensureShardSchema(env, "sync", i + 1)),
+    ensureShardSchema(env, "telemetry"),
+  ]);
   const path = url.pathname;
 
   /* ── Overview ── */
@@ -3326,7 +3418,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       telemetryDb(env).prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_month FROM analytics_events").bind(startOfToday, startOfMonth).first<{ total: number; today: number; this_month: number }>().catch(() => ({ total: 0, today: 0, this_month: 0 })),
       telemetryDb(env).prepare("SELECT COUNT(*) AS total, SUM(count) AS total_responses FROM question_choice_stats").first<{ total: number; total_responses: number }>().catch(() => ({ total: 0, total_responses: 0 })),
       telemetryDb(env).prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?").bind(startOfToday).first<{ n: number }>().catch(() => ({ n: 0 })),
-      syncDb(env).prepare("SELECT COUNT(*) AS total, SUM(raw_bytes) AS raw_bytes, SUM(LENGTH(payload)) AS compressed_bytes FROM progress_documents").first<{ total: number; raw_bytes: number; compressed_bytes: number }>().catch(() => ({ total: 0, raw_bytes: 0, compressed_bytes: 0 })),
+      syncDbProgressTotals(env),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published, SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS drafts FROM content_objects").first<{ total: number; published: number; drafts: number }>().catch(() => ({ total: 0, published: 0, drafts: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today FROM admin_audit").bind(startOfToday).first<{ total: number; today: number }>().catch(() => ({ total: 0, today: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>().catch(() => ({ total: 0 })),
@@ -3853,7 +3945,9 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     const progressMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/progress$/);
     if (progressMatch && request.method === "GET") {
       const targetId = progressMatch[1];
-      const docs = await getAllDocuments(env, targetId);
+      const targetUser = await env.DB.prepare("SELECT id, sync_shard FROM users WHERE id = ?").bind(targetId).first<SyncUser>();
+      if (!targetUser) return json({ error: "User not found" }, 404, origin, log);
+      const docs = await getAllDocuments(env, targetUser);
       const summary: Record<string, { recordCount: number; updatedAt: number }> = {};
       for (const kind of SYNC_KINDS) summary[kind] = { recordCount: Object.keys(docs[kind].records).length, updatedAt: docs[kind].updatedAt };
       return json(summary, 200, origin, log);
@@ -3899,12 +3993,14 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM users WHERE id = ?").bind(targetId),
         ]);
-        // progress_documents may live on the sync shard, where the users FK
-        // cannot cascade across databases — delete it explicitly, after the
-        // core removal succeeded (an orphaned progress row is inert; a
-        // deleted user who still owns one is a storage leak).
-        await ensureShardSchema(env, "sync");
-        await syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(targetId).run();
+        // progress_documents may live on any sync shard, where the users FK
+        // cannot cascade across databases — delete it explicitly from the
+        // user's own shard, after the core removal succeeded (an orphaned
+        // progress row is inert; a deleted user who still owns one is a
+        // storage leak).
+        const targetShard = userSyncShard(user);
+        await ensureShardSchema(env, "sync", targetShard);
+        await syncDb(env, targetShard).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(targetId).run();
         await auditLog(env, session.user.id, "delete_user", targetId, { username: user.username, contentReassignedTo: session.user.id }, log);
         return json({ ok: true }, 200, origin, log);
       }
@@ -5217,7 +5313,7 @@ export default {
         if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
         const userId = id(); const password = await passwordHash(body.password);
         try {
-          await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)").bind(userId, username, email, displayName, password.hash, password.salt, now(), now()).run();
+          await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, sync_shard, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(userId, username, email, displayName, password.hash, password.salt, syncShardForUserId(userId), now(), now()).run();
         } catch { return json({ error: "That username or email is already in use" }, 409, origin, log); }
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<any>();
         return json(await issueSession(user, env, request.headers.get("user-agent")), 201, origin, log);
@@ -5746,7 +5842,7 @@ export default {
         ]);
         return json(await issueSession(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>(), env, request.headers.get("user-agent")), 200, origin, log);
       }
-      if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: await getAllDocuments(env, session.user.id), exportedAt: now() }, 200, origin, log);
+      if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: await getAllDocuments(env, session.user), exportedAt: now() }, 200, origin, log);
       if (request.method === "DELETE" && url.pathname === "/v1/account") {
         const body = await readJson(request);
         if (body.confirm !== "DELETE") return json({ error: "Type DELETE to confirm account deletion" }, 400, origin, log);
@@ -5760,8 +5856,9 @@ export default {
           env.DB.prepare("DELETE FROM users WHERE id = ?").bind(session.user.id),
         ]);
         // Sync shard: no FK cascade across databases (see admin user delete).
-        await ensureShardSchema(env, "sync");
-        await syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(session.user.id).run();
+        const syncShard = userSyncShard(session.user);
+        await ensureShardSchema(env, "sync", syncShard);
+        await syncDb(env, syncShard).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(session.user.id).run();
         return json({ ok: true }, 200, origin, log);
       }
 
@@ -5812,21 +5909,23 @@ export default {
       // ── Sync ──
       if (request.method === "GET" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
+        const syncShard = userSyncShard(session.user);
         const isHead = url.searchParams.get("head") === "true" || url.searchParams.get("head") === "1";
         if (isHead) {
-          const { timestamps, usedBytes } = await getSyncHead(env, session.user.id);
+          const { timestamps, usedBytes } = await getSyncHead(env, session.user);
           return json({ timestamps, quota: { usedBytes, limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
         }
         const requestedKinds = url.searchParams.get("kinds")?.split(",").map(k => k.trim()).filter(Boolean);
         const docs = requestedKinds && requestedKinds.length > 0
-          ? await getSelectedDocuments(env, session.user.id, requestedKinds)
-          : await getAllDocuments(env, session.user.id);
-        const sizeRow = await syncDb(env).prepare("SELECT COALESCE(SUM(raw_bytes),0) as total FROM progress_documents WHERE user_id = ?").bind(session.user.id).first<{ total: number }>();
+          ? await getSelectedDocuments(env, session.user, requestedKinds)
+          : await getAllDocuments(env, session.user);
+        const sizeRow = await syncDb(env, syncShard).prepare("SELECT COALESCE(SUM(raw_bytes),0) as total FROM progress_documents WHERE user_id = ?").bind(session.user.id).first<{ total: number }>();
         return json({ ...docs, quota: { usedBytes: Number(sizeRow?.total ?? 0), limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
         if (!rateLimit(ip, "sync")) return json({ error: "Too many requests" }, 429, origin, log);
-        await ensureShardSchema(env, "sync");
+        const syncShard = userSyncShard(session.user);
+        await ensureShardSchema(env, "sync", syncShard);
         const body = await readJsonBody(request, MAX_GZIP_BODY_BYTES); const statements: any[] = []; const changedKinds: string[] = []; const response: Record<string, any> = {};
         const bodyKinds = new Set<string>();
         for (const kind of SYNC_KINDS) if (body[kind] && typeof body[kind] === "object") bodyKinds.add(kind);
@@ -5835,8 +5934,8 @@ export default {
         // previously each kind's doc was awaited sequentially inside the loop,
         // stretching a multi-kind push to N round-trips.
         const [sizeRows, ...currentDocs] = await Promise.all([
-          syncDb(env).prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>(),
-          ...kindsToSync.map((kind) => getDocument(env, session.user.id, kind)),
+          syncDb(env, syncShard).prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>(),
+          ...kindsToSync.map((kind) => getDocument(env, session.user, kind)),
         ]);
         const currentByKind = new Map<string, { records: Record<string, any>; updatedAt: number }>();
         kindsToSync.forEach((kind, i) => { currentByKind.set(kind, currentDocs[i]); });
@@ -5846,7 +5945,7 @@ export default {
         // they exist — so they stop counting against the user's storage budget.
         const retiredSet = new Set<string>(RETIRED_SYNC_KINDS);
         const retiredCleanup = (sizeRows.results || []).some((row) => retiredSet.has(row?.kind ?? ""))
-          ? [syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind IN ('highlights', 'writtenDrafts')").bind(session.user.id)]
+          ? [syncDb(env, syncShard).prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind IN ('highlights', 'writtenDrafts')").bind(session.user.id)]
           : [];
         // Per-user storage budget: start from the raw bytes of stored docs NOT
         // being rewritten in this request, then add each merged doc's size.
@@ -5886,11 +5985,11 @@ export default {
           // Store gzip-compressed to save D1 space (~5-8x) and support far more
           // progress per user; raw_bytes tracks the uncompressed JSON so the
           // per-user budget is enforced on real content, not compressed size.
-          statements.push(syncDb(env).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
+          statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
           changedKinds.push(kind);
         }
         if (statements.length || retiredCleanup.length) {
-          await syncDb(env).batch([...statements, ...retiredCleanup]);
+          await syncDb(env, syncShard).batch([...statements, ...retiredCleanup]);
           // Fire-and-forget poke: the user's other connected devices pull
           // immediately over the realtime hub (clients no longer idle-poll).
           // The pushing

@@ -10,22 +10,52 @@ database_name = "osler-cloud"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 # ── BEGIN optional D1 shards (managed by `npm run db:shard`) ──
-# Free-tier D1 allows 500 MB of storage PER DATABASE, while the read/write
-# row quotas (5M reads / 100K writes per day) are ACCOUNT-WIDE — sharding
-# does not multiply them. Splitting by data domain therefore multiplies only
-# the storage ceiling, which is exactly what a growing instance needs:
-#   * DB_SYNC      — progress_documents (per-user sync payloads)
-#   * DB_TELEMETRY — analytics_events, question_choice_*, daily_counters
-# Uncomment both blocks and run `npm run db:shard`: it creates the databases,
-# fills the IDs in, applies migrations-sync/ + migrations-telemetry/, copies
-# the tables out of the primary database, and verifies row counts. Deploying
-# WITHOUT these bindings keeps everything in the DB above (the worker falls
-# back to it), so sharding is strictly opt-in.
+# progress_documents is partitioned USER-BY-USER across a pool of numbered
+# sync databases — every kind of a user's sync data lives in exactly one
+# shard, recorded on the user row (users.sync_shard, core DB). Six shards ×
+# 500 MB free-tier ceiling ≈ 2.5 GB of usable sync storage; telemetry keeps
+# its own database. Read/write row quotas (5M reads / 100K writes per day)
+# are ACCOUNT-WIDE — sharding multiplies only storage. Uncomment all seven
+# blocks and run `npm run db:shard`: it creates the databases, fills the IDs
+# in, applies their migrations, backfills users.sync_shard, moves each
+# user's rows from a legacy single sync database (if one exists) into their
+# shard, and verifies. Deploying WITHOUT these bindings keeps everything in
+# the DB above (the worker falls back to it), so sharding is strictly opt-in.
 #
 # [[d1_databases]]
-# binding = "DB_SYNC"
-# database_name = "osler-sync"
-# database_id = "REPLACE_WITH_SYNC_D1_ID"
+# binding = "DB_SYNC_1"
+# database_name = "osler-sync-1"
+# database_id = "REPLACE_WITH_SYNC_1_D1_ID"
+# migrations_dir = "migrations-sync"
+#
+# [[d1_databases]]
+# binding = "DB_SYNC_2"
+# database_name = "osler-sync-2"
+# database_id = "REPLACE_WITH_SYNC_2_D1_ID"
+# migrations_dir = "migrations-sync"
+#
+# [[d1_databases]]
+# binding = "DB_SYNC_3"
+# database_name = "osler-sync-3"
+# database_id = "REPLACE_WITH_SYNC_3_D1_ID"
+# migrations_dir = "migrations-sync"
+#
+# [[d1_databases]]
+# binding = "DB_SYNC_4"
+# database_name = "osler-sync-4"
+# database_id = "REPLACE_WITH_SYNC_4_D1_ID"
+# migrations_dir = "migrations-sync"
+#
+# [[d1_databases]]
+# binding = "DB_SYNC_5"
+# database_name = "osler-sync-5"
+# database_id = "REPLACE_WITH_SYNC_5_D1_ID"
+# migrations_dir = "migrations-sync"
+#
+# [[d1_databases]]
+# binding = "DB_SYNC_6"
+# database_name = "osler-sync-6"
+# database_id = "REPLACE_WITH_SYNC_6_D1_ID"
 # migrations_dir = "migrations-sync"
 #
 # [[d1_databases]]

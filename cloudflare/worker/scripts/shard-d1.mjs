@@ -1,25 +1,32 @@
 #!/usr/bin/env node
-// scripts/shard-d1.mjs — one-time setup + data migration for the optional
-// D1 shards (see wrangler.toml "Optional D1 shards").
+// scripts/shard-d1.mjs — setup + user assignment migration for the sharded
+// sync pool (see wrangler.toml "Optional D1 shards").
 //
-// Free-tier D1 gives 500 MB of storage PER DATABASE; read/write row quotas
-// are account-wide. Sharding multiplies only the storage ceiling:
-//   osler-sync      ← progress_documents            (DB_SYNC)
-//   osler-telemetry ← analytics_events, question_choice_stats,
-//                     question_choice_respondents   (DB_TELEMETRY)
+// Layout: progress_documents is partitioned USER-BY-USER across up to six
+// numbered sync databases (each with its own free-tier 500 MB ceiling —
+// ~2.5 GB usable for sync); users.sync_shard on the core database names the
+// owner, assigned deterministically by hash of the user id. Telemetry keeps
+// its own database. Read/write row quotas stay account-wide.
 //
-// What it does, in order:
-//   1. creates osler-sync + osler-telemetry (skips ones that already exist)
-//   2. uncomments the shard blocks in wrangler.toml and fills in real IDs
-//   3. applies migrations-sync/ + migrations-telemetry/ to the remote shards
-//   4. exports each table from the primary DB and imports it into its shard
-//   5. verifies row counts on both sides
-//   6. with --prune: deletes the copied tables' rows from the primary DB
-//      (run AFTER the sharded worker is deployed and verified — the worker
-//      must already be writing to the shards when this happens)
+// Steps:
+//   1. create osler-sync-1..6 + osler-telemetry — shard names come from the
+//      template section in wrangler.toml, so instances can rename them
+//   2. activate the shard bindings in wrangler.toml with real IDs
+//   3. apply migrations to every shard + telemetry
+//   4. core backfill: users.sync_shard = hash(user.id) for every user whose
+//      mapping is still NULL (run `npm run db:migrate` FIRST — it adds the
+//      users.sync_shard column)
+//   5. data migration: copy each user's progress_documents rows from the
+//      legacy single sync database (auto-detected by name, e.g. osler-sync)
+//      into their assigned shard — skipped when no legacy database exists
+//   6. verify per-user row counts on both sides
+//   7. --prune: delete the migrated rows from the legacy database (run AFTER
+//      the sharded worker is deployed and verified)
 //
-// Idempotent: safe to re-run up to the copy step; re-copying over a shard
-// that already holds rows requires --force (it deletes target rows first).
+// Safe to run while an OLD worker is still deployed: it only adds rows to
+// the new shards and fills the mapping column — the legacy database keeps
+// serving the old worker until cutover. Idempotent up to the copy step;
+// re-copying over populated shards needs --force.
 //
 // Usage (from cloudflare/worker):  npm run db:shard [-- --prune] [-- --force]
 
@@ -31,13 +38,9 @@ import { tmpdir } from "node:os";
 
 const workerDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const configFile = join(workerDir, "wrangler.toml");
-const CORE_DB = "osler-cloud";
-const SHARDS = [
-  { binding: "DB_SYNC", database: "osler-sync", migrationsDir: "migrations-sync", tables: ["progress_documents"] },
-  { binding: "DB_TELEMETRY", database: "osler-telemetry", migrationsDir: "migrations-telemetry", tables: ["analytics_events", "question_choice_stats", "question_choice_respondents"] },
-];
 const BEGIN = "# ── BEGIN optional D1 shards";
 const END = "# ── END optional D1 shards";
+const SYNC_SHARD_COUNT = 6;
 
 const prune = process.argv.includes("--prune");
 const force = process.argv.includes("--force");
@@ -51,13 +54,45 @@ function wrangler(args, opts = {}) {
   return res.stdout;
 }
 
-function countOf(database, table) {
-  const out = wrangler(["d1", "execute", database, "--remote", "--json", "--command", `SELECT COUNT(*) AS n FROM ${table}`]);
-  const rows = JSON.parse(out.slice(out.indexOf("[")));
-  return Number(rows[0]?.results?.[0]?.n ?? 0);
+/** JSON result of a `wrangler --json` call (both `d1 list` and `d1 execute`
+ *  print a top-level array); tolerates banner lines before the JSON. */
+function d1Json(out) {
+  return JSON.parse(out.slice(out.indexOf("[")));
 }
 
-console.log("── 1/5 · Ensuring shard databases exist");
+function countOf(database, table, where = "") {
+  return Number(d1Json(wrangler(["d1", "execute", database, "--remote", "--json", "--command", `SELECT COUNT(*) AS n FROM ${table}${where}`]))[0]?.results?.[0]?.n ?? 0);
+}
+
+function sqlString(v) {
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+/** Deterministic user→shard assignment (djb2). MUST stay in sync with
+ *  syncShardForUserId in src/index.ts — both decide where rows live. */
+function syncShardForUserId(id) {
+  let h = 5381;
+  for (let i = 0; i < id.length; i++) h = ((h * 33) ^ id.charCodeAt(i)) >>> 0;
+  return (h % SYNC_SHARD_COUNT) + 1;
+}
+
+const config = readFileSync(configFile, "utf8");
+// Core database name comes from the primary binding, so instances with a
+// renamed core still derive the right shard names.
+const CORE_DB = config.match(/binding = "DB"\s*\r?\n\s*database_name = "([^"]+)"/)?.[1] ?? "osler-cloud";
+// Shard names come from the (commented) template blocks, so instances can
+// rename them before running this script.
+const shardName = (n) =>
+  config.match(new RegExp(`#\\s*binding = "DB_SYNC_${n}"\\s*\\r?\\n#\\s*database_name = "([^"]+)"`))?.[1]
+  ?? `${CORE_DB.replace(/-cloud$/, "")}-sync-${n}`;
+const TELEMETRY_DB = config.match(/#\s*binding = "DB_TELEMETRY"\s*\r?\n#\s*database_name = "([^"]+)"/)?.[1] ?? "osler-telemetry";
+const SHARDS = Array.from({ length: SYNC_SHARD_COUNT }, (_v, i) => ({
+  binding: `DB_SYNC_${i + 1}`,
+  database: shardName(i + 1),
+  migrationsDir: "migrations-sync",
+}));
+
+console.log("── 1/6 · Ensuring shard databases exist");
 const listed = JSON.parse(wrangler(["d1", "list", "--json"]));
 for (const shard of SHARDS) {
   if (listed.some((db) => db.name === shard.database)) {
@@ -67,99 +102,138 @@ for (const shard of SHARDS) {
     wrangler(["d1", "create", shard.database]);
   }
 }
+if (!listed.some((db) => db.name === TELEMETRY_DB)) {
+  console.log(`   creating ${TELEMETRY_DB}…`);
+  wrangler(["d1", "create", TELEMETRY_DB]);
+}
 const ids = Object.fromEntries(
   JSON.parse(wrangler(["d1", "list", "--json"])).map((db) => [db.name, db.uuid]),
 );
-if (!ids[CORE_DB]) throw new Error(`${CORE_DB} not found in this Cloudflare account — create it first`);
-for (const shard of SHARDS) {
-  if (!ids[shard.database]) throw new Error(`${shard.database} not found after create/list`);
+const allNames = SHARDS.map((s) => s.database).concat(TELEMETRY_DB, CORE_DB);
+for (const name of allNames) {
+  if (!ids[name]) throw new Error(`${name} not found after create/list`);
 }
-// Two bindings pointing at the same physical database would report tripled
+// Two bindings pointing at the same physical database would report multiplied
 // storage headroom while everything still shares one 500 MB file.
-const allIds = SHARDS.map((s) => ids[s.database]).concat(ids[CORE_DB]);
-if (new Set(allIds).size !== allIds.length) {
+if (new Set(allNames.map((n) => ids[n])).size !== allNames.length) {
   throw new Error("duplicate database id across bindings — each binding must point at its own database");
 }
 
-console.log("── 2/5 · Activating shard bindings in wrangler.toml");
-let config = readFileSync(configFile, "utf8");
+console.log("── 2/6 · Activating shard bindings in wrangler.toml");
+let configOut = config;
 // d1 commands resolve databases through wrangler.toml, so a primary binding
-// still holding the committed placeholder would break export/migrate. Fill
-// it in from the account — real IDs are never overwritten.
-if (config.includes(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`)) {
-  if (!ids[CORE_DB]) throw new Error(`${CORE_DB} not found in this Cloudflare account — create it first`);
-  config = config.replace(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`, `database_id = "${ids[CORE_DB]}"`);
+// still holding the committed placeholder would break later steps. Fill it
+// in from the account — real IDs are never overwritten.
+if (configOut.includes(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`)) {
+  configOut = configOut.replace(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`, `database_id = "${ids[CORE_DB]}"`);
   console.log(`   filled in primary ${CORE_DB} id (${ids[CORE_DB]})`);
 }
-const beginAt = config.indexOf(BEGIN);
-const endAt = config.indexOf(END);
+const beginAt = configOut.indexOf(BEGIN);
+const endAt = configOut.indexOf(END);
 if (beginAt < 0 || endAt < 0) throw new Error("wrangler.toml shard markers not found — restore the template block from git");
-const activeBlocks = `# Account-specific database IDs. Re-run \`npm run db:shard\` to re-copy data (--force) or prune the primary copies (--prune).
+const activeBlocks = `# Account-specific database IDs. Re-run \`npm run db:shard\` to re-migrate users (--force) or prune the legacy copies (--prune).
 ` + SHARDS.map((s) => `[[d1_databases]]
 binding = "${s.binding}"
 database_name = "${s.database}"
 database_id = "${ids[s.database]}"
-migrations_dir = "${s.migrationsDir}"`).join("\n\n");
-const updated = config.slice(0, beginAt) + BEGIN + "\n"
-  + SHARDS.map((s) => `# ${s.binding} → ${s.tables.join(", ")}`).join("\n") + "\n"
-  + activeBlocks + "\n"
-  + config.slice(endAt);
-writeFileSync(configFile, updated);
-console.log("   wrangler.toml updated (ID changes stay local — placeholders remain in git)");
+migrations_dir = "${s.migrationsDir}"`).join("\n\n") + `
 
-console.log("── 3/5 · Applying shard migrations (remote)");
-for (const shard of SHARDS) {
-  console.log(`   ${shard.database}:`);
-  console.log(wrangler(["d1", "migrations", "apply", shard.database, "--remote"]).trim());
+[[d1_databases]]
+binding = "DB_TELEMETRY"
+database_name = "${TELEMETRY_DB}"
+database_id = "${ids[TELEMETRY_DB]}"
+migrations_dir = "migrations-telemetry"`;
+configOut = configOut.slice(0, beginAt) + BEGIN + "\n"
+  + SHARDS.map((s) => `# ${s.binding} → ${s.database}`).join("\n") + "\n"
+  + activeBlocks + "\n"
+  + configOut.slice(endAt);
+writeFileSync(configFile, configOut);
+console.log("   wrangler.toml updated");
+
+console.log("── 3/6 · Applying shard migrations (remote)");
+for (const database of [...SHARDS.map((s) => s.database), TELEMETRY_DB]) {
+  console.log(`   ${database}:`);
+  console.log(wrangler(["d1", "migrations", "apply", database, "--remote"]).trim());
 }
 
-console.log("── 4/5 · Copying tables from the primary database");
-console.log("   (d1 export briefly pauses queries on the primary DB — run in a low-traffic window)");
+console.log("── 4/6 · Backfilling users.sync_shard in the core database");
+try {
+  d1Json(wrangler(["d1", "execute", CORE_DB, "--remote", "--json", "--command", "SELECT sync_shard FROM users LIMIT 1"]));
+} catch {
+  throw new Error("users.sync_shard is missing — run `npm run db:migrate` (migration 0003) before this script");
+}
+const unassigned = d1Json(wrangler(["d1", "execute", CORE_DB, "--remote", "--json", "--command", "SELECT id FROM users WHERE sync_shard IS NULL"]))[0]?.results ?? [];
+if (unassigned.length) {
+  for (let i = 0; i < unassigned.length; i += 50) {
+    const sql = unassigned.slice(i, i + 50)
+      .map((u) => `UPDATE users SET sync_shard = ${syncShardForUserId(u.id)} WHERE id = ${sqlString(u.id)}`)
+      .join("; ");
+    wrangler(["d1", "execute", CORE_DB, "--remote", "--yes", "--command", sql]);
+  }
+  console.log(`   assigned ${unassigned.length} user(s) by id hash`);
+} else {
+  console.log("   every user already assigned");
+}
+// User→shard map as of right now — the copy + verify steps depend on it.
+const userShards = new Map(
+  d1Json(wrangler(["d1", "execute", CORE_DB, "--remote", "--json", "--command", "SELECT id, sync_shard FROM users"]))[0]?.results
+    .map((u) => [u.id, Number(u.sync_shard) || 1]) ?? [],
+);
+
+console.log("── 5/6 · Migrating per-user rows from the legacy sync database");
+// The pre-pool single sync database keeps its name (e.g. osler-sync); it is
+// only a migration source — fresh installs don't have one and skip this.
+const legacyName = listed.some((db) => db.name === "osler-sync") ? "osler-sync" : null;
 const tmpDir = mkdtempSync(join(tmpdir(), "osler-shard-"));
 try {
-  for (const shard of SHARDS) {
-    for (const table of shard.tables) {
-      const targetCount = countOf(shard.database, table);
-      if (targetCount > 0 && !force) {
-        console.log(`   SKIP ${table} → ${shard.database} (target already has ${targetCount} rows; use --force to recopy)`);
-        continue;
+  if (!legacyName) {
+    console.log("   no legacy single sync database — nothing to migrate");
+  } else {
+    const legacyTotal = countOf(legacyName, "progress_documents");
+    console.log(`   legacy ${legacyName}: ${legacyTotal} row(s)`);
+    if (legacyTotal > 0) {
+      const rows = d1Json(wrangler(["d1", "execute", legacyName, "--remote", "--json", "--command",
+        "SELECT user_id, kind, payload, compressed, raw_bytes, updated_at FROM progress_documents"]))[0]?.results ?? [];
+      const byShard = new Map();
+      for (const row of rows) {
+        const shard = userShards.get(row.user_id) ?? syncShardForUserId(row.user_id);
+        if (!byShard.has(shard)) byShard.set(shard, []);
+        byShard.get(shard).push(row);
       }
-      if (targetCount > 0 && force) {
-        wrangler(["d1", "execute", shard.database, "--remote", "--yes", "--command", `DELETE FROM ${table}`]);
+      for (const [shard, userRows] of byShard) {
+        const target = SHARDS[shard - 1].database;
+        if (force) {
+          wrangler(["d1", "execute", target, "--remote", "--yes", "--command",
+            `DELETE FROM progress_documents WHERE user_id IN (${[...new Set(userRows.map((r) => sqlString(r.user_id)))].join(", ")})`]);
+        }
+        const dumpFile = join(tmpDir, `shard-${shard}.sql`);
+        writeFileSync(dumpFile, userRows.map((r) =>
+          `INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (${sqlString(r.user_id)}, ${sqlString(r.kind)}, ${sqlString(r.payload)}, ${Number(r.compressed) || 0}, ${Number(r.raw_bytes) || 0}, ${Number(r.updated_at) || 0});`,
+        ).join("\n") + "\n");
+        console.log(`   moving ${userRows.length} row(s) → ${target}…`);
+        wrangler(["d1", "execute", target, "--remote", "--yes", "--file", dumpFile]);
       }
-      const dumpFile = join(tmpDir, `${table}.sql`);
-      console.log(`   exporting ${CORE_DB}.${table}…`);
-      wrangler(["d1", "export", CORE_DB, "--remote", "--table", table, "--output", dumpFile]);
-      // The dump may carry DDL; the shard schema already exists via
-      // migrations, so keep only the INSERT statements.
-      const inserts = readFileSync(dumpFile, "utf8")
-        .split("\n")
-        .filter((line) => /^INSERT INTO/i.test(line))
-        .join("\n");
-      const sourceCount = countOf(CORE_DB, table);
-      if (!inserts) {
-        console.log(`   ${table}: source has ${sourceCount} rows, nothing to copy`);
-        continue;
-      }
-      writeFileSync(dumpFile, inserts + "\n");
-      console.log(`   importing ${sourceCount} rows → ${shard.database}.${table}…`);
-      wrangler(["d1", "execute", shard.database, "--remote", "--yes", "--file", dumpFile]);
     }
   }
 } finally {
   rmSync(tmpDir, { recursive: true, force: true });
 }
 
-console.log("── 5/5 · Verifying row counts");
+console.log("── 6/6 · Verifying per-user row parity");
 let verified = true;
-for (const shard of SHARDS) {
-  for (const table of shard.tables) {
-    const source = countOf(CORE_DB, table);
-    const target = countOf(shard.database, table);
-    const ok = target >= source;
+if (legacyName) {
+  const legacyUsers = d1Json(wrangler(["d1", "execute", legacyName, "--remote", "--json", "--command", "SELECT user_id, COUNT(*) AS n FROM progress_documents GROUP BY user_id"]))[0]?.results ?? [];
+  for (const lu of legacyUsers) {
+    const target = SHARDS[(userShards.get(lu.user_id) ?? 1) - 1]?.database;
+    if (!target) { console.log(`   user ${String(lu.user_id).slice(0, 8)}…: no shard — ✗ MISMATCH`); verified = false; continue; }
+    const got = countOf(target, "progress_documents", ` WHERE user_id = ${sqlString(lu.user_id)}`);
+    const ok = got >= Number(lu.n);
     verified &&= ok;
-    console.log(`   ${table}: ${CORE_DB}=${source}  ${shard.database}=${target}  ${ok ? "✓" : "✗ MISMATCH"}`);
+    console.log(`   user ${String(lu.user_id).slice(0, 8)}… → ${target}: legacy=${lu.n} shard=${got}  ${ok ? "✓" : "✗ MISMATCH"}`);
   }
+  if (verified) console.log(`   all ${legacyUsers.length} user(s) verified`);
+} else {
+  console.log("   no legacy database — nothing to verify");
 }
 if (!verified) {
   console.error("\nVerification failed — do NOT deploy the sharded bindings. Investigate and re-run.");
@@ -168,19 +242,22 @@ if (!verified) {
 
 if (prune) {
   if (!verified) throw new Error("refusing to prune unverified copies");
-  const tables = SHARDS.flatMap((s) => s.tables);
-  console.log(`── Pruning copied tables from ${CORE_DB} (--prune)`);
-  wrangler(["d1", "execute", CORE_DB, "--remote", "--yes", "--command", tables.map((t) => `DELETE FROM ${t}`).join("; ")]);
-  console.log("   done. Note: D1 storage reclaims freed pages lazily — the file shrinks as pages are reused.");
+  if (legacyName) {
+    console.log(`── Pruning migrated rows from ${legacyName} (--prune)`);
+    wrangler(["d1", "execute", legacyName, "--remote", "--yes", "--command", "DELETE FROM progress_documents"]);
+    console.log("   done. The legacy database is now empty and can be deleted once you are satisfied:");
+    console.log(`     npx wrangler d1 delete ${legacyName} --skip-confirmation`);
+  } else {
+    console.log("── --prune: no legacy database, nothing to prune");
+  }
 } else {
   console.log(`
 NEXT STEPS
   1. Review wrangler.toml, then deploy the sharded worker:
        npm run deploy
-  2. Verify the app (login, sync, admin → Analytics), then remove the
-     copied tables from the primary database:
+  2. Verify the app (login, sync, admin → Analytics), then drop the legacy
+     copies:
        npm run db:shard -- --prune
-     (Writes that landed on the primary DB between copy and deploy would be
-     lost by pruning — if the gap worries you, re-run the copy step with
-     --force right before pruning.)`);
+     (Writes from the OLD worker landed in the legacy database until cutover;
+     the verification above fails the prune if any are unaccounted for.)`);
 }

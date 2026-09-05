@@ -66,27 +66,31 @@ The two telemetry daily caps (`ANALYTICS_DAILY_WRITE_CAP`, `QBANK_STATS_DAILY_WR
 
 ## D1 sharding (optional)
 
-The D1 free tier allows **500 MB of storage per database**, while the read/write row quotas (5M reads / 100K writes per day) are **account-wide** — splitting into multiple databases multiplies only the storage ceiling. Sharding by data domain does exactly that, isolating the table most likely to fill up fastest from the tables users care about protecting:
+The D1 free tier allows **500 MB of storage per database**, while the read/write row quotas (5M reads / 100K writes per day) are **account-wide** — splitting into multiple databases multiplies only the storage ceiling. Osler shards by data domain:
 
 | Binding | Database | Tables | Why |
 | --- | --- | --- | --- |
 | `DB` (core) | `osler-cloud` | users, sessions, content_objects, admin_audit, … | small, slow-growing |
-| `DB_SYNC` | `osler-sync` | `progress_documents` | per-user payloads, protected from telemetry churn |
+| `DB_SYNC_1..6` | `osler-sync-1..6` | `progress_documents` | partitioned USER-BY-USER across the pool |
 | `DB_TELEMETRY` | `osler-telemetry` | `analytics_events`, `question_choice_*`, `daily_counters` | highest-volume, most disposable |
+
+The sync pool is **partitioned by user**: every kind of a user's sync data lives in exactly one shard, recorded on the user row (`users.sync_shard`, core DB — read straight off the row every authenticated request already loads, so partitioning costs zero extra queries). New users are assigned deterministically by hash of their id, so a per-user sync request touches exactly one database. Six shards × 500 MB ≈ **2.5 GB of usable sync storage**, isolated from telemetry churn and from the auth/content tables.
 
 Shard bindings are optional: without them the worker keeps every table in the primary database and behaves exactly as before. To enable them:
 
 ```sh
+npm run db:migrate            # core migration 0003 adds users.sync_shard
 npm run db:shard              # creates the shard DBs, fills wrangler.toml IDs,
-                              # applies their migrations, copies + verifies data
+                              # applies migrations, backfills users.sync_shard,
+                              # moves each user's rows from a legacy single
+                              # sync DB (if any), verifies per-user parity
 npm run deploy                # deploy the sharded worker
-npm run db:shard -- --prune   # after verifying the app, drop the copied rows
-                              # from the primary database
+npm run db:shard -- --prune   # after verifying the app, drop the legacy copies
 ```
 
-The ID changes to wrangler.toml stay local (git keeps placeholders, same as the primary database ID). Shard schema lives in `migrations-sync/` and `migrations-telemetry/`; future changes there are applied with `npm run db:migrate:shards` (or `npx wrangler d1 migrations apply osler-sync --local` for `wrangler dev`).
+The ID changes to wrangler.toml stay local (git keeps placeholders, same as the primary database ID). Shard schema lives in `migrations-sync/` and `migrations-telemetry/`; future changes there are applied with `npm run db:migrate:shards` (or `npx wrangler d1 migrations apply osler-sync-1 --local` for `wrangler dev`).
 
-Two safety properties worth knowing: the worker **bootstraps shard schemas itself** (idempotent `CREATE IF NOT EXISTS`, once per isolate), so a binding pointed at an empty database — bindings added before migrations, a recreated DB, local dev — self-heals instead of 500ing every sync request; migrations stay the source of truth. And `d1 export` briefly pauses queries on the primary database, so run `npm run db:shard` in a low-traffic window.
+Two safety properties worth knowing: the worker **bootstraps shard schemas itself** (idempotent `CREATE IF NOT EXISTS`, once per isolate), so a binding pointed at an empty database — bindings added before migrations, a recreated DB, local dev — self-heals instead of 500ing every sync request; migrations stay the source of truth. And the per-user migration reads every payload row once, so run `npm run db:shard` in a low-traffic window.
 
 ## Scripts
 
@@ -99,7 +103,7 @@ Two safety properties worth knowing: the worker **bootstraps shard schemas itsel
 | `npm run db:migrate:local` | Apply pending D1 migrations to the local dev database. |
 | `npm run db:list` | List applied and pending migrations. |
 | `npm run db:shard` | One-time optional D1 shard setup: create + wire + migrate + copy + verify (see "D1 sharding"). |
-| `npm run db:migrate:shards` | Apply pending migrations to the optional sync + telemetry shards (after editing `migrations-sync/` / `migrations-telemetry/`). |
+| `npm run db:migrate:shards` | Apply pending migrations to the six sync shards + telemetry (after editing `migrations-sync/` / `migrations-telemetry/`). |
 | `npm run tail` | Tail live logs from the deployed Worker (`wrangler tail`). |
 | `npm run secret:list` | List configured Worker secrets (names only, not values). |
 
@@ -112,11 +116,11 @@ cloudflare/worker/
 ├── migrations/
 │   └── 0001_schema.sql        # consolidated schema: users, sessions, sync docs, OAuth, content_objects, admin_audit, FTS, analytics, lockout, tickets, tokens, MCP OAuth (replaces the old 0001-0025 chain)
 ├── migrations-sync/
-│   └── 0001_schema.sql        # optional sync shard: progress_documents (applied by `npm run db:shard`)
+│   └── 0001_schema.sql        # optional sync shard pool: progress_documents (applied to each of the 6 by `npm run db:shard`)
 ├── migrations-telemetry/
 │   └── 0001_schema.sql        # optional telemetry shard: analytics + choice stats + daily_counters
 ├── scripts/
-│   └── shard-d1.mjs           # one-time optional shard setup + data migration
+│   └── shard-d1.mjs           # optional shard setup + per-user data migration
 ├── .dev.vars.example          # local secrets template (gitignored)
 ├── .env.example               # documentation reference for env vars
 ├── package.json
