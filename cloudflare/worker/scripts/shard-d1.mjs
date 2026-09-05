@@ -75,7 +75,15 @@ for (const shard of SHARDS) {
 }
 
 console.log("── 2/5 · Activating shard bindings in wrangler.toml");
-const config = readFileSync(configFile, "utf8");
+let config = readFileSync(configFile, "utf8");
+// d1 commands resolve databases through wrangler.toml, so a primary binding
+// still holding the committed placeholder would break export/migrate. Fill
+// it in from the account — real IDs are never overwritten.
+if (config.includes(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`)) {
+  if (!ids[CORE_DB]) throw new Error(`${CORE_DB} not found in this Cloudflare account — create it first`);
+  config = config.replace(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`, `database_id = "${ids[CORE_DB]}"`);
+  console.log(`   filled in primary ${CORE_DB} id (${ids[CORE_DB]})`);
+}
 const beginAt = config.indexOf(BEGIN);
 const endAt = config.indexOf(END);
 if (beginAt < 0 || endAt < 0) throw new Error("wrangler.toml shard markers not found — restore the template block from git");
@@ -84,7 +92,7 @@ binding = "${s.binding}"
 database_name = "${s.database}"
 database_id = "${ids[s.database]}"
 migrations_dir = "${s.migrationsDir}"`).join("\n\n");
-const updated = config.slice(0, beginAt)
+const updated = config.slice(0, beginAt) + BEGIN + "\n"
   + SHARDS.map((s) => `# ${s.binding} → ${s.tables.join(", ")}`).join("\n") + "\n"
   + activeBlocks + "\n"
   + config.slice(endAt);
