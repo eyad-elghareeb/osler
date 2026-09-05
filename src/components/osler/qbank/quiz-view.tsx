@@ -292,6 +292,9 @@ export function QuizView({
   const [toolsOpen, setToolsOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+  // Tracks settings panels the SESSION TOUR auto-opened, so the panel is
+  // put away when the tour ends (panels the user opened themselves stay).
+  const tourOpenedSettingsRef = React.useRef(false);
 
   // Auto-open the session tour the very first time a quiz is launched
   React.useEffect(() => {
@@ -299,8 +302,7 @@ export function QuizView({
       const timer = setTimeout(() => setWalkthroughOpen(true), 600);
       return () => clearTimeout(timer);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // mount-only: check the completed flag once per session mount
   const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
@@ -1287,6 +1289,7 @@ export function QuizView({
 
         <button
           onClick={() => { haptic("selection"); onNavMobileChange(!navOpenMobile); }}
+          data-walkthrough="qbank-nav-mobile"
           className={`md:hidden size-8 rounded-lg flex items-center justify-center me-1 shrink-0 transition-colors ${
             navOpenMobile
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
@@ -1359,7 +1362,7 @@ export function QuizView({
         )}
 
         {!readonly && (
-          <>
+          <div className="flex items-center gap-1.5 sm:gap-2" data-walkthrough="qbank-annotate">
             {/* Unified highlighter: colors + eraser tool */}
             <HighlighterToolbar
               tone="header"
@@ -1387,7 +1390,7 @@ export function QuizView({
             >
               <NotebookPen className="size-3.5" />
             </button>
-          </>
+          </div>
         )}
       </header>
 
@@ -1412,7 +1415,7 @@ export function QuizView({
         />
 
         {/* Simple question navigator (left strip) */}
-        <div className="hidden md:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar">
+        <div className="hidden md:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar" data-walkthrough="qbank-nav-strip">
           <div className="flex-1 overflow-y-auto osler-scroll p-1 space-y-0.5">
             {session.questions.map((_, i) => {
               const ans = session.answers[i];
@@ -1709,7 +1712,7 @@ export function QuizView({
 
                 <Button
                   variant="outline" size="sm" onClick={onToggleFlag}
-                  data-walkthrough="qbank-navigator"
+                  data-walkthrough="qbank-flag"
                   className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning hover:bg-warning/15" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
                 >
@@ -1750,7 +1753,8 @@ export function QuizView({
             )}
 
             <Button
-              size="sm" onClick={goNext} className="h-9 rounded-lg"
+              size="sm" onClick={goNext} data-walkthrough="qbank-next"
+              className="h-9 rounded-lg"
               variant={readonly ? "default" : isLast ? "destructive" : "default"}
             >
               {readonly ? (
@@ -1783,7 +1787,7 @@ export function QuizView({
                 <Button
                   variant="outline" size="icon"
                   onClick={onToggleFlag}
-                  data-walkthrough="qbank-navigator"
+                  data-walkthrough="qbank-flag"
                   className={`size-10 rounded-lg shrink-0 osler-touch-target ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
@@ -1899,6 +1903,7 @@ export function QuizView({
               <Button
                 size="sm" onClick={goNext}
                 variant="default"
+                data-walkthrough="qbank-next"
                 className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {isLast ? t("qbank.review.exit") : t("common.next")}
@@ -1907,6 +1912,7 @@ export function QuizView({
             ) : !submitted && isMCQ ? (
               <Button
                 size="sm" onClick={onSubmit} disabled={selected === undefined}
+                data-walkthrough="qbank-next"
                 className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {t("qbank.session.submitAnswer")}
@@ -1914,6 +1920,7 @@ export function QuizView({
             ) : !submitted && !isMCQ && !qIsWritten ? (
               <Button
                 size="sm" onClick={onSubmit}
+                data-walkthrough="qbank-next"
                 className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submit")}
@@ -1922,6 +1929,7 @@ export function QuizView({
               <Button
                 size="sm" onClick={goNext}
                 variant={isLast ? "destructive" : "default"}
+                data-walkthrough="qbank-next"
                 className="flex-1 h-10 rounded-lg osler-touch-target"
               >
                 {isLast
@@ -1998,7 +2006,29 @@ export function QuizView({
       </AnimatePresence>
 
       <ReportTicketDialog open={reportOpen} onOpenChange={setReportOpen} source="qbank" context={reportContext} />
-      <WalkthroughDialog tour="qbank-session" open={walkthroughOpen} onOpenChange={setWalkthroughOpen} />
+      <WalkthroughDialog
+        tour="qbank-session"
+        open={walkthroughOpen}
+        onOpenChange={(nextOpen) => {
+          setWalkthroughOpen(nextOpen);
+          if (!nextOpen && tourOpenedSettingsRef.current) {
+            tourOpenedSettingsRef.current = false;
+            if (quizSettingsOpen) onToggleQuizSettings();
+          }
+        }}
+        onAction={(action) => {
+          if (action === "open-quiz-settings") {
+            if (!quizSettingsOpen) {
+              onToggleQuizSettings();
+              tourOpenedSettingsRef.current = true;
+            }
+          } else if (action === "close-quiz-settings") {
+            // The panel covers the footer on phones — put it away so the
+            // post-settings steps can spotlight their real targets.
+            if (quizSettingsOpen) onToggleQuizSettings();
+          }
+        }}
+      />
     </div>
   );
 }

@@ -173,176 +173,185 @@ export function QuizSettingsPanel({
         </button>
       </div>
 
-      {/* Scrollable settings body */}
+      {/* Scrollable settings body — the data-walkthrough anchors let the
+          session tour spotlight each section (auto-opening this panel via
+          the consumer's onEnterAction). */}
       <div className="flex-1 overflow-y-auto osler-scroll px-4 md:px-6 py-5 space-y-7">
         {/* Theme switcher — quick dark/light toggle at the top */}
-        <Section
-          icon={theme === "dark" ? Moon : Sun}
-          title={t("settings.theme.title")}
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setTheme("light")}
-              className={cn(
-                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
-                theme === "light"
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "border-border hover:border-primary/40 text-muted-foreground"
-              )}
-            >
-              <Sun className="size-4" />
-              <span className="text-xs font-medium">{t("settings.theme.light")}</span>
-            </button>
-            <button
-              onClick={() => setTheme("dark")}
-              className={cn(
-                "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
-                theme === "dark"
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "border-border hover:border-primary/40 text-muted-foreground"
-              )}
-            >
-              <Moon className="size-4" />
-              <span className="text-xs font-medium">{t("settings.theme.dark")}</span>
-            </button>
-          </div>
-        </Section>
-
-        {/* Typography */}
-        <Section
-          icon={Zap}
-          title={t("qbank.settings.section.typography")}
-          description={t("qbank.settings.section.typography.desc")}
-        >
-          {/* Font family */}
-          <Field label={t("qbank.settings.fontFamily")}>
-            <div className="grid grid-cols-4 gap-2">
-              {FONT_FAMILY_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => update({ fontFamily: opt.id })}
-                  className={cn(
-                    "flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border transition-all",
-                    settings.fontFamily === opt.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40"
-                  )}
-                >
-                  <span
-                    className="text-lg leading-none"
-                    style={{ fontFamily: opt.cssFamily }}
-                  >
-                    {opt.sample}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {t(`qbank.settings.fontFamily.${opt.id}`)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          {/* Font size — compact +/- stepper */}
-          <Field label={t("qbank.settings.fontSize")} hint={`${settings.fontSize}px`}>
-            <Stepper
-              value={settings.fontSize}
-              min={FONT_SIZE_MIN}
-              max={FONT_SIZE_MAX}
-              onDec={decFontSize}
-              onInc={incFontSize}
-            />
-          </Field>
-
-          {/* Font weight */}
-          <Field label={t("qbank.settings.fontWeight")}>
-            <div className="grid grid-cols-4 gap-2">
-              {FONT_WEIGHT_OPTIONS.map((w) => (
-                <button
-                  key={w.id}
-                  onClick={() => update({ fontWeight: w.id })}
-                  style={{ fontWeight: w.id }}
-                  className={cn(
-                    "px-2 py-2 rounded-lg border text-xs transition-all",
-                    settings.fontWeight === w.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40"
-                  )}
-                >
-                  {t(w.key as StringKey)}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          {/* Line height — compact +/- stepper */}
-          <Field label={t("qbank.settings.lineHeight")} hint={settings.lineHeight.toFixed(1)}>
-            <Stepper
-              value={settings.lineHeight}
-              min={LINE_HEIGHT_MIN}
-              max={LINE_HEIGHT_MAX}
-              step={LINE_HEIGHT_STEP}
-              format={(v) => v.toFixed(1)}
-              onDec={decLineHeight}
-              onInc={incLineHeight}
-            />
-          </Field>
-
-          {/* Apply to choices */}
-          <Field
-            label={t("qbank.settings.applyToChoices")}
-            description={t("qbank.settings.applyToChoices.desc")}
-            row
-          >
-            <Switch
-              checked={settings.textAffectsChoices}
-              onCheckedChange={(v) => update({ textAffectsChoices: v })}
-            />
-          </Field>
-        </Section>
-
-        {/* Behavior */}
-        <Section
-          icon={Zap}
-          title={t("qbank.settings.section.behavior")}
-          description={t("qbank.settings.section.behavior.desc")}
-        >
-          <Field
-            label={t("qbank.settings.autoSubmit")}
-            description={t("qbank.settings.autoSubmit.desc")}
-            row
-          >
-            <Switch
-              checked={settings.autoSubmit}
-              onCheckedChange={(v) => update({ autoSubmit: v })}
-            />
-          </Field>
-
-          <Field
-            label={t("qbank.settings.explanationLayout")}
-            description={t("qbank.settings.explanationLayout.desc")}
+        <div data-walkthrough="quiz-settings-theme">
+          <Section
+            icon={theme === "dark" ? Moon : Sun}
+            title={t("settings.theme.title")}
           >
             <div className="grid grid-cols-2 gap-2">
-              <LayoutOption
-                active={settings.explanationMode === "split"}
-                onClick={() => update({ explanationMode: "split" })}
-                icon={BookOpenText}
-                label={t("qbank.settings.explanation.split")}
-                description={t("qbank.settings.explanation.split.desc")}
-              />
-              <LayoutOption
-                active={settings.explanationMode === "continuous"}
-                onClick={() => update({ explanationMode: "continuous" })}
-                icon={ScrollText}
-                label={t("qbank.settings.explanation.continuous")}
-                description={t("qbank.settings.explanation.continuous.desc")}
-              />
+              <button
+                onClick={() => setTheme("light")}
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                  theme === "light"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border hover:border-primary/40 text-muted-foreground"
+                )}
+              >
+                <Sun className="size-4" />
+                <span className="text-xs font-medium">{t("settings.theme.light")}</span>
+              </button>
+              <button
+                onClick={() => setTheme("dark")}
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                  theme === "dark"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border hover:border-primary/40 text-muted-foreground"
+                )}
+              >
+                <Moon className="size-4" />
+                <span className="text-xs font-medium">{t("settings.theme.dark")}</span>
+              </button>
             </div>
-          </Field>
-        </Section>
+          </Section>
+        </div>
+
+        {/* Typography */}
+        <div data-walkthrough="quiz-settings-typography">
+          <Section
+            icon={Zap}
+            title={t("qbank.settings.section.typography")}
+            description={t("qbank.settings.section.typography.desc")}
+          >
+            {/* Font family */}
+            <Field label={t("qbank.settings.fontFamily")}>
+              <div className="grid grid-cols-4 gap-2">
+                {FONT_FAMILY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => update({ fontFamily: opt.id })}
+                    className={cn(
+                      "flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border transition-all",
+                      settings.fontFamily === opt.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
+                    )}
+                  >
+                    <span
+                      className="text-lg leading-none"
+                      style={{ fontFamily: opt.cssFamily }}
+                    >
+                      {opt.sample}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {t(`qbank.settings.fontFamily.${opt.id}`)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            {/* Font size — compact +/- stepper */}
+            <Field label={t("qbank.settings.fontSize")} hint={`${settings.fontSize}px`}>
+              <Stepper
+                value={settings.fontSize}
+                min={FONT_SIZE_MIN}
+                max={FONT_SIZE_MAX}
+                onDec={decFontSize}
+                onInc={incFontSize}
+              />
+            </Field>
+
+            {/* Font weight */}
+            <Field label={t("qbank.settings.fontWeight")}>
+              <div className="grid grid-cols-4 gap-2">
+                {FONT_WEIGHT_OPTIONS.map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => update({ fontWeight: w.id })}
+                    style={{ fontWeight: w.id }}
+                    className={cn(
+                      "px-2 py-2 rounded-lg border text-xs transition-all",
+                      settings.fontWeight === w.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
+                    )}
+                  >
+                    {t(w.key as StringKey)}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            {/* Line height — compact +/- stepper */}
+            <Field label={t("qbank.settings.lineHeight")} hint={settings.lineHeight.toFixed(1)}>
+              <Stepper
+                value={settings.lineHeight}
+                min={LINE_HEIGHT_MIN}
+                max={LINE_HEIGHT_MAX}
+                step={LINE_HEIGHT_STEP}
+                format={(v) => v.toFixed(1)}
+                onDec={decLineHeight}
+                onInc={incLineHeight}
+              />
+            </Field>
+
+            {/* Apply to choices */}
+            <Field
+              label={t("qbank.settings.applyToChoices")}
+              description={t("qbank.settings.applyToChoices.desc")}
+              row
+            >
+              <Switch
+                checked={settings.textAffectsChoices}
+                onCheckedChange={(v) => update({ textAffectsChoices: v })}
+              />
+            </Field>
+          </Section>
+        </div>
+
+        {/* Behavior */}
+        <div data-walkthrough="quiz-settings-behavior">
+          <Section
+            icon={Zap}
+            title={t("qbank.settings.section.behavior")}
+            description={t("qbank.settings.section.behavior.desc")}
+          >
+            <Field
+              label={t("qbank.settings.autoSubmit")}
+              description={t("qbank.settings.autoSubmit.desc")}
+              row
+            >
+              <Switch
+                checked={settings.autoSubmit}
+                onCheckedChange={(v) => update({ autoSubmit: v })}
+              />
+            </Field>
+
+            <Field
+              label={t("qbank.settings.explanationLayout")}
+              description={t("qbank.settings.explanationLayout.desc")}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <LayoutOption
+                  active={settings.explanationMode === "split"}
+                  onClick={() => update({ explanationMode: "split" })}
+                  icon={BookOpenText}
+                  label={t("qbank.settings.explanation.split")}
+                  description={t("qbank.settings.explanation.split.desc")}
+                />
+                <LayoutOption
+                  active={settings.explanationMode === "continuous"}
+                  onClick={() => update({ explanationMode: "continuous" })}
+                  icon={ScrollText}
+                  label={t("qbank.settings.explanation.continuous")}
+                  description={t("qbank.settings.explanation.continuous.desc")}
+                />
+              </div>
+            </Field>
+          </Section>
+        </div>
 
         {/* Alignment — hidden in 2-page (split) mode since alignment is forced to left there.
             Only shown in continuous mode where the alignment choice actually takes effect. */}
         {!isSplitMode && (
+          <div data-walkthrough="quiz-settings-alignment">
           <Section
             icon={AlignLeft}
             title={t("qbank.settings.section.alignment")}
@@ -370,6 +379,7 @@ export function QuizSettingsPanel({
               })}
             </div>
           </Section>
+          </div>
         )}
 
         {/* Reset */}
