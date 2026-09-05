@@ -36,7 +36,7 @@
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-import { SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
+import { SYNC_KINDS, RETIRED_SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
 import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
@@ -5646,11 +5646,20 @@ export default {
         ]);
         const currentByKind = new Map<string, { records: Record<string, any>; updatedAt: number }>();
         kindsToSync.forEach((kind, i) => { currentByKind.set(kind, currentDocs[i]); });
+        // Retired kinds (RETIRED_SYNC_KINDS): legacy per-kind docs are dead
+        // weight now that session-bound data rides inside the sessions doc.
+        // Drop the rows lazily — the sizeRows scan above already knows whether
+        // they exist — so they stop counting against the user's storage budget.
+        const retiredSet = new Set<string>(RETIRED_SYNC_KINDS);
+        const retiredCleanup = (sizeRows.results || []).some((row) => retiredSet.has(row?.kind ?? ""))
+          ? [env.DB.prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind IN ('highlights', 'writtenDrafts')").bind(session.user.id)]
+          : [];
         // Per-user storage budget: start from the raw bytes of stored docs NOT
         // being rewritten in this request, then add each merged doc's size.
         let projectedBytes = (sizeRows.results || []).reduce((sum, row) => {
           const kind = row?.kind ?? "";
-          return sum + (bodyKinds.has(kind) ? 0 : (Number(row?.raw_bytes) || 0));
+          // Retired rows are deleted by this same request — don't count them.
+          return sum + (bodyKinds.has(kind) || retiredSet.has(kind) ? 0 : (Number(row?.raw_bytes) || 0));
         }, 0);
         for (const kind of kindsToSync) {
           const local = body[kind].records;
@@ -5686,15 +5695,16 @@ export default {
           statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
           changedKinds.push(kind);
         }
-        if (statements.length) {
-          await env.DB.batch(statements);
+        if (statements.length || retiredCleanup.length) {
+          await env.DB.batch([...statements, ...retiredCleanup]);
           // Fire-and-forget poke: the user's other connected devices pull
           // immediately over the realtime hub (clients no longer idle-poll).
           // The pushing
           // connection (x-osler-realtime-conn) is skipped by the hub; a
           // missing binding (unmigrated instance) or hub failure must never
-          // fail the sync response itself.
-          if (env.USER_SYNC_HUB) {
+          // fail the sync response itself. Only pokes when a live kind
+          // actually changed — a cleanup-only batch needs no fan-out.
+          if (changedKinds.length && env.USER_SYNC_HUB) {
             ctx.waitUntil(env.USER_SYNC_HUB.getByName(session.user.id).notify(request.headers.get("x-osler-realtime-conn") ?? "", changedKinds).catch(() => {}));
           }
         }

@@ -83,11 +83,11 @@ describe("mergeKind — notes", () => {
   });
 });
 
-describe("mergeKind — highlights / articleHighlights", () => {
+describe("mergeKind — articleHighlights (item-list kinds)", () => {
   it("merges item lists by id and keeps the newer item", () => {
     const remote = { "u:q1": [{ id: "h1", text: "a", createdAt: 100 }, { id: "h2", text: "b", createdAt: 150 }] };
     const local = { "u:q1": [{ id: "h1", text: "a edited", createdAt: 200 }], "u:q2": [{ id: "h3", text: "c", createdAt: 50 }] };
-    const r = mergeKind(remote, local, "highlights");
+    const r = mergeKind(remote, local, "articleHighlights");
     expect(r.records["u:q1"]).toHaveLength(2);
     expect(r.records["u:q1"].find((h: any) => h.id === "h1").text).toBe("a edited");
     expect(r.records["u:q2"]).toHaveLength(1);
@@ -106,19 +106,19 @@ describe("mergeKind — highlights / articleHighlights", () => {
     const tombstone = { id: "h1", deletedAt: now - 1_000, updatedAt: now - 1_000 };
     const live = { id: "h1", text: "still there", color: "yellow", createdAt: now - 60_000 };
     // Push from the deleting device: server doc holds the live item.
-    const pushed = mergeKind({ "u:q1": [live] }, { "u:q1": [tombstone] }, "highlights");
+    const pushed = mergeKind({ "u:q1": [live] }, { "u:q1": [tombstone] }, "articleHighlights");
     expect(pushed.records["u:q1"].find((h: any) => h.id === "h1").deletedAt).toBe(now - 1_000);
     expect(pushed.changed).toBe(true);
     // Another device that missed the deletion pushes its stale live copy —
     // the tombstone must win so the highlight is not resurrected.
-    const stale = mergeKind({ "u:q1": [tombstone] }, { "u:q1": [live] }, "highlights");
+    const stale = mergeKind({ "u:q1": [tombstone] }, { "u:q1": [live] }, "articleHighlights");
     expect(stale.records["u:q1"].find((h: any) => h.id === "h1").deletedAt).toBe(now - 1_000);
   });
 
   it("keeps live items created after the tombstone (re-highlight is not suppressed)", () => {
     const tombstone = { id: "h1", deletedAt: 5_000, updatedAt: 5_000 };
     const rehighlight = { id: "h1", text: "new", color: "green", createdAt: 9_000 };
-    const r = mergeKind({ "u:q1": [tombstone] }, { "u:q1": [rehighlight] }, "highlights");
+    const r = mergeKind({ "u:q1": [tombstone] }, { "u:q1": [rehighlight] }, "articleHighlights");
     expect(r.records["u:q1"].find((h: any) => h.id === "h1").text).toBe("new");
   });
 
@@ -132,22 +132,6 @@ describe("mergeKind — highlights / articleHighlights", () => {
     // A stale device re-pushes its live copy — the tombstone wins.
     const stale = mergeKind({ n1: tombstone }, { n1: live }, "notes");
     expect(stale.records.n1.deletedAt).toBe(now);
-  });
-
-  it("writtenDrafts: a cleared draft's tombstone beats older live drafts, and a newer re-save wins", () => {
-    const now = Date.now();
-    const liveOld = { text: "draft", rubricChecked: [], submitted: false, updatedAt: now - 60_000 };
-    const tombstone = { deletedAt: now, updatedAt: now };
-    // Clearing device pushes its tombstone over the server's live draft.
-    const cleared = mergeKind({ pack1: { q1: liveOld } }, { pack1: { q1: tombstone } }, "writtenDrafts");
-    expect(cleared.records.pack1.q1.deletedAt).toBe(now);
-    // Stale device re-pushes the old live draft — stays cleared.
-    const stale = mergeKind({ pack1: { q1: tombstone } }, { pack1: { q1: liveOld } }, "writtenDrafts");
-    expect(stale.records.pack1.q1.deletedAt).toBe(now);
-    // Re-saving the draft afterwards (newer updatedAt) revives it.
-    const redraft = { text: "v2", rubricChecked: [true], submitted: false, updatedAt: now + 5_000 };
-    const revived = mergeKind({ pack1: { q1: tombstone } }, { pack1: { q1: redraft } }, "writtenDrafts");
-    expect(revived.records.pack1.q1.text).toBe("v2");
   });
 
   it("bookmarks: removal propagates via deletedAt and a later re-add revives", () => {
@@ -196,8 +180,8 @@ describe("mergeKind — bookmarks", () => {
 });
 
 describe("SYNC_KINDS", () => {
-  it("covers every kind merged by the worker", () => {
-    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "highlights", "articleHighlights", "writtenDrafts", "bookmarks", "achievements", "settings"]);
+  it("covers every kind merged by the worker (session-bound data rides in `sessions`)", () => {
+    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "articleHighlights", "bookmarks", "achievements", "settings"]);
   });
 });
 
@@ -215,25 +199,6 @@ describe("mergeKind — achievements", () => {
     const doc = { "first-steps": { id: "first-steps", unlockedAt: 100 } };
     const r = mergeKind(doc, doc, "achievements");
     expect(r.records["first-steps"].unlockedAt).toBe(100);
-    expect(r.changed).toBe(false);
-  });
-});
-
-describe("mergeKind — writtenDrafts", () => {
-  it("deep-merges a pack's draft map per question key, incoming wins on tie", () => {
-    const remote = { "pack1": { "q0": { text: "old", rubricChecked: [true], submitted: false }, "q1": { text: "keep", rubricChecked: [], submitted: true } } };
-    const local = { "pack1": { "q0": { text: "new", rubricChecked: [true], submitted: true } }, "pack2": { "q0": { text: "other", rubricChecked: [], submitted: false } } };
-    const r = mergeKind(remote, local, "writtenDrafts");
-    expect(r.records).toEqual({
-      "pack1": { "q0": { text: "new", rubricChecked: [true], submitted: true }, "q1": { text: "keep", rubricChecked: [], submitted: true } },
-      "pack2": { "q0": { text: "other", rubricChecked: [], submitted: false } },
-    });
-    expect(r.changed).toBe(true);
-  });
-
-  it("reports no change on a no-op re-push", () => {
-    const doc = { "pack1": { "q0": { text: "a", rubricChecked: [], submitted: true } } };
-    const r = mergeKind(doc, doc, "writtenDrafts");
     expect(r.changed).toBe(false);
   });
 });

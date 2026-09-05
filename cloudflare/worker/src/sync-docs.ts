@@ -11,15 +11,20 @@ export const SYNC_KINDS = [
   "flashcards",
   "sessions",
   "notes",
-  "highlights",
   "articleHighlights",
-  "writtenDrafts",
   "bookmarks",
   "achievements",
   "settings",
 ] as const;
 
 export type SyncKind = (typeof SYNC_KINDS)[number];
+
+/** Kinds retired from the sync protocol. Session-bound data (written drafts,
+ *  qbank highlights) now rides inside the `sessions` records. Legacy per-kind
+ *  rows are lazily deleted by the sync PUT handler so they stop counting
+ *  against the user's storage quota. Kept as data so the cleanup stays in
+ *  lockstep with this list. */
+export const RETIRED_SYNC_KINDS = ["highlights", "writtenDrafts"] as const;
 
 /* ── Merge ──────────────────────────────────────────────────────────── */
 
@@ -195,42 +200,11 @@ function normalizeBookmarkEntry(v: any): { a?: number; d?: number } {
   return { a: 0 };
 }
 
-/** Deep dict merge for nested key-value data (e.g. writtenDrafts:
- *  `Record<packUid, Record<questionIdx, WrittenDraft>>`). Leaves carry an
- *  optional `updatedAt` — when both sides have one, the newer wins (this is
- *  what lets a draft cleared on one device stay cleared: the tombstone's
- *  updatedAt out-ranks the older live draft); without timestamps the incoming
- *  value wins (legacy data), so repeated sync still converges. */
-function mergeDictDeep(remote: Record<string, any>, local: Record<string, any>, depth = 0): MergeResult {
-  if (depth > 4) return mergeUnion(remote, local);
-  const out: Record<string, any> = { ...remote };
-  let changed = false;
-  for (const [k, v] of Object.entries(local || {})) {
-    if (!isSafeRecordKey(k)) continue;
-    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
-      const sub = mergeDictDeep(out[k], v, depth + 1);
-      if (sub.changed) { out[k] = sub.records; changed = true; }
-    } else if (
-      v && typeof v === "object" && !Array.isArray(v) && typeof v.updatedAt === "number" &&
-      out[k] && typeof out[k] === "object" && !Array.isArray(out[k]) && typeof out[k].updatedAt === "number"
-    ) {
-      // LWW leaves: the tombstone's newer updatedAt keeps a deletion alive
-      // against an older live draft arriving from another device.
-      if (v.updatedAt >= out[k].updatedAt && JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
-    } else {
-      if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
-    }
-  }
-  const json = changed ? JSON.stringify(out) : "";
-  return { records: out, changed, json };
-}
-
 export function mergeKind(remote: Record<string, any>, local: Record<string, any>, kind: SyncKind): MergeResult {
   const cfg = TIMESTAMP_KIND[kind];
   if (cfg) return mergeBy(remote, local, cfg);
   if (kind === "bookmarks") return mergeBookmarkEntries(remote, local);
   if (kind === "settings") return mergeUnion(remote, local);
-  if (kind === "writtenDrafts") return mergeDictDeep(remote, local);
   return mergeItemArrays(remote, local);
 }
 
