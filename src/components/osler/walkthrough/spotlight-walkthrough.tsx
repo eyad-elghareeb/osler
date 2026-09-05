@@ -3,14 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Compass,
-  X,
-  Info,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
@@ -74,10 +67,11 @@ export function SpotlightWalkthrough({
   onStepChange,
   onAction,
 }: SpotlightWalkthroughProps) {
-  const { t, rtl } = useI18n();
+  const { t } = useI18n();
   const [mounted, setMounted] = React.useState(false);
   const [index, setIndex] = React.useState(0);
-  const [dir, setDir] = React.useState(1);
+  // Bumping pulseKey replays the "tap me" bounce animation on the halo
+  const [pulseKey, setPulseKey] = React.useState(0);
   const [spotlightRect, setSpotlightRect] = React.useState<SpotlightRect>({
     top: 0,
     left: 0,
@@ -89,141 +83,83 @@ export function SpotlightWalkthrough({
   const steps = React.useMemo(() => getTourSteps(tour), [tour]);
   const total = steps.length;
   const currentStep = steps[index] ?? steps[0];
-  const isFirst = index === 0;
   const isLast = index === total - 1;
 
-  // Mount detection for client portal
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  React.useEffect(() => { setMounted(true); }, []);
 
-  // Reset index when opened
   React.useEffect(() => {
     if (open) {
       setIndex(0);
-      setDir(1);
+      setPulseKey(0);
     }
   }, [open]);
 
-  // Handle step triggers & notify parent
   React.useEffect(() => {
     if (!open || !currentStep) return;
-    if (currentStep.onEnterTab && onAction) {
-      onAction(currentStep.onEnterTab);
-    }
+    if (currentStep.onEnterTab && onAction) onAction(currentStep.onEnterTab);
     onStepChange?.(currentStep, index);
-  }, [open, index, currentStep, onAction, onStepChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, index]);
 
-  // Target element bounding box resolution & auto-scroll
+  // ── Target bounding box ──────────────────────────────────────────────────
   const updateTargetRect = React.useCallback(() => {
     if (!open || !currentStep) return;
-
-    const selector = currentStep.targetSelector;
-    let targetEl: HTMLElement | null = null;
-
-    if (selector) {
-      try {
-        targetEl = document.querySelector<HTMLElement>(selector);
-      } catch {
-        targetEl = null;
-      }
+    let el: HTMLElement | null = null;
+    if (currentStep.targetSelector) {
+      try { el = document.querySelector<HTMLElement>(currentStep.targetSelector); } catch { /* ignore */ }
     }
-
-    if (targetEl) {
-      const rect = targetEl.getBoundingClientRect();
-      const padding = currentStep.highlightPadding ?? 8;
-      const isVisible =
-        rect.width > 0 &&
-        rect.height > 0 &&
-        rect.top >= 0 &&
-        rect.bottom <= window.innerHeight &&
-        rect.left >= 0 &&
-        rect.right <= window.innerWidth;
-
-      if (!isVisible) {
-        targetEl.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-          inline: "nearest",
-        });
-      }
-
-      setSpotlightRect({
-        top: Math.max(0, rect.top - padding),
-        left: Math.max(0, rect.left - padding),
-        width: rect.width + padding * 2,
-        height: rect.height + padding * 2,
-        found: true,
-      });
+    if (el) {
+      const r = el.getBoundingClientRect();
+      const p = currentStep.highlightPadding ?? 8;
+      const visible =
+        r.width > 0 && r.height > 0 &&
+        r.top >= 0 && r.bottom <= window.innerHeight &&
+        r.left >= 0 && r.right <= window.innerWidth;
+      if (!visible) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setSpotlightRect({ top: Math.max(0, r.top - p), left: Math.max(0, r.left - p), width: r.width + p * 2, height: r.height + p * 2, found: true });
     } else {
-      // Fallback: centered spotlight or viewport center
-      setSpotlightRect({
-        top: Math.max(0, window.innerHeight / 2 - 120),
-        left: Math.max(0, window.innerWidth / 2 - 160),
-        width: 320,
-        height: 240,
-        found: false,
-      });
+      setSpotlightRect({ top: 0, left: 0, width: 0, height: 0, found: false });
     }
   }, [open, currentStep]);
 
-  // Target element tracking with ResizeObserver, window resize, and scroll listeners
   React.useEffect(() => {
     if (!open) return;
-
     updateTargetRect();
-    const timer1 = setTimeout(updateTargetRect, 60);
-    const timer2 = setTimeout(updateTargetRect, 220);
-
-    const onScrollOrResize = () => {
-      updateTargetRect();
-    };
-
-    window.addEventListener("resize", onScrollOrResize, { passive: true });
-    window.addEventListener("scroll", onScrollOrResize, { passive: true, capture: true });
-
-    let observer: ResizeObserver | null = null;
-    const selector = currentStep?.targetSelector;
-    if (selector) {
+    const t1 = setTimeout(updateTargetRect, 60);
+    const t2 = setTimeout(updateTargetRect, 250);
+    const onUpdate = () => updateTargetRect();
+    window.addEventListener("resize", onUpdate, { passive: true });
+    window.addEventListener("scroll", onUpdate, { passive: true, capture: true });
+    let obs: ResizeObserver | null = null;
+    if (currentStep?.targetSelector) {
       try {
-        const el = document.querySelector<HTMLElement>(selector);
+        const el = document.querySelector<HTMLElement>(currentStep.targetSelector);
         if (el && typeof ResizeObserver !== "undefined") {
-          observer = new ResizeObserver(() => updateTargetRect());
-          observer.observe(el);
+          obs = new ResizeObserver(onUpdate);
+          obs.observe(el);
         }
-      } catch {
-        // Ignore invalid selectors
-      }
+      } catch { /* ignore */ }
     }
-
     return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      window.removeEventListener("resize", onScrollOrResize);
-      window.removeEventListener("scroll", onScrollOrResize, { capture: true });
-      observer?.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", onUpdate);
+      window.removeEventListener("scroll", onUpdate, { capture: true });
+      obs?.disconnect();
     };
   }, [open, index, currentStep, updateTargetRect]);
 
+  // ── Advance ──────────────────────────────────────────────────────────────
   const handleNext = React.useCallback(() => {
     if (isLast) {
       markWalkthroughCompleted(tour);
       haptic("success");
       onOpenChange(false);
     } else {
-      setDir(1);
       setIndex((i) => Math.min(total - 1, i + 1));
       haptic("selection");
     }
   }, [isLast, total, tour, onOpenChange]);
-
-  const handlePrev = React.useCallback(() => {
-    if (!isFirst) {
-      setDir(-1);
-      setIndex((i) => Math.max(0, i - 1));
-      haptic("selection");
-    }
-  }, [isFirst]);
 
   const handleSkip = React.useCallback(() => {
     markWalkthroughCompleted(tour);
@@ -231,444 +167,195 @@ export function SpotlightWalkthrough({
     onOpenChange(false);
   }, [tour, onOpenChange]);
 
-  // Keyboard navigation
+  // ── Capture-phase click listener: detect taps inside spotlight rect ───────
+  // The SVG dim is pointer-events:none, so the real button underneath is
+  // naturally clickable. We listen at window capture phase to detect the click
+  // and call handleNext() after letting it through to the real button.
+  React.useEffect(() => {
+    if (!open || !spotlightRect.found) return;
+    const onCapture = (e: MouseEvent) => {
+      const { clientX: x, clientY: y } = e;
+      const { top, left, width, height } = spotlightRect;
+      const inSpot = x >= left && x <= left + width && y >= top && y <= top + height;
+      if (inSpot) requestAnimationFrame(handleNext);
+    };
+    window.addEventListener("click", onCapture, { capture: true });
+    return () => window.removeEventListener("click", onCapture, { capture: true });
+  }, [open, spotlightRect, handleNext]);
+
+  // ── Backdrop click: pulse the halo instead of advancing ──────────────────
+  const handleBackdropClick = React.useCallback(() => {
+    haptic("light");
+    setPulseKey((k) => k + 1);
+  }, []);
+
+  // ── Escape ───────────────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        handleSkip();
-      } else if (e.key === "ArrowRight") {
-        if (rtl) handlePrev();
-        else handleNext();
-      } else if (e.key === "ArrowLeft") {
-        if (rtl) handleNext();
-        else handlePrev();
-      } else if (e.key === "Enter") {
-        handleNext();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, rtl, handleNext, handlePrev, handleSkip]);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") handleSkip(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, handleSkip]);
 
-  // Touch gesture swipe handling for mobile
-  const touchStartX = React.useRef<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const touchEndX = e.changedTouches[0].clientX;
-    const diff = touchEndX - touchStartX.current;
-    const threshold = 45;
-
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0) {
-        if (rtl) handleNext();
-        else handlePrev();
-      } else {
-        if (rtl) handlePrev();
-        else handleNext();
-      }
-    }
-    touchStartX.current = null;
-  };
-
-  // Smart Popper Placement Calculation
+  // ── Card placement ───────────────────────────────────────────────────────
   const cardPosition = React.useMemo(() => {
-    if (typeof window === "undefined") return { top: 0, left: 0, placement: "bottom", cardWidth: 380 };
-
+    if (typeof window === "undefined") return { top: 0, left: 0, placement: "bottom" as const, cardWidth: 300 };
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const cardWidth = Math.min(420, vw - 32);
-    const cardHeight = 360;
-    const gap = 16;
-    const isMobile = vw < 640;
+    const cardWidth = Math.min(300, vw - 32);
+    const cardHeight = 120;
+    const gap = 14;
 
-    if (!spotlightRect.found || isMobile) {
-      if (spotlightRect.found && spotlightRect.top > vh / 2) {
-        return {
-          top: 24,
-          left: Math.max(16, (vw - cardWidth) / 2),
-          placement: "top" as const,
-          cardWidth,
-        };
-      }
-      return {
-        top: Math.max(24, vh - cardHeight - 24),
-        left: Math.max(16, (vw - cardWidth) / 2),
-        placement: "bottom" as const,
-        cardWidth,
-      };
+    if (!spotlightRect.found) {
+      return { top: Math.max(24, vh - cardHeight - 32), left: Math.max(16, (vw - cardWidth) / 2), placement: "bottom" as const, cardWidth };
     }
 
     const spaceBelow = vh - (spotlightRect.top + spotlightRect.height);
     const spaceAbove = spotlightRect.top;
-    const spaceRight = vw - (spotlightRect.left + spotlightRect.width);
-    const spaceLeft = spotlightRect.left;
+    const raw = currentStep.preferredPlacement;
+    let placement: "top" | "bottom" | "left" | "right" = raw && raw !== "auto" ? raw : "bottom";
 
-    const rawPlacement = currentStep.preferredPlacement;
-    let placement: "top" | "bottom" | "left" | "right" =
-      rawPlacement && rawPlacement !== "auto" ? rawPlacement : "bottom";
-
-    if (placement === "bottom" && spaceBelow < cardHeight && spaceAbove > spaceBelow) {
-      placement = "top";
-    } else if (placement === "top" && spaceAbove < cardHeight && spaceBelow > spaceAbove) {
-      placement = "bottom";
-    } else if (placement === "right" && spaceRight < cardWidth && spaceLeft > spaceRight) {
-      placement = "left";
-    } else if (placement === "left" && spaceLeft < cardWidth && spaceRight > spaceLeft) {
-      placement = "right";
-    }
+    if (placement === "bottom" && spaceBelow < cardHeight && spaceAbove > spaceBelow) placement = "top";
+    else if (placement === "top" && spaceAbove < cardHeight && spaceBelow > spaceAbove) placement = "bottom";
 
     let top = 0;
     let left = 0;
+    if (placement === "bottom") { top = spotlightRect.top + spotlightRect.height + gap; left = spotlightRect.left + spotlightRect.width / 2 - cardWidth / 2; }
+    else if (placement === "top") { top = spotlightRect.top - cardHeight - gap; left = spotlightRect.left + spotlightRect.width / 2 - cardWidth / 2; }
+    else if (placement === "right") { top = spotlightRect.top + spotlightRect.height / 2 - cardHeight / 2; left = spotlightRect.left + spotlightRect.width + gap; }
+    else { top = spotlightRect.top + spotlightRect.height / 2 - cardHeight / 2; left = spotlightRect.left - cardWidth - gap; }
 
-    if (placement === "bottom") {
-      top = spotlightRect.top + spotlightRect.height + gap;
-      left = spotlightRect.left + spotlightRect.width / 2 - cardWidth / 2;
-    } else if (placement === "top") {
-      top = spotlightRect.top - cardHeight - gap;
-      left = spotlightRect.left + spotlightRect.width / 2 - cardWidth / 2;
-    } else if (placement === "right") {
-      top = spotlightRect.top + spotlightRect.height / 2 - cardHeight / 2;
-      left = spotlightRect.left + spotlightRect.width + gap;
-    } else if (placement === "left") {
-      top = spotlightRect.top + spotlightRect.height / 2 - cardHeight / 2;
-      left = spotlightRect.left - cardWidth - gap;
-    }
-
-    // Viewport boundary containment
-    top = Math.max(16, Math.min(vh - cardHeight - 16, top));
-    left = Math.max(16, Math.min(vw - cardWidth - 16, left));
-
-    return { top, left, placement, cardWidth };
+    return { top: Math.max(16, Math.min(vh - cardHeight - 16, top)), left: Math.max(16, Math.min(vw - cardWidth - 16, left)), placement, cardWidth };
   }, [spotlightRect, currentStep]);
 
   if (!mounted || !open) return null;
 
-  const StepMainIcon = currentStep.mainIcon;
+  const StepIcon = currentStep.mainIcon;
   const radius = currentStep.highlightRadius ?? 12;
 
-  const overlayContent = (
-    <div
-      className="fixed inset-0 z-[9999] overflow-hidden select-none"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("walkthrough.trigger")}
-    >
-      {/* ── 1. Hardware-Accelerated SVG Cutout Mask (Dims entire screen except active UI) ── */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        aria-hidden="true"
-      >
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] overflow-hidden" role="dialog" aria-modal="true" aria-label={t("walkthrough.trigger")}>
+
+      {/* ── Dim overlay with SVG cutout (pointer-events:none so real button is clickable) ── */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
         <defs>
-          <mask id="osler-spotlight-cutout">
-            {/* White fills everything (opaque mask) */}
+          <mask id="osler-spotlight-mask">
             <rect x="0" y="0" width="100%" height="100%" fill="#ffffff" />
-            {/* Black cuts out the spotlight hole with smooth transition */}
             {spotlightRect.found && (
               <rect
-                x={spotlightRect.left}
-                y={spotlightRect.top}
-                width={spotlightRect.width}
-                height={spotlightRect.height}
-                rx={radius}
-                ry={radius}
-                fill="#000000"
-                style={{
-                  transition: "x 0.28s cubic-bezier(0.32, 0.72, 0, 1), y 0.28s cubic-bezier(0.32, 0.72, 0, 1), width 0.28s cubic-bezier(0.32, 0.72, 0, 1), height 0.28s cubic-bezier(0.32, 0.72, 0, 1)",
-                }}
+                x={spotlightRect.left} y={spotlightRect.top}
+                width={spotlightRect.width} height={spotlightRect.height}
+                rx={radius} ry={radius} fill="#000000"
+                style={{ transition: "x 0.25s cubic-bezier(0.32,0.72,0,1),y 0.25s cubic-bezier(0.32,0.72,0,1),width 0.25s cubic-bezier(0.32,0.72,0,1),height 0.25s cubic-bezier(0.32,0.72,0,1)" }}
               />
             )}
           </mask>
         </defs>
-        {/* Dark Dimmed Backdrop with Cutout */}
-        <rect
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          fill="rgba(5, 12, 24, 0.78)"
-          mask="url(#osler-spotlight-cutout)"
-          className="backdrop-blur-[1.5px]"
-        />
+        <rect x="0" y="0" width="100%" height="100%" fill="rgba(5,12,24,0.82)" mask="url(#osler-spotlight-mask)" />
       </svg>
 
-      {/* ── 2. Click-away background layer to advance / dismiss ── */}
-      <div
-        className="absolute inset-0 z-10 cursor-pointer"
-        onClick={handleNext}
-        aria-hidden="true"
-      />
+      {/* ── Backdrop click catcher — only covers dimmed area (below halo z-index) ── */}
+      <div className="absolute inset-0 z-10" aria-hidden="true" onClick={handleBackdropClick} />
 
-      {/* ── 3. Animated Spotlight Glowing Halo Ring ── */}
+      {/* ── Halo ring (pointer-events:none so clicks pass through to real button) ── */}
       {spotlightRect.found && (
         <motion.div
-          layoutId="osler-spotlight-halo"
+          key={`halo-${index}`}
           initial={false}
-          animate={{
-            top: spotlightRect.top,
-            left: spotlightRect.left,
-            width: spotlightRect.width,
-            height: spotlightRect.height,
-          }}
+          animate={{ top: spotlightRect.top, left: spotlightRect.left, width: spotlightRect.width, height: spotlightRect.height }}
           transition={MOTION_SPRING.snappy}
-          style={{ borderRadius: radius }}
-          className={cn(
-            "absolute z-20 pointer-events-auto cursor-pointer",
-            "border-2 border-primary ring-4 ring-primary/30",
-            "shadow-[0_0_35px_rgba(var(--primary-rgb),0.55),inset_0_0_15px_rgba(var(--primary-rgb),0.2)]",
-            "transition-shadow duration-300 hover:ring-primary/50"
-          )}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleNext();
-          }}
-          title={t("walkthrough.clickToContinue")}
+          style={{ borderRadius: radius, position: "absolute" }}
+          className="z-20 pointer-events-none border-2 border-primary/90 ring-[3px] ring-primary/20"
+          aria-hidden="true"
         >
-          {/* Subtle pulsating beacon dot */}
-          <span className="absolute -top-1.5 -right-1.5 flex size-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-            <span className="relative inline-flex rounded-full size-3.5 bg-primary border-2 border-background" />
-          </span>
+          {/* Pulse beacon */}
+          <motion.span
+            key={`beacon-${pulseKey}`}
+            className="absolute -top-1.5 -right-1.5 flex size-3"
+            animate={pulseKey > 0 ? { scale: [1, 1.8, 1], opacity: [1, 0.4, 1] } : {}}
+            transition={{ duration: 0.4 }}
+          >
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-70" />
+            <span className="relative inline-flex rounded-full size-3 bg-primary border-2 border-background" />
+          </motion.span>
         </motion.div>
       )}
 
-      {/* ── 4. Interactive Floating Coach Mark Card ── */}
-      <motion.div
-        layout
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="osler-walkthrough-title"
-        aria-describedby="osler-walkthrough-desc"
-        tabIndex={-1}
-        initial={{ opacity: 0, scale: 0.94, y: dir * 12 }}
-        animate={{
-          opacity: 1,
-          scale: 1,
-          y: 0,
-          top: cardPosition.top,
-          left: cardPosition.left,
-          width: cardPosition.cardWidth,
-        }}
-        exit={{ opacity: 0, scale: 0.94 }}
-        transition={MOTION_TRANSITION.normal}
-        className={cn(
-          "absolute z-30 rounded-2xl border border-border/80 bg-card shadow-2xl overflow-visible",
-          "max-h-[85vh] flex flex-col pointer-events-auto",
-          "focus-visible:outline-none"
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Directional arrow notch pointing to spotlight */}
-        {spotlightRect.found && cardPosition.placement === "bottom" && (
-          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 border-t border-l border-border/80 bg-card z-20 pointer-events-none" />
-        )}
-        {spotlightRect.found && cardPosition.placement === "top" && (
-          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 border-b border-r border-border/80 bg-card z-20 pointer-events-none" />
-        )}
-        {spotlightRect.found && cardPosition.placement === "right" && (
-          <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 size-3 rotate-45 border-b border-l border-border/80 bg-card z-20 pointer-events-none" />
-        )}
-        {spotlightRect.found && cardPosition.placement === "left" && (
-          <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 size-3 rotate-45 border-t border-r border-border/80 bg-card z-20 pointer-events-none" />
-        )}
+      {/* ── Coach mark card ── */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={index}
+          role="status"
+          aria-live="polite"
+          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1, top: cardPosition.top, left: cardPosition.left, width: cardPosition.cardWidth }}
+          exit={{ opacity: 0, y: -4, scale: 0.96 }}
+          transition={MOTION_TRANSITION.normal}
+          className="absolute z-30 pointer-events-auto rounded-2xl border border-border/70 bg-card/95 backdrop-blur-sm shadow-xl px-4 py-3 flex flex-col gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Arrow notch */}
+          {spotlightRect.found && cardPosition.placement === "bottom" && (
+            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 border-t border-l border-border/70 bg-card pointer-events-none" />
+          )}
+          {spotlightRect.found && cardPosition.placement === "top" && (
+            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 size-3 rotate-45 border-b border-r border-border/70 bg-card pointer-events-none" />
+          )}
+          {spotlightRect.found && cardPosition.placement === "right" && (
+            <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 size-3 rotate-45 border-b border-l border-border/70 bg-card pointer-events-none" />
+          )}
+          {spotlightRect.found && cardPosition.placement === "left" && (
+            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 size-3 rotate-45 border-t border-r border-border/70 bg-card pointer-events-none" />
+          )}
 
-        {/* Ambient Top Glow */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden opacity-40"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 70%)",
-          }}
-        />
-
-        {/* Card Header */}
-        <div className="relative z-10 px-4 sm:px-5 pt-4 pb-3 border-b border-border/60 bg-muted/30">
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 truncate">
-                <Compass className="size-3.5 shrink-0" />
-                <span className="truncate">{t(currentStep.badgeKey)}</span>
-              </span>
-              <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                {t("walkthrough.step", { current: index + 1, total })}
-              </span>
+          {/* Icon + step count + title + skip */}
+          <div className="flex items-start gap-2.5">
+            <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+              <StepIcon className="size-4" />
             </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSkip}
-              className="text-muted-foreground hover:text-foreground text-xs h-7 px-2 rounded-lg shrink-0"
-              title={t("walkthrough.skip")}
-            >
-              <span>{t("walkthrough.skip")}</span>
-              <X className="size-3.5 ms-1" />
-            </Button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-[10px] font-medium text-muted-foreground tabular-nums tracking-wide uppercase">
+                  {t("walkthrough.step", { current: index + 1, total })}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  onClick={handleSkip}
+                  className="text-muted-foreground hover:text-foreground -mt-0.5 -mr-1.5 shrink-0"
+                  title={t("walkthrough.skip")}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+              <h3 className="text-sm font-semibold text-foreground leading-tight mt-0.5">
+                {t(currentStep.titleKey)}
+              </h3>
+            </div>
           </div>
 
-          {/* Stepped Progress Bar */}
-          <div className="w-full bg-muted rounded-full h-1 overflow-hidden flex gap-1">
+          {/* 1-line subtitle */}
+          <p className="text-xs text-muted-foreground leading-relaxed ps-[42px]">
+            {t(currentStep.subtitleKey)}
+          </p>
+
+          {/* Progress segments */}
+          <div className="flex gap-1 ps-[42px]">
             {steps.map((_, i) => (
               <div
                 key={i}
                 className={cn(
-                  "h-full rounded-full transition-all duration-300 flex-1",
-                  i <= index ? "bg-primary" : "bg-muted-foreground/20"
+                  "h-0.5 flex-1 rounded-full transition-all duration-300",
+                  i <= index ? "bg-primary" : "bg-muted-foreground/20",
                 )}
               />
             ))}
           </div>
-        </div>
-
-        {/* Card Body */}
-        <div className="relative z-10 p-4 sm:p-5 overflow-y-auto osler-scroll space-y-3.5 max-h-[55vh]">
-          {/* Step Title Header */}
-          <div className="flex items-start gap-3">
-            <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 shadow-xs border border-primary/20 mt-0.5">
-              <StepMainIcon className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 id="osler-walkthrough-title" className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-snug">
-                {t(currentStep.titleKey)}
-              </h3>
-              <p id="osler-walkthrough-desc" className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
-                {t(currentStep.subtitleKey)}
-              </p>
-            </div>
-          </div>
-
-          {/* Key Feature Highlights */}
-          {currentStep.features && currentStep.features.length > 0 && (
-            <div className="space-y-2 pt-1">
-              {currentStep.features.map((feat, fIdx) => {
-                const FeatIcon = feat.icon;
-                return (
-                  <div
-                    key={fIdx}
-                    className="rounded-xl border border-border/80 bg-muted/30 p-2.5 flex items-start gap-2.5 text-xs transition-colors hover:bg-muted/50"
-                  >
-                    <div className="size-6 rounded-lg bg-background text-primary border border-border flex items-center justify-center shrink-0 mt-0.5">
-                      <FeatIcon className="size-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-foreground">
-                          {t(feat.titleKey)}
-                        </span>
-                        {feat.tag && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">
-                            {feat.tag}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-muted-foreground text-[11px] mt-0.5 leading-relaxed">
-                        {t(feat.descKey)}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Pro Tip / Settings Callout */}
-          {currentStep.tip && (
-            <div
-              className={cn(
-                "rounded-xl border p-2.5 flex items-start gap-2 text-xs",
-                currentStep.tip.type === "settings"
-                  ? "bg-primary/5 border-primary/20 text-foreground"
-                  : "bg-warning/5 border-warning/20 text-foreground"
-              )}
-            >
-              <currentStep.tip.icon
-                className={cn(
-                  "size-4 shrink-0 mt-0.5",
-                  currentStep.tip.type === "settings" ? "text-primary" : "text-warning"
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <span className="font-semibold block text-[11px] mb-0.5">
-                  {t(currentStep.tip.titleKey)}
-                </span>
-                <span className="text-muted-foreground text-[11px] leading-relaxed block">
-                  {t(currentStep.tip.bodyKey)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Action Hint */}
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80 pt-1">
-            <Info className="size-3.5 text-primary shrink-0" />
-            <span>{t("walkthrough.clickToContinue")}</span>
-          </div>
-        </div>
-
-        {/* Card Footer Navigation */}
-        <div className="relative z-10 border-t border-border/60 bg-muted/20 px-4 sm:px-5 py-3 flex items-center justify-between gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrev}
-            disabled={isFirst}
-            className="h-8 px-3 rounded-xl gap-1 text-xs"
-          >
-            <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
-            <span>{t("walkthrough.back")}</span>
-          </Button>
-
-          {/* Step Dots */}
-          <div className="hidden xs:flex items-center gap-1">
-            {steps.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  setDir(i > index ? 1 : -1);
-                  setIndex(i);
-                  haptic("selection");
-                }}
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-300",
-                  i === index ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50"
-                )}
-                aria-label={`Step ${i + 1}`}
-              />
-            ))}
-          </div>
-
-          <Button
-            size="sm"
-            onClick={handleNext}
-            className="h-8 px-3.5 rounded-xl gap-1.5 text-xs font-semibold shadow-xs"
-          >
-            {isLast ? (
-              <>
-                <Check className="size-3.5" />
-                <span>{t("walkthrough.finish")}</span>
-              </>
-            ) : (
-              <>
-                <span>{t("walkthrough.next")}</span>
-                <ArrowRight className={cn("size-3.5", rtl && "rtl-flip-x")} />
-              </>
-            )}
-          </Button>
-        </div>
-      </motion.div>
-    </div>
+        </motion.div>
+      </AnimatePresence>
+    </div>,
+    document.body,
   );
-
-  return createPortal(overlayContent, document.body);
 }
 
 // Backwards-compatible alias so existing components continue to work

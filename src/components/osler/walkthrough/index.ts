@@ -16,5 +16,4 @@ export {
   getTourSteps,
   type TourId,
   type WalkthroughStep,
-  type WalkthroughFeature,
 } from "./walkthrough-steps";

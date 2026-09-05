@@ -36,7 +36,7 @@ import type { QuestionChoiceStats } from "@/lib/osler/question-stats";
 import { WrittenEngineView, WrittenEvaluationPanel } from "./written-engine";
 import { OsceEngineView } from "./osce-engine-view";
 import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
-import { WalkthroughDialog } from "@/components/osler/walkthrough";
+import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
 
 
 
@@ -292,6 +292,15 @@ export function QuizView({
   const [toolsOpen, setToolsOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+
+  // Auto-open the session tour the very first time a quiz is launched
+  React.useEffect(() => {
+    if (!isWalkthroughCompleted("qbank-session")) {
+      const timer = setTimeout(() => setWalkthroughOpen(true), 600);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
