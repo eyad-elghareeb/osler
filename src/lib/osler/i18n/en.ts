@@ -3253,6 +3253,9 @@ export const en = {
     "walkthrough.step": "Step {current} of {total}",
     "walkthrough.dontShowAgain": "Don't show automatically again",
     "walkthrough.trigger": "Interactive Guide",
+    "walkthrough.clickToContinue": "Click highlighted element or Next to continue",
+    "walkthrough.coachTip": "Pro Tip",
+    "walkthrough.keyNav": "Use ← → or Enter to navigate",
     "walkthrough.settingsTipTitle": "How to change settings",
     "walkthrough.reportTipTitle": "How to report problems",
     "walkthrough.preview.live": "Live Preview",
@@ -3263,6 +3266,19 @@ export const en = {
     "walkthrough.preview.editorialReview": "Editorial Review",
     "walkthrough.preview.offlineExport": "Offline & PDF",
     "walkthrough.preview.ready": "Ready",
+
+    // QBank Hub Walkthrough
+    "walkthrough.qbankHub.badge": "QBank Hub Guide",
+    "walkthrough.qbankHub.step1.title": "Study Modes & Navigation Tabs",
+    "walkthrough.qbankHub.step1.subtitle": "Switch between browsing official question packs, building custom practice exams, and tracking score history.",
+    "walkthrough.qbankHub.step2.title": "Medical Specialty Question Packs",
+    "walkthrough.qbankHub.step2.subtitle": "Explore categorized question banks by clinical discipline, organ system, or exam paper.",
+    "walkthrough.qbankHub.step3.title": "Custom Test Builder",
+    "walkthrough.qbankHub.step3.subtitle": "Tailor practice blocks: select specific specialties, question counts, difficulty, and unused or incorrect questions.",
+    "walkthrough.qbankHub.step4.title": "Performance Analytics & History",
+    "walkthrough.qbankHub.step4.subtitle": "Review previous test results, score progression graphs, and resume paused sessions at any time.",
+    "walkthrough.qbankHub.step5.title": "Interactive Guide Trigger",
+    "walkthrough.qbankHub.step5.subtitle": "Need a refresher? Tap the compass icon anytime to replay this interactive guided walkthrough.",
 
     // QBank Walkthrough
     "walkthrough.qbank.badge": "QBank Walkthrough",

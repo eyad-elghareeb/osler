@@ -207,6 +207,7 @@ export function HomeView({
                 <Button
                   variant="outline"
                   size="sm"
+                  data-walkthrough="qbank-guide-btn"
                   onClick={() => {
                     haptic("selection");
                     setWalkthroughOpen(true);
@@ -236,7 +237,7 @@ export function HomeView({
               of active tabs flush with the container's border-b. */}
           <div className="-mb-px grid grid-cols-[1fr_auto_1fr]">
             <div />
-            <nav className="flex">
+            <nav className="flex" data-walkthrough="qbank-tabs">
               {[
                 { id: "content" as const, label: t("qbank.home.tabContent"), icon: Grid3x3 },
                 { id: "create" as const, label: t("qbank.home.tabCreate"), icon: Plus },
@@ -247,6 +248,7 @@ export function HomeView({
                 return (
                   <button
                     key={tab.id}
+                    data-walkthrough={`qbank-${tab.id}-tab-btn`}
                     onClick={() => onHomeTabChange(tab.id)}
                     className={cn(
                       "flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors",
@@ -277,15 +279,17 @@ export function HomeView({
             className="h-full"
           >
               {homeTab === "content" && (
-                <ContentTab
-                  data={data}
-                  onLoadPack={loadPack}
-                  onOpenPack={onOpenPack}
-                  onPickForCreateTest={onPickForCreateTest}
-                />
+                <div data-walkthrough="qbank-packs" className="h-full">
+                  <ContentTab
+                    data={data}
+                    onLoadPack={loadPack}
+                    onOpenPack={onOpenPack}
+                    onPickForCreateTest={onPickForCreateTest}
+                  />
+                </div>
               )}
               {homeTab === "create" && (
-                <div className="osler-page">
+                <div className="osler-page" data-walkthrough="qbank-create">
                   <div className="osler-page__inner">
                     <CreateTestTab
                       data={data}
@@ -302,7 +306,7 @@ export function HomeView({
                 </div>
               )}
               {homeTab === "tracker" && (
-                <div className="osler-page">
+                <div className="osler-page" data-walkthrough="qbank-tracker">
                   <div className="osler-page__inner">
                     <TrackerTab
                       data={data}
@@ -335,6 +339,11 @@ export function HomeView({
         tour="qbank"
         open={walkthroughOpen}
         onOpenChange={setWalkthroughOpen}
+        onAction={(tabId) => {
+          if (tabId === "content" || tabId === "create" || tabId === "tracker") {
+            onHomeTabChange(tabId);
+          }
+        }}
       />
     </div>
   );

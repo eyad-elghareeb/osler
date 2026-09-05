@@ -3246,6 +3246,9 @@ export const ar = {
     "walkthrough.step": "الخطوة {current} من {total}",
     "walkthrough.dontShowAgain": "عدم الإظهار تلقائيًا مرة أخرى",
     "walkthrough.trigger": "الجولة التعريفية",
+    "walkthrough.clickToContinue": "انقر على العنصر المظلل أو زر التالي للمتابعة",
+    "walkthrough.coachTip": "نصيحة للمذاكرة",
+    "walkthrough.keyNav": "استخدم الأسهم ← → أو Enter للتنقل",
     "walkthrough.settingsTipTitle": "كيفية تغيير الإعدادات",
     "walkthrough.reportTipTitle": "كيفية الإبلاغ عن مشكلة",
     "walkthrough.preview.live": "معاينة مباشرة",
@@ -3256,6 +3259,19 @@ export const ar = {
     "walkthrough.preview.editorialReview": "مراجعة تحريرية",
     "walkthrough.preview.offlineExport": "دون اتصال وملفات PDF",
     "walkthrough.preview.ready": "جاهز",
+
+    // QBank Hub Walkthrough
+    "walkthrough.qbankHub.badge": "دليل بنك الأسئلة",
+    "walkthrough.qbankHub.step1.title": "أقسام التصفح وأنماط المذاكرة",
+    "walkthrough.qbankHub.step1.subtitle": "تنقل بين تصفح بنوك الأسئلة المعتمدة، إنشاء اختبارات مخصصة، ومتابعة سجل أدائك.",
+    "walkthrough.qbankHub.step2.title": "حزم الأسئلة والتخصصات الطبية",
+    "walkthrough.qbankHub.step2.subtitle": "استعرض الأسئلة المصنفة حسب التخصص السريري، النظام الطبي، أو نماذج الامتحانات السابقة.",
+    "walkthrough.qbankHub.step3.title": "منشئ الاختبارات المخصصة",
+    "walkthrough.qbankHub.step3.subtitle": "خصص جلسات المذاكرة: حدد التخصصات وعدد الأسئلة ومستوى الصعوبة والأسئلة الخاطئة أو غير المجابة.",
+    "walkthrough.qbankHub.step4.title": "تحليل الأداء وسجل الاختبارات",
+    "walkthrough.qbankHub.step4.subtitle": "راجع درجات الاختبارات السابقة وتطور مستواك واستأنف الجلسات المحفوظة في أي وقت.",
+    "walkthrough.qbankHub.step5.title": "إعادة تشغيل الجولة التعريفية",
+    "walkthrough.qbankHub.step5.subtitle": "هل تحتاج لتذكير؟ انقر على أيقونة البوصلة في أي وقت لإعادة تشغيل هذه الجولة التفاعلية.",
 
     // QBank Walkthrough
     "walkthrough.qbank.badge": "دليل بنك الأسئلة",

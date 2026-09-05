@@ -845,6 +845,7 @@ function MobileHub({
           </button>
           <div className="flex-1" />
           <button
+            data-walkthrough="library-guide-btn"
             onClick={onOpenWalkthrough}
             className="size-8 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 shadow-xs"
             title={t("walkthrough.trigger")}
@@ -855,7 +856,7 @@ function MobileHub({
         </div>
       </div>
 
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4" data-walkthrough="library-tree">
         {filter === "all" && allArticles.length === 0 ? (
           <ComingSoonState icon={BookOpen} className="py-16" />
         ) : grouped.length === 0 ? (
@@ -1121,18 +1122,22 @@ function MobileReader({
               aria-label={t("library.readerToolbar")}
               className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-card/95 backdrop-blur-md shadow-e3 p-1"
             >
-              <DisplayMenu display={display} onChange={onDisplayChange} buttonClassName={toolbarBtn} />
+              <div data-walkthrough="library-display">
+                <DisplayMenu display={display} onChange={onDisplayChange} buttonClassName={toolbarBtn} />
+              </div>
 
-              <HighlighterToolbar
-                control={{
-                  tool: hlCtrl.tool,
-                  color: hlCtrl.color,
-                  count: hlCtrl.highlights.length,
-                  onToolChange: hlCtrl.setTool,
-                  onColorChange: hlCtrl.setColor,
-                  onClearAll: hlCtrl.clearAll,
-                }}
-              />
+              <div data-walkthrough="library-tools">
+                <HighlighterToolbar
+                  control={{
+                    tool: hlCtrl.tool,
+                    color: hlCtrl.color,
+                    count: hlCtrl.highlights.length,
+                    onToolChange: hlCtrl.setTool,
+                    onColorChange: hlCtrl.setColor,
+                    onClearAll: hlCtrl.clearAll,
+                  }}
+                />
+              </div>
 
               <button onClick={onShare} className={toolbarBtn} title={t("contextMenu.share")} aria-label={t("contextMenu.share")}>
                 <Share2 className="size-4" />
@@ -1143,7 +1148,7 @@ function MobileReader({
               </button>
 
               {article.contentType === "md" && (
-                <button onClick={onExportPdf} className={toolbarBtn} title={t("pdf.exportResults")} aria-label={t("pdf.exportResults")}>
+                <button data-walkthrough="library-export" onClick={onExportPdf} className={toolbarBtn} title={t("pdf.exportResults")} aria-label={t("pdf.exportResults")}>
                   <Printer className="size-4" />
                 </button>
               )}
@@ -1161,11 +1166,11 @@ function MobileReader({
                 </a>
               )}
 
-              <button onClick={onReport} className={toolbarBtn} title={t("support.reportProblem")} aria-label={t("support.reportProblem")}>
+              <button data-walkthrough="library-reporting" onClick={onReport} className={toolbarBtn} title={t("support.reportProblem")} aria-label={t("support.reportProblem")}>
                 <MessageSquareWarning className="size-4" />
               </button>
 
-              <button onClick={onOpenWalkthrough} className={toolbarBtn} title={t("walkthrough.trigger")} aria-label={t("walkthrough.trigger")}>
+              <button data-walkthrough="library-guide-btn" onClick={onOpenWalkthrough} className={toolbarBtn} title={t("walkthrough.trigger")} aria-label={t("walkthrough.trigger")}>
                 <Compass className="size-4 text-primary" />
               </button>
 
@@ -1245,7 +1250,7 @@ function SidebarContent({
             <BookOpen className="size-3.5" />
             {t("library.title")}
           </h3>
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5" data-walkthrough="library-tabs">
             <button
               onClick={() => onTabChange("toc")}
               className={cn(
@@ -1271,6 +1276,7 @@ function SidebarContent({
               <Bookmark className="size-3.5" />
             </button>
             <button
+              data-walkthrough="library-guide-btn"
               onClick={onOpenWalkthrough}
               className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-primary transition-colors"
               title={t("walkthrough.trigger")}
@@ -1282,7 +1288,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto osler-scroll p-2 space-y-0.5 osler-tabbar-pad md:pb-2">
+      <div className="flex-1 overflow-y-auto osler-scroll p-2 space-y-0.5 osler-tabbar-pad md:pb-2" data-walkthrough="library-tree">
         {sidebarTab === "bookmarks" && bookmarkedArticles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <BookmarkX className="size-8 text-muted-foreground/40 mb-2" />
@@ -1590,18 +1596,22 @@ function ArticleHeader({
 
         {article.contentType === "md" && (
           <>
-            <DisplayMenu display={display} onChange={onDisplayChange} />
+            <div data-walkthrough="library-display">
+              <DisplayMenu display={display} onChange={onDisplayChange} />
+            </div>
 
-            <HighlighterToolbar
-              control={{
-                tool: hlCtrl.tool,
-                color: hlCtrl.color,
-                count: hlCtrl.highlights.length,
-                onToolChange: hlCtrl.setTool,
-                onColorChange: hlCtrl.setColor,
-                onClearAll: hlCtrl.clearAll,
-              }}
-            />
+            <div data-walkthrough="library-tools">
+              <HighlighterToolbar
+                control={{
+                  tool: hlCtrl.tool,
+                  color: hlCtrl.color,
+                  count: hlCtrl.highlights.length,
+                  onToolChange: hlCtrl.setTool,
+                  onColorChange: hlCtrl.setColor,
+                  onClearAll: hlCtrl.clearAll,
+                }}
+              />
+            </div>
           </>
         )}
 
@@ -1634,6 +1644,7 @@ function ArticleHeader({
 
         {article.contentType === "md" && (
           <button
+            data-walkthrough="library-export"
             onClick={onExportPdf}
             className="osler-icon-btn size-9 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             title={t("pdf.exportResults")}
@@ -1655,6 +1666,7 @@ function ArticleHeader({
         )}
 
         <button
+          data-walkthrough="library-reporting"
           onClick={onReport}
           className="osler-icon-btn size-8"
           title={t("support.reportProblem")}
@@ -1664,6 +1676,7 @@ function ArticleHeader({
         </button>
 
         <button
+          data-walkthrough="library-guide-btn"
           onClick={onOpenWalkthrough}
           className="osler-icon-btn size-8"
           title={t("walkthrough.trigger")}

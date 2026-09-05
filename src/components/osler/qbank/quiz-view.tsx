@@ -619,7 +619,7 @@ export function QuizView({
         )}
 
         {/* Stem */}
-        <div className="relative">
+        <div className="relative" data-walkthrough="qbank-question-stem">
           <div className="osler-prose" style={stemStyle} dir={dirForContent(activeItem.lang)} lang={activeItem.lang ?? undefined} data-hl-region="stem">
             <HighlightedContent
               html={renderQuestionText(question.stem, question, activeItem)}
@@ -631,7 +631,7 @@ export function QuizView({
 
         {/* Choices (MCQ only) */}
         {qIsMCQ ? (
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 space-y-3" data-walkthrough="qbank-options">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               {qSubmitted ? t("qbank.session.readOnly") : t("qbank.session.selectOne")}
             </div>
@@ -1257,6 +1257,7 @@ export function QuizView({
           size-8 to give a slightly larger touch target on phones (it's the
           only way to access the navigator on mobile). */}
       <header
+        data-walkthrough="qbank-session-bar"
         className="h-12 flex items-center pl-3 sm:pl-4 pr-1 sm:pr-2 gap-1.5 sm:gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
         style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
       >
@@ -1312,6 +1313,7 @@ export function QuizView({
 
         {/* Quiz settings button — opens full settings panel */}
         <button
+          data-walkthrough="qbank-settings"
           onClick={onToggleQuizSettings}
           className={`size-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
             readonly ? "me-1.5 sm:me-2" : ""
@@ -1662,7 +1664,7 @@ export function QuizView({
 
             {!readonly && (
               <>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" data-walkthrough="qbank-tools">
                   <ToolButton onClick={onToggleCalculator} icon={CalcIcon} active={calculatorOpen} title={t("qbank.session.calculator")} />
                   <ToolButton onClick={onToggleLabValues} icon={FlaskConical} active={labValuesOpen} title={t("qbank.session.labValues")} />
                   <ToolButton onClick={onToggleAiAssistant} icon={Sparkles} active={aiAssistantOpen} title={t("qbank.session.aiAssistant")} />
@@ -1692,13 +1694,14 @@ export function QuizView({
                     </Popover>
                   )}
                   <ToolButton onClick={() => setShowShortcuts((s) => !s)} icon={Keyboard} active={showShortcuts} title={t("qbank.session.keyboardShortcuts")} />
-                  <ToolButton onClick={() => { haptic("selection"); setWalkthroughOpen(true); }} icon={Compass} active={walkthroughOpen} title={t("walkthrough.trigger")} />
+                  <ToolButton data-walkthrough="qbank-guide-btn" onClick={() => { haptic("selection"); setWalkthroughOpen(true); }} icon={Compass} active={walkthroughOpen} title={t("walkthrough.trigger")} />
                 </div>
 
                 <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
 
                 <Button
                   variant="outline" size="sm" onClick={onToggleFlag}
+                  data-walkthrough="qbank-navigator"
                   className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning hover:bg-warning/15" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
                 >
@@ -1708,6 +1711,7 @@ export function QuizView({
 
                 <Button
                   variant="outline" size="sm"
+                  data-walkthrough="qbank-reporting"
                   onClick={() => { haptic("light"); setReportOpen(true); }}
                   className="h-9 rounded-lg"
                   title={t("support.reportQuestion")}
@@ -1989,7 +1993,7 @@ export function QuizView({
       </AnimatePresence>
 
       <ReportTicketDialog open={reportOpen} onOpenChange={setReportOpen} source="qbank" context={reportContext} />
-      <WalkthroughDialog tour="qbank" open={walkthroughOpen} onOpenChange={setWalkthroughOpen} />
+      <WalkthroughDialog tour="qbank-session" open={walkthroughOpen} onOpenChange={setWalkthroughOpen} />
     </div>
   );
 }
