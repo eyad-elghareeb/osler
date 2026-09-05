@@ -93,7 +93,7 @@ export function HomeView({
 
   // First-time interactive tour for new users
   React.useEffect(() => {
-    if (!isWalkthroughCompleted("qbank")) {
+    if (!isWalkthroughCompleted("qbank-hub")) {
       setWalkthroughOpen(true);
     }
   }, []);
@@ -318,7 +318,7 @@ export function HomeView({
 
       {/* Interactive Walkthrough */}
       <WalkthroughDialog
-        tour="qbank"
+        tour="qbank-hub"
         open={walkthroughOpen}
         onOpenChange={setWalkthroughOpen}
         onAction={(tabId) => {

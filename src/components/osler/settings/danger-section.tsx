@@ -11,7 +11,7 @@ import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 
 const GUIDE_REPLAYS: Array<{ tour: TourId; view: "qbank" | "library"; icon: typeof GraduationCap; titleKey: "settings.guides.qbank" | "settings.guides.session" | "settings.guides.library"; subKey: "settings.guides.qbankSub" | "settings.guides.sessionSub" | "settings.guides.librarySub" }> = [
-  { tour: "qbank", view: "qbank", icon: GraduationCap, titleKey: "settings.guides.qbank", subKey: "settings.guides.qbankSub" },
+  { tour: "qbank-hub", view: "qbank", icon: GraduationCap, titleKey: "settings.guides.qbank", subKey: "settings.guides.qbankSub" },
   { tour: "qbank-session", view: "qbank", icon: Timer, titleKey: "settings.guides.session", subKey: "settings.guides.sessionSub" },
   { tour: "library", view: "library", icon: BookOpen, titleKey: "settings.guides.library", subKey: "settings.guides.librarySub" },
 ];

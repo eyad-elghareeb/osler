@@ -9,11 +9,8 @@ export {
 } from "./spotlight-walkthrough";
 
 export {
-  QBANK_HUB_STEPS,
-  QBANK_SESSION_STEPS,
-  QBANK_STEPS,
-  LIBRARY_STEPS,
   getTourSteps,
+  TOUR_META,
   type TourId,
   type WalkthroughStep,
 } from "./walkthrough-steps";

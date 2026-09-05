@@ -23,23 +23,40 @@ import {
 } from "lucide-react";
 import type { StringKey } from "@/lib/osler/i18n";
 
-export type TourId = "qbank" | "qbank-hub" | "qbank-session" | "library";
+export type TourId = "qbank-hub" | "qbank-session" | "library";
 
 export interface WalkthroughStep {
   id: string;
   targetSelector: string;
   titleKey: StringKey;
   subtitleKey: StringKey;
+  /** Optional deeper teaching line rendered under the subtitle. */
+  descriptionKey?: StringKey;
+  /** Optional coach tip rendered as a highlighted callout. */
+  tipKey?: StringKey;
   mainIcon: LucideIcon;
   preferredPlacement?: "top" | "bottom" | "left" | "right" | "auto";
   highlightPadding?: number;
   highlightRadius?: number;
+  /** Tab id forwarded to the consumer's onAction when the step is entered
+      (hub tours use it to switch tabs). */
   onEnterTab?: string;
+  /** Action key forwarded to the consumer's onAction when the step is
+      entered — puts the UI in the state the step teaches (open/close a
+      dialog or panel) so Next-button users get the same tour as clickers. */
+  onEnterAction?: string;
   /** Auto-advance past this step when its target isn't on screen (conditional
-      dialog sections, platform-only toggles). Re-checked after 600 ms so tab
-      switches and dialog animations get a chance to mount the target. */
+      dialog sections, platform-only toggles). Re-checked at two beats so tab
+      switches, navigation and content fetches get a chance to mount it. */
   skipIfMissing?: boolean;
 }
+
+/** Card eyebrow label per tour. */
+export const TOUR_META: Record<TourId, { badgeKey: StringKey }> = {
+  "qbank-hub": { badgeKey: "walkthrough.qbankHub.badge" },
+  "qbank-session": { badgeKey: "walkthrough.qbank.badge" },
+  library: { badgeKey: "walkthrough.library.badge" },
+};
 
 export const QBANK_HUB_STEPS: WalkthroughStep[] = [
   {
@@ -309,12 +326,9 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
 ];
 
 export function getTourSteps(tour: TourId): WalkthroughStep[] {
-  if (tour === "qbank" || tour === "qbank-hub") return QBANK_HUB_STEPS;
+  if (tour === "qbank-hub") return QBANK_HUB_STEPS;
   if (tour === "qbank-session") return QBANK_SESSION_STEPS;
   return LIBRARY_STEPS;
 }
-
-// Re-export for compatibility
-export const QBANK_STEPS = QBANK_SESSION_STEPS;
 
 
