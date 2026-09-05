@@ -139,11 +139,12 @@ const ANALYTICS_MAX_PATH_LEN = 255;
 const ANALYTICS_MAX_DETAIL_BYTES = 512;
 // Global daily write cap for analytics events. When exceeded, new events
 // are rejected with 429 until the next UTC midnight. This protects the D1
-// daily row-write quota (100K/day free tier) from being exhausted. Sized
-// for ~1000 MAU: even a heavy exam-season day (~600 DAU × ~100 events)
-// writes ~24K rows, while sync + auth + content stay well under 15K —
-// together comfortably inside the 100K/day budget.
-const ANALYTICS_DAILY_WRITE_CAP = 25_000;
+// daily row-write quota (100K/day, ACCOUNT-WIDE — sharding does not
+// multiply it) from being exhausted. Sized for a ~200-DAU instance with
+// headroom: 10K rows = 50 events/user/day, while a typical study session
+// emits a fraction of that — leaving 90% of the write budget for auth,
+// sync, and content, which are the flows users actually notice.
+const ANALYTICS_DAILY_WRITE_CAP = 10_000;
 
 // Per-question choice stats ("62% of users chose B") — pre-aggregated counters
 // in question_choice_stats, one upsert row per answered question per finished
@@ -2038,10 +2039,11 @@ const ANALYTICS_VALID_CONNECTIONS = new Set([
 
 // ── Global daily write caps (DoS protection for D1 quota) ──
 //
-// The D1 free tier allows 100,000 rows written per day for the ENTIRE
-// database (auth, sync, content, analytics). Telemetry that ignored caps
-// could exhaust this in minutes, taking down auth, sync, and content
-// management with it. Two flows are capped per day:
+// The D1 free tier allows 100,000 rows written per day ACCOUNT-WIDE
+// (shared by auth, sync, content, and analytics across every D1 database
+// on the account — splitting into shards does not multiply it). Telemetry
+// that ignored caps could exhaust this in minutes, taking down auth, sync,
+// and content management with it. Two flows are capped per day:
 //   analytics — ANALYTICS_DAILY_WRITE_CAP rows
 //   qstats    — QBANK_STATS_DAILY_WRITE_CAP row writes
 // Together with the uncapped-but-bounded sync/auth writes, a ~1000-MAU
@@ -2205,8 +2207,8 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
     return json({ error: "Request body too large" }, 413, origin, log);
   }
 
-  // Global daily write cap — protects D1 free-tier quota (100K rows/day
-  // for the ENTIRE database) from being exhausted by analytics alone.
+  // Global daily write cap — protects the D1 free-tier write quota (100K
+  // rows/day account-wide) from being exhausted by analytics alone.
   if (!(await dailyWriteCountOk(env, "analytics", ANALYTICS_DAILY_WRITE_CAP))) {
     return json({ error: "Analytics daily write cap reached" }, 429, origin, log);
   }
@@ -3376,8 +3378,8 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       totalD1Rows,
       totalD1EstimatedBytes,
       safetyThrottles: [
-        { name: "Analytics Daily Write Cap", threshold: "50,000 / day", status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
-        { name: "QBank Choice Stats Write Cap", threshold: "25,000 / day", status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
+        { name: "Analytics Daily Write Cap", threshold: `${ANALYTICS_DAILY_WRITE_CAP.toLocaleString("en-US")} / day`, status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
+        { name: "QBank Choice Stats Write Cap", threshold: `${QBANK_STATS_DAILY_WRITE_CAP.toLocaleString("en-US")} / day`, status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
         { name: "Per-IP Analytics Ingest Rate Limit", threshold: "12 batches / min", status: "active", protectedQuota: "Worker Requests & D1 Writes" },
         { name: "Per-User Analytics Rate Limit", threshold: "12 batches / min", status: "active", protectedQuota: "D1 User Write Quota" },
         { name: "Subrequest Batch Chunking", threshold: "Bounded ≤40 / run", status: "active", protectedQuota: "Worker Subrequests (50/req free cap)" },

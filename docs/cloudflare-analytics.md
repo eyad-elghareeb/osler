@@ -81,7 +81,7 @@ curl -s -H "Authorization: Bearer <admin-session-token>" \
 | Worker CPU time | 10 ms / request | Per request | 1102 invocation error |
 | Worker subrequests | 50 / invocation | Per request | Subrequest limit error |
 
-Osler's internal caps sit far below these (50k analytics writes/day,
+Osler's internal caps sit far below these (10k analytics writes/day,
 25k stat writes/day, 12 ingest batches/min, ≤ 40 subrequests per bounded run)
 so the app throttles itself before Cloudflare does — the panel's "safety
 throttles" table lists every guard and which quota it protects.
