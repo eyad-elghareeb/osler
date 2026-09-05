@@ -85,7 +85,7 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
               {t("qbank.settings.title")}
             </span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 font-mono">
-              Live Preview
+              {t("walkthrough.preview.live")}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -112,7 +112,7 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
               {t("support.title")}
             </span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/10 font-medium">
-              Instant Sync
+              {t("walkthrough.preview.instantSync")}
             </span>
           </div>
           <div className="p-2 rounded-lg bg-card border border-border space-y-1 text-[11px] text-muted-foreground font-mono">
@@ -131,9 +131,9 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
     case "qbank-explanations":
       return (
         <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-            <span>{t("qbank.session.explanation")}</span>
-            <span className="text-[10px] text-muted-foreground font-medium">78% Peer Accuracy</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground">{t("qbank.session.explanation")}</span>
+            <span className="text-[10px] text-muted-foreground font-medium">78% {t("walkthrough.preview.peerStats")}</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-xs">
@@ -163,20 +163,20 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
         <div className="rounded-xl border border-border bg-card p-3 space-y-2">
           <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
             <Sparkles className="size-3.5 text-primary" />
-            <span>Clinical Tools Toolbar</span>
+            <span>{t("walkthrough.preview.tools")}</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
-              <Calculator className="size-3 text-primary" /> Calculator
+              <Calculator className="size-3 text-primary" /> {t("qbank.session.calculator")}
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
-              <FlaskConical className="size-3 text-primary" /> Lab Values
+              <FlaskConical className="size-3 text-primary" /> {t("qbank.session.labValues")}
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
-              <NotebookPen className="size-3 text-primary" /> Notes
+              <NotebookPen className="size-3 text-primary" /> {t("qbank.notes.title")}
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted text-[11px] font-medium text-foreground">
-              <Highlighter className="size-3 text-primary" /> Highlighter
+              <Highlighter className="size-3 text-primary" /> {t("highlighter.toggleOff")}
             </span>
           </div>
         </div>
@@ -191,17 +191,17 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
               {t("library.display")}
             </span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 font-mono">
-              Customizable
+              {t("walkthrough.preview.customizable")}
             </span>
           </div>
           <div className="flex items-center justify-between p-2 rounded-lg bg-card border border-border text-[11px]">
             <span className="text-muted-foreground">{t("library.fontFamily")}:</span>
             <div className="flex gap-1">
               <span className="px-2 py-0.5 rounded bg-primary text-primary-foreground font-serif text-[10px]">
-                Serif
+                {t("library.fontSerif")}
               </span>
               <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground font-sans text-[10px]">
-                Sans
+                {t("library.fontSans")}
               </span>
             </div>
           </div>
@@ -217,11 +217,11 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
               {t("support.reportProblem")}
             </span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/10 font-medium">
-              Editorial Review
+              {t("walkthrough.preview.editorialReview")}
             </span>
           </div>
           <div className="p-2 rounded-lg bg-card border border-border text-[11px] text-muted-foreground">
-            <span className="text-foreground font-medium">Active Article Title & Specialty</span> automatically attached to ticket for verified clinicians.
+            <span className="text-foreground font-medium">{t("walkthrough.preview.editorialReview")}</span>{" — "}{t("support.attachContext")}
           </div>
         </div>
       );
@@ -232,18 +232,18 @@ function StepVisualPreview({ stepId }: { stepId: string }) {
           <div className="text-xs font-semibold text-foreground flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <CloudDownload className="size-3.5 text-primary" />
-              Offline & Export
+              {t("walkthrough.preview.offlineExport")}
             </span>
             <span className="text-[10px] text-success font-medium flex items-center gap-0.5">
-              <Check className="size-3" /> Ready
+              <Check className="size-3" /> {t("walkthrough.preview.ready")}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <div className="p-2 rounded-lg bg-muted flex items-center gap-1.5 font-medium">
-              <CloudDownload className="size-3.5 text-primary" /> Offline Storage
+              <CloudDownload className="size-3.5 text-primary" /> {t("walkthrough.preview.offlineExport")}
             </div>
             <div className="p-2 rounded-lg bg-muted flex items-center gap-1.5 font-medium">
-              <Printer className="size-3.5 text-primary" /> Export to PDF
+              <Printer className="size-3.5 text-primary" /> PDF
             </div>
           </div>
         </div>
@@ -486,12 +486,12 @@ export function WalkthroughDialog({
                           )}
                           {isSpecialSettings && (
                             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary text-primary-foreground">
-                              Settings
+                              {t("settings.title")}
                             </span>
                           )}
                           {isSpecialReport && (
                             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning text-warning-foreground">
-                              Support
+                              {t("support.title")}
                             </span>
                           )}
                         </div>
