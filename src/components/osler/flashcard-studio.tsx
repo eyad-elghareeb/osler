@@ -51,6 +51,7 @@ import { NavigationStack } from "./navigation-stack";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
 import { ctxLinkAttrs } from "@/lib/osler/deep-link";
+import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
 
 type ViewMode = "decks" | "subdecks" | "study" | "complete";
 
@@ -61,6 +62,36 @@ interface FlashcardStudioProps {
   onNavigateHome?: () => void;
   /** Called when the user swipes back to navigate to the Learn hub. */
   onNavigateBack?: () => void;
+}
+
+/** Mutable ref the walkthrough dialog (which lives in the wrapper, so it
+ *  survives deck/study mode changes) uses to reach actions only the inner
+ *  knows (start a deck, flip the card). */
+interface WalkthroughActionBridge {
+  current: ((action: string) => void) | null;
+}
+
+export function FlashcardStudio(props: FlashcardStudioProps = {}) {
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+  const walkthroughActions = React.useRef<((action: string) => void) | null>(null);
+  // First-time interactive tour for new users. Hub only — a deep-linked
+  // deck (?uid) lands inside the study flow where a tour is noise.
+  React.useEffect(() => {
+    if (!props.uid && !isWalkthroughCompleted("flashcards")) {
+      setWalkthroughOpen(true);
+    }
+  }, []); // mount-time check, mirroring the other hub tours
+  return (
+    <>
+      <FlashcardStudioInner {...props} walkthroughActions={walkthroughActions} />
+      <WalkthroughDialog
+        tour="flashcards"
+        open={walkthroughOpen}
+        onOpenChange={setWalkthroughOpen}
+        onAction={(action) => walkthroughActions.current?.(action)}
+      />
+    </>
+  );
 }
 
 const FLASHCARD_COLOR = ENGINE_META.flashcard.color;
@@ -282,13 +313,14 @@ function expandCards(cards: Flashcard[]): StudyCard[] {
   return out;
 }
 
-export function FlashcardStudio({
+function FlashcardStudioInner({
   uid,
   onExit: propOnExit,
   onOpenPack: propOnOpenPack,
   onNavigateHome: propOnNavigateHome,
   onNavigateBack: propOnNavigateBack,
-}: FlashcardStudioProps = {}) {
+  walkthroughActions,
+}: FlashcardStudioProps & { walkthroughActions?: WalkthroughActionBridge } = {}) {
   const { navigate } = useOslerRouter();
   const router = useRouter();
   const onExit = propOnExit || (() => navigate("flashcards"));
@@ -396,6 +428,22 @@ export function FlashcardStudio({
     compute();
     return flashcardReview.subscribe(compute);
   }, [leafContent]);
+
+  // Walkthrough action bridge — the tour dialog lives in the wrapper (stable
+  // across deck/study mode changes) while the mode state lives here; re-bound
+  // every render so the closure always sees the current tree and handlers.
+  React.useLayoutEffect(() => {
+    if (!walkthroughActions) return;
+    walkthroughActions.current = (action: string) => {
+      if (action === "open-sample-deck") {
+        const leaf = filteredTree.find((node) => node.items.length === 0);
+        const idx = leaf ? tree.findIndex((n) => n.uid === leaf.uid) : -1;
+        if (idx >= 0) void startDeck(idx);
+      } else if (action === "flip-sample-card" && mode === "study") {
+        setFlipped(true);
+      }
+    };
+  });
 
   const currentDeck = tree[deckIndex];
   const currentSubdecks = React.useMemo(() => {
@@ -859,7 +907,7 @@ export function FlashcardStudio({
         </div>
 
         {/* Stat bar */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-3 mb-6" data-walkthrough="flash-stats">
           <div className="osler-stat-tile--compact">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
               <Clock className="size-3.5" />
@@ -893,7 +941,7 @@ export function FlashcardStudio({
             description={t("flash.home.emptyDesc")}
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-walkthrough="flash-decks">
             {filteredTree.map((node, idx) => {
               const isBranch = node.items.length > 0;
               const totalCards = mergeCards(collectLeafUids(node)).length;
@@ -1154,7 +1202,7 @@ export function FlashcardStudio({
             a drag from anywhere — including the empty space above/below
             the card. Each page centers its card visually; the surrounding
             empty space is part of the snap interaction zone. */}
-        <div className="flex-1 min-h-0 bg-card">
+        <div className="flex-1 min-h-0 bg-card" data-walkthrough="flash-card">
           <VerticalSnapGallery
             items={currentDeckCards}
             currentIndex={cardIndex}
@@ -1185,6 +1233,7 @@ export function FlashcardStudio({
               exit={{ opacity: 0, y: 16 }}
               transition={MOTION_TRANSITION.fast}
               className="shrink-0 border-t border-border bg-card px-4 py-3 sm:py-3"
+              data-walkthrough="flash-rate"
             >
               <div className="max-w-lg mx-auto">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground text-center mb-2">

@@ -58,7 +58,7 @@ function initScript(theme, { session = true } = {}) {
       localStorage.setItem("osler-theme", ${JSON.stringify(theme)});
       localStorage.setItem("osler-onboarding-complete", "1");
       localStorage.setItem("osler_cookie_consent", "1");
-      for (const tour of ["qbank-hub", "qbank-session", "library"]) {
+      for (const tour of ["qbank-hub", "qbank-session", "library", "osce", "flashcards"]) {
         localStorage.setItem("osler-walkthrough-v2-" + tour, "1");
       }
       ${session ? `

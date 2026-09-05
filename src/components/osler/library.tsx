@@ -344,6 +344,17 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     }
   }, []);
 
+  // Tour action hook: the reader-toolbar steps teach controls that only
+  // exist once an article is open — open the first markdown article for
+  // them (same pattern as the QBank hub tour opening the launch dialog).
+  // Idempotent: re-fires from later steps are ignored once an article is
+  // open (including a deep-linked one — never navigate the user away).
+  const handleWalkthroughAction = React.useCallback((action: string) => {
+    if (action !== "open-sample-article" || activeFile) return;
+    const sample = allArticles.find((a) => a.contentType === "md");
+    if (sample) openArticleByFile(sample.file);
+  }, [activeFile, allArticles, openArticleByFile]);
+
   const reportContext: TicketContext | undefined = activeArticle
     ? { articleTitle: activeArticle.title, articleFile: activeFile ?? activeArticle.file }
     : undefined;
@@ -602,6 +613,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           tour="library"
           open={walkthroughOpen}
           onOpenChange={setWalkthroughOpen}
+          onAction={handleWalkthroughAction}
         />
       </>
     );
@@ -764,6 +776,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         tour="library"
         open={walkthroughOpen}
         onOpenChange={setWalkthroughOpen}
+        onAction={handleWalkthroughAction}
       />
     </motion.div>
   );

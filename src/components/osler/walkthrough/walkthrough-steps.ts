@@ -23,11 +23,14 @@ import {
   Zap,
   AlignLeft,
   ListChecks,
+  Stethoscope,
+  ClipboardList,
+  Brain,
   type LucideIcon,
 } from "lucide-react";
 import type { StringKey } from "@/lib/osler/i18n";
 
-export type TourId = "qbank-hub" | "qbank-session" | "library";
+export type TourId = "qbank-hub" | "qbank-session" | "library" | "osce" | "flashcards";
 
 export interface WalkthroughStep {
   id: string;
@@ -53,6 +56,13 @@ export interface WalkthroughStep {
       dialog sections, platform-only toggles). Re-checked at two beats so tab
       switches, navigation and content fetches get a chance to mount it. */
   skipIfMissing?: boolean;
+  /** Custom auto-advance beats (ms) for skipIfMissing steps whose target may
+      legitimately take seconds to mount (content fetches). Defaults: fast
+      beats for plain conditional steps, patient beats for action steps. */
+  skipBeats?: [number, number];
+  /** Step teaches desktop-only chrome (e.g. the sidebar tab strip) — filtered
+      out of tours on phone viewports so it never flashes a targetless card. */
+  desktopOnly?: boolean;
 }
 
 /** Card eyebrow label per tour. */
@@ -60,6 +70,8 @@ export const TOUR_META: Record<TourId, { badgeKey: StringKey }> = {
   "qbank-hub": { badgeKey: "walkthrough.qbankHub.badge" },
   "qbank-session": { badgeKey: "walkthrough.qbank.badge" },
   library: { badgeKey: "walkthrough.library.badge" },
+  osce: { badgeKey: "walkthrough.osce.badge" },
+  flashcards: { badgeKey: "walkthrough.flashcards.badge" },
 };
 
 export const QBANK_HUB_STEPS: WalkthroughStep[] = [
@@ -366,6 +378,9 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     preferredPlacement: "right",
     highlightPadding: 8,
     highlightRadius: 14,
+    // Missing when the tour fires over a deep-linked open article — skip
+    // ahead to the reader-toolbar steps instead of hanging.
+    skipIfMissing: true,
   },
   {
     id: "library-toc",
@@ -377,6 +392,7 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     highlightPadding: 6,
     highlightRadius: 10,
     skipIfMissing: true,
+    desktopOnly: true,
   },
   {
     id: "library-tools",
@@ -389,6 +405,10 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     highlightPadding: 6,
     highlightRadius: 12,
     skipIfMissing: true,
+    // The toolbar steps teach controls that only exist once an article is
+    // open — open a sample md article so the tour has its targets (the
+    // consumer ignores the action when an article is already open).
+    onEnterAction: "open-sample-article",
   },
   {
     id: "library-display",
@@ -401,6 +421,7 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     highlightPadding: 6,
     highlightRadius: 10,
     skipIfMissing: true,
+    onEnterAction: "open-sample-article",
   },
   {
     id: "library-bookmark",
@@ -412,6 +433,7 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     highlightPadding: 6,
     highlightRadius: 10,
     skipIfMissing: true,
+    onEnterAction: "open-sample-article",
   },
   {
     id: "library-offline-pdf",
@@ -424,6 +446,7 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     highlightPadding: 6,
     highlightRadius: 10,
     skipIfMissing: true,
+    onEnterAction: "open-sample-article",
   },
   {
     id: "library-reporting",
@@ -435,13 +458,147 @@ export const LIBRARY_STEPS: WalkthroughStep[] = [
     highlightPadding: 6,
     highlightRadius: 10,
     skipIfMissing: true,
+    onEnterAction: "open-sample-article",
   },
 ];
 
-export function getTourSteps(tour: TourId): WalkthroughStep[] {
-  if (tour === "qbank-hub") return QBANK_HUB_STEPS;
-  if (tour === "qbank-session") return QBANK_SESSION_STEPS;
-  return LIBRARY_STEPS;
+export const OSCE_STEPS: WalkthroughStep[] = [
+  {
+    id: "osce-grid",
+    targetSelector: "[data-walkthrough='osce-grid']",
+    titleKey: "walkthrough.osce.step1.title",
+    subtitleKey: "walkthrough.osce.step1.subtitle",
+    descriptionKey: "walkthrough.osce.step1.desc",
+    mainIcon: Stethoscope,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 16,
+    // Missing while the manifest tree is still loading (or when no content
+    // exists) — move on instead of hanging. Patient beats: the hub grid
+    // mounts only after the content manifest resolves.
+    skipIfMissing: true,
+    skipBeats: [4000, 10000],
+  },
+  {
+    id: "osce-brief",
+    targetSelector: "[data-walkthrough='osce-brief']",
+    titleKey: "walkthrough.osce.step2.title",
+    subtitleKey: "walkthrough.osce.step2.subtitle",
+    descriptionKey: "walkthrough.osce.step2.desc",
+    mainIcon: ClipboardList,
+    preferredPlacement: "bottom",
+    highlightPadding: 8,
+    highlightRadius: 14,
+    // Reached via Next without a pack click — open the first station so the
+    // lobby section of the tour can play out (the consumer ignores the
+    // action once a station is already open).
+    onEnterAction: "open-sample-station",
+    skipIfMissing: true,
+  },
+  {
+    id: "osce-task",
+    targetSelector: "[data-walkthrough='osce-task']",
+    titleKey: "walkthrough.osce.step3.title",
+    subtitleKey: "walkthrough.osce.step3.subtitle",
+    mainIcon: FileText,
+    preferredPlacement: "bottom",
+    highlightPadding: 8,
+    highlightRadius: 14,
+    skipIfMissing: true,
+    onEnterAction: "open-sample-station",
+  },
+  {
+    id: "osce-stats",
+    targetSelector: "[data-walkthrough='osce-stats']",
+    titleKey: "walkthrough.osce.step4.title",
+    subtitleKey: "walkthrough.osce.step4.subtitle",
+    mainIcon: Clock,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 14,
+    skipIfMissing: true,
+    onEnterAction: "open-sample-station",
+  },
+  {
+    id: "osce-enter",
+    targetSelector: "[data-walkthrough='osce-enter']",
+    titleKey: "walkthrough.osce.step5.title",
+    subtitleKey: "walkthrough.osce.step5.subtitle",
+    descriptionKey: "walkthrough.osce.step5.desc",
+    tipKey: "walkthrough.osce.step5.tip",
+    mainIcon: Play,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 12,
+    skipIfMissing: true,
+    onEnterAction: "open-sample-station",
+  },
+];
+
+export const FLASHCARD_STEPS: WalkthroughStep[] = [
+  {
+    id: "flash-stats",
+    targetSelector: "[data-walkthrough='flash-stats']",
+    titleKey: "walkthrough.flashcards.step1.title",
+    subtitleKey: "walkthrough.flashcards.step1.subtitle",
+    descriptionKey: "walkthrough.flashcards.step1.desc",
+    mainIcon: Brain,
+    preferredPlacement: "bottom",
+    highlightPadding: 8,
+    highlightRadius: 14,
+  },
+  {
+    id: "flash-decks",
+    targetSelector: "[data-walkthrough='flash-decks']",
+    titleKey: "walkthrough.flashcards.step2.title",
+    subtitleKey: "walkthrough.flashcards.step2.subtitle",
+    descriptionKey: "walkthrough.flashcards.step2.desc",
+    mainIcon: Layers,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 16,
+  },
+  {
+    id: "flash-card",
+    targetSelector: "[data-walkthrough='flash-card']",
+    titleKey: "walkthrough.flashcards.step3.title",
+    subtitleKey: "walkthrough.flashcards.step3.subtitle",
+    mainIcon: BookOpenText,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 16,
+    // Reached via Next without a deck click — start the first deck so the
+    // study section of the tour can play out.
+    onEnterAction: "open-sample-deck",
+    skipIfMissing: true,
+  },
+  {
+    id: "flash-rate",
+    targetSelector: "[data-walkthrough='flash-rate']",
+    titleKey: "walkthrough.flashcards.step4.title",
+    subtitleKey: "walkthrough.flashcards.step4.subtitle",
+    descriptionKey: "walkthrough.flashcards.step4.desc",
+    tipKey: "walkthrough.flashcards.step4.tip",
+    mainIcon: CheckCircle2,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 14,
+    // The rating bar mounts once the card is flipped — flip it for the user.
+    onEnterAction: "flip-sample-card",
+    skipIfMissing: true,
+  },
+];
+
+export function getTourSteps(tour: TourId, opts: { mobile?: boolean } = {}): WalkthroughStep[] {
+  const byTour: Record<TourId, WalkthroughStep[]> = {
+    "qbank-hub": QBANK_HUB_STEPS,
+    "qbank-session": QBANK_SESSION_STEPS,
+    library: LIBRARY_STEPS,
+    osce: OSCE_STEPS,
+    flashcards: FLASHCARD_STEPS,
+  };
+  const steps = byTour[tour] ?? [];
+  return opts.mobile ? steps.filter((step) => !step.desktopOnly) : steps;
 }
 
 

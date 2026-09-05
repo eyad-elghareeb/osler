@@ -97,7 +97,13 @@ export function SpotlightWalkthrough({
     cardObsRef.current = obs;
   }, []);
 
-  const steps = React.useMemo(() => getTourSteps(tour), [tour]);
+  // Phone viewports drop desktop-only steps (sidebar chrome etc.) so the
+  // tour never flashes a card for a target the form factor can't show.
+  // Recomputed per open — a mid-tour rotation just keeps the current set.
+  const steps = React.useMemo(
+    () => getTourSteps(tour, { mobile: typeof window !== "undefined" && window.innerWidth < 768 }),
+    [tour, open], // re-derive the step set each time the tour opens
+  );
   const total = steps.length;
   const currentStep = steps[index] ?? steps[0];
   const isLast = index === total - 1;
@@ -237,13 +243,13 @@ export function SpotlightWalkthrough({
   // ── skipIfMissing: conditional targets (dialog sections, desktop-only
   // toggles) vanish gracefully — re-checked at two beats and a still-missing
   // target auto-advances (or finishes on last). Steps that fire an action
-  // (tab switch, dialog navigation) get slower beats so the UI they trigger
-  // has time to mount before the step is given up on. The checks clear as
-  // soon as the target appears.
+  // (tab switch, dialog navigation, article/deck open) get much slower beats
+  // so the async content they trigger has time to mount before the step is
+  // given up on. The checks clear as soon as the target appears.
   React.useEffect(() => {
     if (!open || !currentStep?.skipIfMissing || spotlightRect.found) return;
     if (skippedRef.current === index) return;
-    const beats = currentStep.onEnterAction ? [1500, 5000] : [600, 1500];
+    const beats = currentStep.skipBeats ?? (currentStep.onEnterAction ? [4000, 10000] : [600, 1500]);
     const timers = beats.map((delay) =>
       setTimeout(() => {
         if (skippedRef.current === index) return;

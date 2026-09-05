@@ -23,6 +23,7 @@ import { AiMarkdown } from "@/components/osler/ai-markdown";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
 import { ctxLinkAttrs } from "@/lib/osler/deep-link";
+import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
 import { MAX_TURNS, WARN_TURNS, EXAM_TIME, STORAGE, MAP_STEPS, formatTime, timerState, diffClass, userTurnCount, sanitizeModelText, isPediatric, normalizeStation, buildPatientSysPrompt, buildDataInterpSysPrompt, ExamResult, getApiKey, hasApiKey, getLiveModel, dataImageUrl, askPatient, askExaminer, scoreInterview, scoreDataInterpExam, TranscriptEntry, OscePhase } from "./osce/gemini";
 import { nodeFromPack, buildAchievements, launchConfetti, getSpeakerName, OsceStreamBubble } from "./osce/session-utils";
 import { DataTablesRenderer, DataImagesRenderer, PrintedMaterialsModal, LiveVoiceOverlay } from "./osce/renderers";
@@ -40,14 +41,45 @@ interface OsceStudioProps {
   /** Called when the user swipes back to navigate to the Learn hub. */
   onNavigateBack?: () => void;
 }
-export function OsceStudio({
+
+/** Mutable ref the walkthrough dialog (which lives in the wrapper, so it
+ *  survives phase changes) uses to reach actions that only the inner knows. */
+interface WalkthroughActionBridge {
+  current: ((action: string) => void) | null;
+}
+
+export function OsceStudio(props: OsceStudioProps = {}) {
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+  const walkthroughActions = React.useRef<((action: string) => void) | null>(null);
+  // First-time interactive tour for new users. Hub only — deep links
+  // (?uid) and externally-injected packs land mid-flow where a tour is noise.
+  React.useEffect(() => {
+    if (!props.uid && !props.activeItem && !isWalkthroughCompleted("osce")) {
+      setWalkthroughOpen(true);
+    }
+  }, []); // mount-time check, mirroring the other hub tours
+  return (
+    <>
+      <OsceStudioInner {...props} walkthroughActions={walkthroughActions} />
+      <WalkthroughDialog
+        tour="osce"
+        open={walkthroughOpen}
+        onOpenChange={setWalkthroughOpen}
+        onAction={(action) => walkthroughActions.current?.(action)}
+      />
+    </>
+  );
+}
+
+function OsceStudioInner({
   uid,
   activeItem: activeItemProp,
   activeContent: activeContentProp,
   onExit: propOnExit,
   onOpenPack: propOnOpenPack,
   onNavigateBack: propOnNavigateBack,
-}: OsceStudioProps = {}) {
+  walkthroughActions,
+}: OsceStudioProps & { walkthroughActions?: WalkthroughActionBridge } = {}) {
   const { navigate } = useOslerRouter();
   const router = useRouter();
   const onExit = propOnExit || (() => navigate("osce"));
@@ -1276,6 +1308,27 @@ export function OsceStudio({
     );
   };
 
+  // Walkthrough action bridge — the tour dialog lives in the wrapper (stable
+  // across phase changes) while the phase state lives here; re-bound every
+  // render so the closure always sees the current tree and selectPack. Only
+  // acts from the picker — once a station is open the action is a no-op.
+  React.useLayoutEffect(() => {
+    if (!walkthroughActions) return;
+    walkthroughActions.current = (action: string) => {
+      if (action !== "open-sample-station" || phase !== "select") return;
+      const findLeaf = (nodes: ContentTreeNode[]): ContentTreeNode | null => {
+        for (const n of nodes) {
+          if (n.items.length === 0) return n;
+          const leaf = findLeaf(n.items);
+          if (leaf) return leaf;
+        }
+        return null;
+      };
+      const firstLeaf = findLeaf(filteredRootTree);
+      if (firstLeaf) void selectPack({ node: firstLeaf, content: contentByUid.get(firstLeaf.uid) ?? null });
+    };
+  });
+
   if (selfPackError && uid) {
     return (
       <div className="osler-page">
@@ -1365,7 +1418,7 @@ export function OsceStudio({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr" data-walkthrough="osce-grid">
               {filteredRootTree.map((node, idx) =>
                 node.items.length > 0
                   ? renderOsceFolderCard(node, idx)
@@ -1515,7 +1568,7 @@ export function OsceStudio({
             </button>
 
             {/* Header */}
-            <div className="relative overflow-hidden bg-card border border-border rounded-xl p-5 md:p-6 mb-5">
+            <div className="relative overflow-hidden bg-card border border-border rounded-xl p-5 md:p-6 mb-5" data-walkthrough="osce-brief">
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary/60 to-transparent" />
               <div className="flex items-start gap-4">
                 <div className="size-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
@@ -1553,7 +1606,7 @@ export function OsceStudio({
             )}
 
             {/* Task */}
-            <div className="bg-card border border-border rounded-xl p-4 mb-4">
+            <div className="bg-card border border-border rounded-xl p-4 mb-4" data-walkthrough="osce-task">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">{t("osce.session.yourTask")}</p>
               <p className="text-sm leading-relaxed">{activeCase.task}</p>
             </div>
@@ -1577,7 +1630,7 @@ export function OsceStudio({
             )}
 
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="grid grid-cols-3 gap-3 mb-6" data-walkthrough="osce-stats">
               {[
                 { icon: Clock, val: dur + " min", label: t("osce.session.timeLimit") },
                 { icon: Activity, val: String(MAX_TURNS), label: t("osce.session.maxTurns") },
@@ -1625,6 +1678,7 @@ export function OsceStudio({
             <div className="flex items-center gap-3">
               <button
                 onClick={startConsultation}
+                data-walkthrough="osce-enter"
                 className="inline-flex items-center gap-2 h-11 px-6 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors active:scale-[0.98]"
               >
                 <Play className="size-4" />

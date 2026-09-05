@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Trash2, AlertTriangle, GraduationCap, Timer, BookOpen, Compass } from "lucide-react";
+import { Trash2, AlertTriangle, GraduationCap, Timer, BookOpen, Compass, Stethoscope, Layers } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { storage } from "@/lib/osler/storage";
@@ -10,10 +10,12 @@ import { useOslerRouter } from "@/lib/osler/navigation";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 
-const GUIDE_REPLAYS: Array<{ tour: TourId; view: "qbank" | "library"; icon: typeof GraduationCap; titleKey: "settings.guides.qbank" | "settings.guides.session" | "settings.guides.library"; subKey: "settings.guides.qbankSub" | "settings.guides.sessionSub" | "settings.guides.librarySub" }> = [
+const GUIDE_REPLAYS: Array<{ tour: TourId; view: "qbank" | "library" | "osce" | "flashcards"; icon: typeof GraduationCap; titleKey: "settings.guides.qbank" | "settings.guides.session" | "settings.guides.library" | "settings.guides.osce" | "settings.guides.flashcards"; subKey: "settings.guides.qbankSub" | "settings.guides.sessionSub" | "settings.guides.librarySub" | "settings.guides.osceSub" | "settings.guides.flashcardsSub" }> = [
   { tour: "qbank-hub", view: "qbank", icon: GraduationCap, titleKey: "settings.guides.qbank", subKey: "settings.guides.qbankSub" },
   { tour: "qbank-session", view: "qbank", icon: Timer, titleKey: "settings.guides.session", subKey: "settings.guides.sessionSub" },
   { tour: "library", view: "library", icon: BookOpen, titleKey: "settings.guides.library", subKey: "settings.guides.librarySub" },
+  { tour: "flashcards", view: "flashcards", icon: Layers, titleKey: "settings.guides.flashcards", subKey: "settings.guides.flashcardsSub" },
+  { tour: "osce", view: "osce", icon: Stethoscope, titleKey: "settings.guides.osce", subKey: "settings.guides.osceSub" },
 ];
 export function DangerZoneSection() {
   const { t } = useI18n();
