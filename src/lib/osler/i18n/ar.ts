@@ -3251,14 +3251,6 @@ export const ar = {
     "walkthrough.keyNav": "استخدم الأسهم ← → أو Enter للتنقل",
     "walkthrough.settingsTipTitle": "كيفية تغيير الإعدادات",
     "walkthrough.reportTipTitle": "كيفية الإبلاغ عن مشكلة",
-    "walkthrough.preview.live": "معاينة مباشرة",
-    "walkthrough.preview.instantSync": "مزامنة فورية",
-    "walkthrough.preview.peerStats": "دقة إجابات الأقران",
-    "walkthrough.preview.tools": "الأدوات السريرية",
-    "walkthrough.preview.customizable": "قابل للتخصيص",
-    "walkthrough.preview.editorialReview": "مراجعة تحريرية",
-    "walkthrough.preview.offlineExport": "دون اتصال وملفات PDF",
-    "walkthrough.preview.ready": "جاهز",
 
     // QBank Hub Walkthrough
     "walkthrough.qbankHub.badge": "دليل بنك الأسئلة",

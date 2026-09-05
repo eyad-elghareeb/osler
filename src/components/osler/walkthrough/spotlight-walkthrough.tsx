@@ -9,7 +9,6 @@ import {
   Check,
   Compass,
   X,
-  Sparkles,
   Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,7 +38,7 @@ export function markWalkthroughCompleted(tour: TourId): void {
   try {
     localStorage.setItem(`${STORAGE_PREFIX}${tour}`, "1");
   } catch {
-    // Ignore storage errors
+    // Ignore storage errors in private browsing
   }
 }
 
@@ -136,8 +135,10 @@ export function SpotlightWalkthrough({
       const isVisible =
         rect.width > 0 &&
         rect.height > 0 &&
-        rect.top < window.innerHeight &&
-        rect.bottom > 0;
+        rect.top >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.left >= 0 &&
+        rect.right <= window.innerWidth;
 
       if (!isVisible) {
         targetEl.scrollIntoView({
@@ -155,10 +156,10 @@ export function SpotlightWalkthrough({
         found: true,
       });
     } else {
-      // Fallback: centered spotlight or no target
+      // Fallback: centered spotlight or viewport center
       setSpotlightRect({
-        top: window.innerHeight / 2 - 120,
-        left: window.innerWidth / 2 - 160,
+        top: Math.max(0, window.innerHeight / 2 - 120),
+        left: Math.max(0, window.innerWidth / 2 - 160),
         width: 320,
         height: 240,
         found: false,
@@ -166,13 +167,13 @@ export function SpotlightWalkthrough({
     }
   }, [open, currentStep]);
 
-  // Re-measure on resize, scroll, and step switch
+  // Target element tracking with ResizeObserver, window resize, and scroll listeners
   React.useEffect(() => {
     if (!open) return;
 
     updateTargetRect();
-    const timer = setTimeout(updateTargetRect, 80);
-    const timer2 = setTimeout(updateTargetRect, 250);
+    const timer1 = setTimeout(updateTargetRect, 60);
+    const timer2 = setTimeout(updateTargetRect, 220);
 
     const onScrollOrResize = () => {
       updateTargetRect();
@@ -181,13 +182,28 @@ export function SpotlightWalkthrough({
     window.addEventListener("resize", onScrollOrResize, { passive: true });
     window.addEventListener("scroll", onScrollOrResize, { passive: true, capture: true });
 
+    let observer: ResizeObserver | null = null;
+    const selector = currentStep?.targetSelector;
+    if (selector) {
+      try {
+        const el = document.querySelector<HTMLElement>(selector);
+        if (el && typeof ResizeObserver !== "undefined") {
+          observer = new ResizeObserver(() => updateTargetRect());
+          observer.observe(el);
+        }
+      } catch {
+        // Ignore invalid selectors
+      }
+    }
+
     return () => {
-      clearTimeout(timer);
+      clearTimeout(timer1);
       clearTimeout(timer2);
       window.removeEventListener("resize", onScrollOrResize);
       window.removeEventListener("scroll", onScrollOrResize, { capture: true });
+      observer?.disconnect();
     };
-  }, [open, index, updateTargetRect]);
+  }, [open, index, currentStep, updateTargetRect]);
 
   const handleNext = React.useCallback(() => {
     if (isLast) {
@@ -262,29 +278,28 @@ export function SpotlightWalkthrough({
 
   // Smart Popper Placement Calculation
   const cardPosition = React.useMemo(() => {
-    if (typeof window === "undefined") return { top: 0, left: 0, placement: "bottom" };
+    if (typeof window === "undefined") return { top: 0, left: 0, placement: "bottom", cardWidth: 380 };
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const cardWidth = Math.min(420, vw - 32);
-    const cardHeight = 360; // Estimated card height
+    const cardHeight = 360;
     const gap = 16;
     const isMobile = vw < 640;
 
     if (!spotlightRect.found || isMobile) {
-      // Mobile or fallback: place at bottom or top of viewport safely
       if (spotlightRect.found && spotlightRect.top > vh / 2) {
         return {
           top: 24,
           left: Math.max(16, (vw - cardWidth) / 2),
-          placement: "top",
+          placement: "top" as const,
           cardWidth,
         };
       }
       return {
         top: Math.max(24, vh - cardHeight - 24),
         left: Math.max(16, (vw - cardWidth) / 2),
-        placement: "bottom",
+        placement: "bottom" as const,
         cardWidth,
       };
     }
@@ -294,7 +309,9 @@ export function SpotlightWalkthrough({
     const spaceRight = vw - (spotlightRect.left + spotlightRect.width);
     const spaceLeft = spotlightRect.left;
 
-    let placement = currentStep.preferredPlacement ?? "bottom";
+    const rawPlacement = currentStep.preferredPlacement;
+    let placement: "top" | "bottom" | "left" | "right" =
+      rawPlacement && rawPlacement !== "auto" ? rawPlacement : "bottom";
 
     if (placement === "bottom" && spaceBelow < cardHeight && spaceAbove > spaceBelow) {
       placement = "top";
@@ -323,7 +340,7 @@ export function SpotlightWalkthrough({
       left = spotlightRect.left - cardWidth - gap;
     }
 
-    // Viewport bounds clamping
+    // Viewport boundary containment
     top = Math.max(16, Math.min(vh - cardHeight - 16, top));
     left = Math.max(16, Math.min(vw - cardWidth - 16, left));
 
@@ -344,16 +361,16 @@ export function SpotlightWalkthrough({
       aria-modal="true"
       aria-label={t("walkthrough.trigger")}
     >
-      {/* ── 1. SVG Cutout Mask (Dims entire screen except active UI) ── */}
+      {/* ── 1. Hardware-Accelerated SVG Cutout Mask (Dims entire screen except active UI) ── */}
       <svg
-        className="absolute inset-0 w-full h-full pointer-events-none transition-all duration-300"
+        className="absolute inset-0 w-full h-full pointer-events-none"
         aria-hidden="true"
       >
         <defs>
           <mask id="osler-spotlight-cutout">
             {/* White fills everything (opaque mask) */}
             <rect x="0" y="0" width="100%" height="100%" fill="#ffffff" />
-            {/* Black cuts out the spotlight hole */}
+            {/* Black cuts out the spotlight hole with smooth transition */}
             {spotlightRect.found && (
               <rect
                 x={spotlightRect.left}
@@ -363,6 +380,9 @@ export function SpotlightWalkthrough({
                 rx={radius}
                 ry={radius}
                 fill="#000000"
+                style={{
+                  transition: "x 0.28s cubic-bezier(0.32, 0.72, 0, 1), y 0.28s cubic-bezier(0.32, 0.72, 0, 1), width 0.28s cubic-bezier(0.32, 0.72, 0, 1), height 0.28s cubic-bezier(0.32, 0.72, 0, 1)",
+                }}
               />
             )}
           </mask>
@@ -379,7 +399,7 @@ export function SpotlightWalkthrough({
         />
       </svg>
 
-      {/* ── 2. Click-away background layer to dismiss / step ── */}
+      {/* ── 2. Click-away background layer to advance / dismiss ── */}
       <div
         className="absolute inset-0 z-10 cursor-pointer"
         onClick={handleNext}
@@ -411,7 +431,7 @@ export function SpotlightWalkthrough({
           }}
           title={t("walkthrough.clickToContinue")}
         >
-          {/* Subtle pulsating beacon dot in corner */}
+          {/* Subtle pulsating beacon dot */}
           <span className="absolute -top-1.5 -right-1.5 flex size-3.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
             <span className="relative inline-flex rounded-full size-3.5 bg-primary border-2 border-background" />
