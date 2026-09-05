@@ -7,7 +7,7 @@ import type { EngineType } from "./types";
 import type { AchievementRecord } from "./achievements";
 
 const DB_NAME = "osler-db-v1";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 /** localStorage key holding the bookmark state for library article paths —
  *  `Record<path, { a: addedAt, d?: deletedAt }>` (two-phase LWW set). Each
@@ -102,15 +102,14 @@ export const articleBookmarks = {
 
 /** Every content kind synced to the cloud, mirroring the worker's SYNC_KINDS.
  *  The GET response also carries a `quota` field, which callers must skip when
- *  iterating kinds. */
+ *  iterating kinds. Qbank highlights + written drafts are session-bound — they
+ *  ride inside the synced `sessions` records instead of per-kind docs. */
 export const SYNC_KINDS = [
   "qbank",
   "flashcards",
   "sessions",
   "notes",
-  "highlights",
   "articleHighlights",
-  "writtenDrafts",
   "bookmarks",
   "achievements",
   "settings",
@@ -144,9 +143,6 @@ function openDB(): Promise<IDBDatabase> {
         db.deleteObjectStore("sessions");
       }
       db.createObjectStore("sessions", { keyPath: "key" });
-      if (!db.objectStoreNames.contains("highlights")) {
-        db.createObjectStore("highlights", { keyPath: "key" });
-      }
       // v4: fix articleHighlights store keyPath from "articleId" to "key"
       // (generic helpers store { key, value }; a missing keyPath key throws DataError).
       if (db.objectStoreNames.contains("articleHighlights")) {
@@ -155,9 +151,6 @@ function openDB(): Promise<IDBDatabase> {
       db.createObjectStore("articleHighlights", { keyPath: "key" });
       if (!db.objectStoreNames.contains("stickyNotes")) {
         db.createObjectStore("stickyNotes", { keyPath: "key" });
-      }
-      if (!db.objectStoreNames.contains("writtenDrafts")) {
-        db.createObjectStore("writtenDrafts", { keyPath: "key" });
       }
       if (!db.objectStoreNames.contains("flashcardReviews")) {
         db.createObjectStore("flashcardReviews", { keyPath: "key" });
@@ -175,6 +168,10 @@ function openDB(): Promise<IDBDatabase> {
         notesStore.createIndex("byUpdatedAt", "updatedAt");
         notesStore.createIndex("byPack", "packUid");
       }
+      // v6: retire session-bound stores — written drafts and qbank highlights
+      // live inside the session record (active + saved), never per-pack stores.
+      if (db.objectStoreNames.contains("highlights")) db.deleteObjectStore("highlights");
+      if (db.objectStoreNames.contains("writtenDrafts")) db.deleteObjectStore("writtenDrafts");
     };
 
     req.onsuccess = () => {
@@ -390,30 +387,6 @@ function pruneHighlightTombstones(list: HighlightItem[]): HighlightItem[] {
   return list.filter((h) => isLiveHighlight(h) || (h.deletedAt ?? 0) > cutoff);
 }
 
-/** Deep dict merge (e.g. writtenDrafts: Record<pack, Record<question, draft>>).
- *  Incoming wins per leaf — no timestamps exist on the data. Idempotent. */
-function mergeDictDeep(current: Record<string, any>, incoming: Record<string, any>, depth = 0): { records: Record<string, any>; changed: boolean } {
-  if (depth > 4) return { records: { ...current, ...incoming }, changed: JSON.stringify(current) !== JSON.stringify({ ...current, ...incoming }) };
-  const out: Record<string, any> = { ...current };
-  let changed = false;
-  for (const [k, v] of Object.entries(incoming || {})) {
-    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
-      const sub = mergeDictDeep(out[k], v, depth + 1);
-      if (sub.changed) { out[k] = sub.records; changed = true; }
-    } else if (
-      v && typeof v === "object" && !Array.isArray(v) && typeof (v as any).updatedAt === "number" &&
-      out[k] && typeof out[k] === "object" && !Array.isArray(out[k]) && typeof (out[k] as any).updatedAt === "number"
-    ) {
-      // LWW leaves (writtenDrafts): the newer updatedAt wins, so a cleared
-      // draft's tombstone out-ranks older live drafts arriving from elsewhere.
-      if ((v as any).updatedAt >= (out[k] as any).updatedAt && JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
-    } else {
-      if (JSON.stringify(out[k]) !== JSON.stringify(v)) { out[k] = v; changed = true; }
-    }
-  }
-  return { records: out, changed };
-}
-
 /* ── Types ──────────────────────────────────────────────────────────── */
 
 export interface QuestionRecord {
@@ -510,9 +483,8 @@ export interface WrittenDraft {
   evaluation?: WrittenEvaluation | null;
   childAnswers?: string[];
   childEvaluations?: (WrittenEvaluation | null)[];
-  /** LWW stamp for sync (mergeDictDeep ranks leaves by it) and tombstone
-   *  marker: a cleared draft is `{ deletedAt, updatedAt }` with content
-   *  dropped, so the clearing out-ranks older live drafts elsewhere. */
+  /** Legacy fields from the retired per-pack drafts store. Session-bound
+   *  drafts live only inside the session record now; readers ignore them. */
   updatedAt?: number;
   deletedAt?: number;
 }
@@ -905,30 +877,11 @@ export const storage = {
       for (const n of notes.listSync()) noteRecords[n.id] = n;
       snapshot.notes = { records: noteRecords };
     }
-    if (shouldExport("highlights")) {
-      const highlightRecords: Record<string, unknown> = {};
-      for (const [k, v] of memoryCache) {
-        if (k.startsWith("highlights:")) {
-          const key = k.replace("highlights:", "");
-          if (Array.isArray(v)) highlightRecords[key] = v;
-        }
-      }
-      snapshot.highlights = { records: highlightRecords };
-    }
     if (shouldExport("articleHighlights")) {
       snapshot.articleHighlights = { records: storage.exportArticleHighlights() as unknown as Record<string, unknown> };
     }
     if (shouldExport("bookmarks")) {
       snapshot.bookmarks = { records: readBookmarkState() as unknown as Record<string, unknown> };
-    }
-    if (shouldExport("writtenDrafts")) {
-      const writtenDraftRecords: Record<string, unknown> = {};
-      for (const [k, v] of memoryCache) {
-        if (k.startsWith("writtenDrafts:")) {
-          writtenDraftRecords[k.replace("writtenDrafts:", "")] = v;
-        }
-      }
-      snapshot.writtenDrafts = { records: writtenDraftRecords };
     }
     if (shouldExport("achievements")) {
       snapshot.achievements = { records: achievements.getAll() as unknown as Record<string, unknown> };
@@ -985,7 +938,7 @@ export const storage = {
       }
     }
 
-    for (const kind of ["highlights", "articleHighlights"] as const) {
+    for (const kind of ["articleHighlights"] as const) {
       const docs = snapshot[kind]?.records;
       if (!docs || typeof docs !== "object") continue;
       let changed = false;
@@ -1001,7 +954,7 @@ export const storage = {
           await idbPut(kind, key, merged);
         }
       }
-      if (changed) dispatchChange(kind === "highlights" ? "osler-highlights-changed" : "osler-article-highlights-changed");
+      if (changed) dispatchChange("osler-article-highlights-changed");
     }
 
     const bookmarkRecords = snapshot.bookmarks?.records;
@@ -1009,23 +962,6 @@ export const storage = {
       if (articleBookmarks.merge(bookmarkRecords as Record<string, BookmarkEntry>)) {
         window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
       }
-    }
-
-    // writtenDrafts: deep-dict merge per pack per question, incoming-wins at leaf
-    const wdRecords = snapshot.writtenDrafts?.records;
-    if (wdRecords && typeof wdRecords === "object") {
-      let changed = false;
-      for (const [packUid, incomingPack] of Object.entries(wdRecords)) {
-        if (!incomingPack || typeof incomingPack !== "object" || Array.isArray(incomingPack)) continue;
-        const current = getCached<Record<string, any>>("writtenDrafts", packUid) ?? {};
-        const merged = mergeDictDeep(current, incomingPack as Record<string, any>);
-        if (merged.changed) {
-          changed = true;
-          setCached("writtenDrafts", packUid, merged.records);
-          await idbPut("writtenDrafts", packUid, merged.records);
-        }
-      }
-      if (changed) dispatchChange("osler-written-drafts-changed");
     }
 
     // achievements: union by id, newest unlockedAt wins.
@@ -1303,80 +1239,6 @@ export const sessions = {
   },
 };
 
-/* ── Highlights (per question in a pack) ────────────────────────────── */
-
-function highlightsKey(packUid: string, questionIdx?: number): string {
-  return questionIdx !== undefined
-    ? `${packUid}:${questionIdx}`
-    : packUid;
-}
-
-export const highlights = {
-  get(packUid: string, questionIdx: number): HighlightItem[] {
-    const key = highlightsKey(packUid, questionIdx);
-    return (getCached<HighlightItem[]>("highlights", key) ?? []).filter(isLiveHighlight);
-  },
-
-  getAll(packUid: string): Record<number, HighlightItem[]> {
-    const result: Record<number, HighlightItem[]> = {};
-    const prefix = `highlights:${packUid}:`;
-    for (const [k, v] of memoryCache) {
-      if (k.startsWith(prefix)) {
-        const idx = parseInt(k.replace(prefix, ""), 10);
-        if (!isNaN(idx)) result[idx] = (v as HighlightItem[]).filter(isLiveHighlight);
-      }
-    }
-    return result;
-  },
-
-  add(packUid: string, questionIdx: number, item: HighlightItem) {
-    const existing = highlights.get(packUid, questionIdx);
-    const updated = [...existing, item];
-    const key = highlightsKey(packUid, questionIdx);
-    setCached("highlights", key, updated);
-    idbPut("highlights", key, updated).catch(console.warn);
-    dispatchChange("osler-highlights-changed");
-  },
-
-  remove(packUid: string, questionIdx: number, id: string) {
-    const key = highlightsKey(packUid, questionIdx);
-    const current = getCached<HighlightItem[]>("highlights", key) ?? [];
-    // Tombstone instead of removing: the union merge on every replica (and
-    // the worker's) is monotonic, so a plain removal would be resurrected by
-    // the next pull from a device that still holds the live item.
-    const updated = current.map((h) => (h.id === id && isLiveHighlight(h) ? tombstoneHighlight(h.id) : h));
-    if (updated.some((h, i) => h !== current[i])) {
-      setCached("highlights", key, updated);
-      idbPut("highlights", key, updated).catch(console.warn);
-      dispatchChange("osler-highlights-changed");
-    }
-  },
-
-  clear(packUid: string, questionIdx: number) {
-    const key = highlightsKey(packUid, questionIdx);
-    const current = getCached<HighlightItem[]>("highlights", key) ?? [];
-    const updated = pruneHighlightTombstones(current.map((h) => (isLiveHighlight(h) ? tombstoneHighlight(h.id) : h)));
-    setCached("highlights", key, updated);
-    idbPut("highlights", key, updated).catch(console.warn);
-    dispatchChange("osler-highlights-changed");
-  },
-
-  clearAll(packUid: string) {
-    const prefix = `highlights:${packUid}:`;
-    const keys: string[] = [];
-    for (const [k, v] of memoryCache) {
-      if (k.startsWith(prefix) && Array.isArray(v) && (v as HighlightItem[]).some(isLiveHighlight)) keys.push(k);
-    }
-    for (const k of keys) {
-      const rawKey = k.replace("highlights:", "");
-      const updated = pruneHighlightTombstones((memoryCache.get(k) as HighlightItem[]).map((h) => (isLiveHighlight(h) ? tombstoneHighlight(h.id) : h)));
-      setCached("highlights", rawKey, updated);
-      idbPut("highlights", rawKey, updated).catch(console.warn);
-    }
-    if (keys.length) dispatchChange("osler-highlights-changed");
-  },
-};
-
 /* ── Article Highlights ─────────────────────────────────────────────── */
 
 export const articleHighlights = {
@@ -1472,44 +1334,6 @@ export const stickyNotes = {
       memoryCache.delete(k);
       idbDelete("stickyNotes", rawKey).catch(console.warn);
     }
-  },
-};
-
-/* ── Written Drafts (per pack) ──────────────────────────────────────── */
-
-function writtenDraftsKey(packUid: string): string {
-  return packUid;
-}
-
-export const writtenDrafts = {
-  get(packUid: string): Record<string, WrittenDraft> {
-    const drafts = getCached<Record<string, WrittenDraft>>("writtenDrafts", writtenDraftsKey(packUid)) ?? {};
-    return Object.fromEntries(Object.entries(drafts).filter(([, d]) => d && !d.deletedAt));
-  },
-
-  save(packUid: string, drafts: Record<string, WrittenDraft>) {
-    const key = writtenDraftsKey(packUid);
-    // Stamp every leaf for LWW sync — merges rank leaves by updatedAt, so a
-    // cleared draft's tombstone loses to a subsequently re-saved draft.
-    const now = Date.now();
-    const stamped = Object.fromEntries(
-      Object.entries(drafts).map(([qid, d]) => [qid, d && !d.deletedAt ? { ...d, updatedAt: now } : d]),
-    );
-    setCached("writtenDrafts", key, stamped);
-    idbPut("writtenDrafts", key, stamped).catch(console.warn);
-    dispatchChange("osler-written-drafts-changed");
-  },
-
-  clear(packUid: string) {
-    const key = writtenDraftsKey(packUid);
-    const current = getCached<Record<string, WrittenDraft>>("writtenDrafts", key) ?? {};
-    const now = Date.now();
-    const tombstoned = Object.fromEntries(
-      Object.entries(current).map(([qid, d]) => [qid, d && !d.deletedAt ? { updatedAt: now, deletedAt: now } as WrittenDraft : d]),
-    );
-    setCached("writtenDrafts", key, tombstoned);
-    idbPut("writtenDrafts", key, tombstoned).catch(console.warn);
-    dispatchChange("osler-written-drafts-changed");
   },
 };
 

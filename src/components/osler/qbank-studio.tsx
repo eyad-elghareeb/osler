@@ -8,7 +8,7 @@ import { loadContentByUid, loadNodeByUid, nodeUrls } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import { contentToQuestions as poolContentToQuestions, filterPoolByProgress, filterPoolByChapters, filterPoolByQuestionType, filterPoolByDifficulty, pickQuestions, type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
-import { storage, sessions, writtenDrafts, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
+import { storage, sessions, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
 import { listAllArticles } from "@/lib/osler/articles";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -600,6 +600,8 @@ export function QBankStudio({
           meta.savedFlagged = savedFlagged;
           meta.savedRatings = s.ratings;
           meta.savedQuestionTimes = s.questionTimes;
+          // Session-bound highlights replay with the session they belong to.
+          meta.savedHighlights = s.highlights;
         } else {
           meta.onlyMode = "wrong";
           meta.savedDrafts = s.writtenDrafts;
@@ -720,9 +722,6 @@ export function QBankStudio({
       // in-progress progress. Stale and review sessions are skipped.
       await archiveDisplacedActive();
 
-      // Load existing written drafts
-      const drafts = writtenDrafts.get(item.uid);
-
       setSession({
         itemId: item.uid,
         itemTitle: item.title,
@@ -739,7 +738,7 @@ export function QBankStudio({
         timeEndsAt: sessionMode === "timed" ? Date.now() + totalTime * 1000 : undefined,
         examPaused: false,
         sessionId,
-        writtenDrafts: drafts,
+        writtenDrafts: {},
         rubricState: {},
         ratings: {},
         questionTimes: {},
@@ -842,9 +841,6 @@ export function QBankStudio({
       // P3-1: don't persist review sessions — they're read-only replays.
       if (!s.isReview) {
         saveSession(completed);
-        if (!s.itemId.startsWith("custom-")) {
-          writtenDrafts.clear(s.itemId);
-        }
       }
       return completed;
     });
@@ -1155,13 +1151,9 @@ export function QBankStudio({
             setSession((s) => {
               if (!s) return s;
               const drafts = { ...s.writtenDrafts, [qid]: draft };
-              // Only persist to IndexedDB for single-pack sessions (restorable
-              // via writtenDrafts.get). Custom sessions don't have an IndexedDB
-              // restore path — their drafts are passed via SavedSession.writtenDrafts.
-              if (!s.itemId.startsWith("custom-")) {
-                writtenDrafts.save(s.itemId, drafts);
-              }
-              // Auto-reveal when evaluation is set (shows the right 45% column)
+              // Session-bound: drafts live only inside the session record —
+              // the active-session autosave persists them locally (resume
+              // keeps them), and a saved session carries them into review.
               const next: SessionData = { ...s, writtenDrafts: drafts };
               if (draft.evaluation && !next.revealed[next.current]) {
                 next.revealed = { ...next.revealed, [next.current]: true };

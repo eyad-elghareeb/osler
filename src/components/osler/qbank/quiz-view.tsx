@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, Graduati
 import { ENGINE_META } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import type { ContentTreeNode } from "@/lib/osler/types";
-import { sessions, writtenDrafts, type HighlightItem, type WrittenDraft } from "@/lib/osler/storage";
+import { sessions, type HighlightItem, type WrittenDraft } from "@/lib/osler/storage";
 import type { ArticleMeta } from "@/lib/osler/articles";
 import { HIGHLIGHT_COLOR_KEYS, ERASER_TOOL } from "@/lib/osler/highlight-palette";
 import { cn } from "@/lib/utils";

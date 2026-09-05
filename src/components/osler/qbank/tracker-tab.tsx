@@ -8,7 +8,7 @@ import { loadContentByUid, loadNodeByUid, ENGINE_META } from "@/lib/osler/conten
 import { toast } from "@/hooks/use-toast";
 import { contentToQuestions as poolContentToQuestions, filterPoolByProgress, type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
-import { storage, sessions, writtenDrafts, type SavedSession, type WrittenDraft, type QuestionRecord } from "@/lib/osler/storage";
+import { storage, sessions, type SavedSession, type WrittenDraft, type HighlightItem, type QuestionRecord } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -123,6 +123,7 @@ export function TrackerTab({
       savedFlagged?: Record<number, boolean>;
       savedRatings?: Record<string, "easy" | "hard" | "unknown">;
       savedQuestionTimes?: Record<string, number>;
+      savedHighlights?: Record<number, HighlightItem[]>;
     }
   ) => void;
   /** Lazily fetch a pack's content JSON when it's not yet cached.
@@ -660,6 +661,8 @@ export function TrackerTab({
           savedFlagged,
           savedRatings: s.ratings,
           savedQuestionTimes: s.questionTimes,
+          // Session-bound highlights replay with the session they belong to.
+          savedHighlights: s.highlights,
         });
       } finally {
         setBusy(null);

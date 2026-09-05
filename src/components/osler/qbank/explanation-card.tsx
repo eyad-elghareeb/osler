@@ -4,7 +4,7 @@ import * as React from "react";
 import { motion, animate } from "framer-motion";
 import { Check, X, Sparkles } from "lucide-react";
 import type { ContentTreeNode } from "@/lib/osler/types";
-import { highlights, type HighlightItem } from "@/lib/osler/storage";
+import { type HighlightItem } from "@/lib/osler/storage";
 import { Badge } from "@/components/ui/badge";
 import { HighlightedContent } from "@/components/osler/highlighted-content";
 import { useI18n } from "@/components/osler/i18n-provider";

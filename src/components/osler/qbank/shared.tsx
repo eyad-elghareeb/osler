@@ -4,7 +4,7 @@ import * as React from "react";
 import { ClipboardCheck, Check, Pause, Sparkles, BookOpen, PenTool, Activity, Keyboard, Layers, Video as VideoIcon } from "lucide-react";
 import { contentToQuestions as poolContentToQuestions, countQuestions as poolCountQuestions, buildQuestionPool, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, ContentImage, EngineType, ContentTreeNode } from "@/lib/osler/types";
-import { sessions, writtenDrafts, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
+import { sessions, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
 import { renderRichText, resolveContentAsset } from "@/lib/osler/richtext";
 import { HIGHLIGHT_COLOR_KEYS } from "@/lib/osler/highlight-palette";
 import { cn } from "@/lib/utils";
@@ -384,10 +384,16 @@ export function contentToQuestions(
 export async function archiveDisplacedActive() {
   try {
     const active = (await sessions.getActiveFromDb()) as SessionData | null;
+    // A typed written draft counts as progress — an essay in flight is work
+    // worth preserving when another session displaces this one.
+    const hasDraftProgress = Object.values(active?.writtenDrafts ?? {}).some(
+      (d) => !!d && !d.deletedAt && !!d.text.trim()
+    );
     const hasProgress =
       Object.keys(active?.answers ?? {}).some(
         (k) => active?.answers[+k] !== undefined
       ) ||
+      hasDraftProgress ||
       (active?.current ?? 0) > 0 ||
       Object.values(active?.flagged ?? {}).some(Boolean);
     if (
