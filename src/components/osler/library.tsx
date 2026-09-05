@@ -24,6 +24,7 @@ import {
   MessageSquareWarning,
   Share2,
   Link2,
+  Compass,
 } from "lucide-react";
 import {
   loadArticleTree,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/osler/articles";
 import { contentFileUrl } from "@/lib/osler/content-url";
 import { articleBookmarks } from "@/lib/osler/storage";
+import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -334,6 +336,20 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
 
   const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+
+  // First-time interactive tour for new users
+  React.useEffect(() => {
+    if (!isWalkthroughCompleted("library")) {
+      setWalkthroughOpen(true);
+    }
+  }, []);
+
+  const onOpenWalkthrough = React.useCallback(() => {
+    haptic("selection");
+    setWalkthroughOpen(true);
+  }, []);
+
   const reportContext: TicketContext | undefined = activeArticle
     ? { articleTitle: activeArticle.title, articleFile: activeFile ?? activeArticle.file }
     : undefined;
@@ -539,6 +555,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           activeFile={activeFile}
           onOpenArticle={openArticleByFile}
           onToggleBookmark={toggleBookmark}
+          onOpenWalkthrough={onOpenWalkthrough}
         />
       }
       subpage={
@@ -559,6 +576,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             onExportPdf={() => setPdfDialogOpen(true)}
             onReport={onReportProblem}
             onShare={handleShareArticle}
+            onOpenWalkthrough={onOpenWalkthrough}
           />
         ) : null
       }
@@ -588,6 +606,11 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
         />
         {notesPanel}
         {reportDialog}
+        <WalkthroughDialog
+          tour="library"
+          open={walkthroughOpen}
+          onOpenChange={setWalkthroughOpen}
+        />
       </>
     );
   }
@@ -628,6 +651,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                 bookmarkedArticles={bookmarkedArticles}
                 fullScreen={!activeFile}
                 onClose={activeFile ? () => setSidebarOpen(false) : undefined}
+                onOpenWalkthrough={onOpenWalkthrough}
               />
             </motion.div>
           </motion.div>
@@ -646,6 +670,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           sidebarTab={sidebarTab}
           onTabChange={setSidebarTab}
           bookmarkedArticles={bookmarkedArticles}
+          onOpenWalkthrough={onOpenWalkthrough}
         />
       </aside>
 
@@ -664,6 +689,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               onReport={onReportProblem}
               onShare={handleShareArticle}
               onCopyLink={handleCopyArticleLink}
+              onOpenWalkthrough={onOpenWalkthrough}
             />
             <div className="flex-1 overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0 relative flex flex-col">
               {loading ? (
@@ -745,6 +771,11 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
       />
       {notesPanel}
       {reportDialog}
+      <WalkthroughDialog
+        tour="library"
+        open={walkthroughOpen}
+        onOpenChange={setWalkthroughOpen}
+      />
     </motion.div>
   );
 }
@@ -758,6 +789,7 @@ function MobileHub({
   activeFile,
   onOpenArticle,
   onToggleBookmark,
+  onOpenWalkthrough,
 }: {
   allArticles: ArticleMeta[];
   bookmarks: Set<string>;
@@ -765,6 +797,7 @@ function MobileHub({
   activeFile: string | null;
   onOpenArticle: (file: string) => void;
   onToggleBookmark: (file: string) => void;
+  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
@@ -809,6 +842,15 @@ function MobileHub({
           >
             <BookmarkCheck className="size-3 inline me-1 -mt-0.5" />
             {t("library.bookmarked")} ({bookmarkedArticles.length})
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={onOpenWalkthrough}
+            className="size-8 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 shadow-xs"
+            title={t("walkthrough.trigger")}
+            aria-label={t("walkthrough.trigger")}
+          >
+            <Compass className="size-4 text-primary" />
           </button>
         </div>
       </div>
@@ -931,6 +973,7 @@ function MobileReader({
   onExportPdf,
   onReport,
   onShare,
+  onOpenWalkthrough,
 }: {
   article: Article;
   articlePath: string;
@@ -947,6 +990,7 @@ function MobileReader({
   onExportPdf: () => void;
   onReport: () => void;
   onShare: () => void;
+  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
   // NOTE: The swipe-to-go-back gesture is now handled by the parent
@@ -1121,6 +1165,10 @@ function MobileReader({
                 <MessageSquareWarning className="size-4" />
               </button>
 
+              <button onClick={onOpenWalkthrough} className={toolbarBtn} title={t("walkthrough.trigger")} aria-label={t("walkthrough.trigger")}>
+                <Compass className="size-4 text-primary" />
+              </button>
+
               <button
                 onClick={onToggleBookmark}
                 className={cn(
@@ -1158,6 +1206,7 @@ function SidebarContent({
   bookmarkedArticles,
   fullScreen,
   onClose,
+  onOpenWalkthrough,
 }: {
   tree: ContentTreeNode[];
   articleCount: number;
@@ -1169,11 +1218,12 @@ function SidebarContent({
   sidebarTab: SidebarTab;
   onTabChange: (t: SidebarTab) => void;
   bookmarkedArticles: ArticleMeta[];
-    fullScreen?: boolean;
-    onClose?: () => void;
-  }) {
-    const { t } = useI18n();
-    return (
+  fullScreen?: boolean;
+  onClose?: () => void;
+  onOpenWalkthrough: () => void;
+}) {
+  const { t } = useI18n();
+  return (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
         {fullScreen && (
@@ -1219,6 +1269,14 @@ function SidebarContent({
               title={t("library.bookmarks")}
             >
               <Bookmark className="size-3.5" />
+            </button>
+            <button
+              onClick={onOpenWalkthrough}
+              className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-primary transition-colors"
+              title={t("walkthrough.trigger")}
+              aria-label={t("walkthrough.trigger")}
+            >
+              <Compass className="size-3.5" />
             </button>
           </div>
         </div>
@@ -1494,6 +1552,7 @@ function ArticleHeader({
   onReport,
   onShare,
   onCopyLink,
+  onOpenWalkthrough,
 }: {
   article: Article;
   isBookmarked: boolean;
@@ -1506,6 +1565,7 @@ function ArticleHeader({
   onReport: () => void;
   onShare: () => void;
   onCopyLink: () => void;
+  onOpenWalkthrough: () => void;
 }) {
   const { t } = useI18n();
 
@@ -1601,6 +1661,15 @@ function ArticleHeader({
           aria-label={t("support.reportProblem")}
         >
           <MessageSquareWarning className="size-4" />
+        </button>
+
+        <button
+          onClick={onOpenWalkthrough}
+          className="osler-icon-btn size-8"
+          title={t("walkthrough.trigger")}
+          aria-label={t("walkthrough.trigger")}
+        >
+          <Compass className="size-4 text-primary" />
         </button>
 
         <button

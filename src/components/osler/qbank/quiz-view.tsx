@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
-import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning, Compass } from "lucide-react";
 import { ENGINE_META } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import type { ContentTreeNode } from "@/lib/osler/types";
@@ -36,6 +36,7 @@ import type { QuestionChoiceStats } from "@/lib/osler/question-stats";
 import { WrittenEngineView, WrittenEvaluationPanel } from "./written-engine";
 import { OsceEngineView } from "./osce-engine-view";
 import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
+import { WalkthroughDialog } from "@/components/osler/walkthrough";
 
 
 
@@ -290,6 +291,7 @@ export function QuizView({
   const [articleSearchOpen, setArticleSearchOpen] = React.useState(false);
   const [toolsOpen, setToolsOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
   const isMobile = useIsMobile();
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
@@ -1690,6 +1692,7 @@ export function QuizView({
                     </Popover>
                   )}
                   <ToolButton onClick={() => setShowShortcuts((s) => !s)} icon={Keyboard} active={showShortcuts} title={t("qbank.session.keyboardShortcuts")} />
+                  <ToolButton onClick={() => { haptic("selection"); setWalkthroughOpen(true); }} icon={Compass} active={walkthroughOpen} title={t("walkthrough.trigger")} />
                 </div>
 
                 <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
@@ -1980,6 +1983,7 @@ export function QuizView({
       </AnimatePresence>
 
       <ReportTicketDialog open={reportOpen} onOpenChange={setReportOpen} source="qbank" context={reportContext} />
+      <WalkthroughDialog tour="qbank" open={walkthroughOpen} onOpenChange={setWalkthroughOpen} />
     </div>
   );
 }

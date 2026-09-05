@@ -2,17 +2,20 @@
 
 import * as React from "react";
 import { motion, animate } from "framer-motion";
-import { ClipboardCheck, Plus, Activity, Grid3x3 } from "lucide-react";
+import { ClipboardCheck, Plus, Activity, Grid3x3, Compass } from "lucide-react";
 import { loadCategoryTree, getCachedCategoryTree, loadContentByUid, flattenTree } from "@/lib/osler/content";
 import { type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { storage, sessions, type SavedSession, type WrittenDraft } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { PageHeader } from "@/components/osler/ui-primitives";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
+import { haptic } from "@/lib/osler/native";
+import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
 import { TestMode, HomeTab, PackEntry } from "./shared";
 import { ContentTab } from "./content-tab";
 import { CreateTestTab } from "./create-test-tab";
@@ -88,6 +91,14 @@ export function HomeView({
   const [savedSessions, setSavedSessions] = React.useState<SavedSession[]>([]);
   const [exportDialogOpen, setExportDialogOpen] = React.useState(false);
   const [contextMenuNode, setContextMenuNode] = React.useState<ContentTreeNode | null>(null);
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+
+  // First-time interactive tour for new users
+  React.useEffect(() => {
+    if (!isWalkthroughCompleted("qbank")) {
+      setWalkthroughOpen(true);
+    }
+  }, []);
 
   // Pack export moved into the app-wide context menu: the menu sees
   // [data-ctx-export] on a pack/folder card and asks for the dialog via
@@ -192,6 +203,21 @@ export function HomeView({
               inlineIcon={ClipboardCheck}
               title={t("qbank.home.title")}
               subtitle={t("qbank.home.subtitle")}
+              actions={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    haptic("selection");
+                    setWalkthroughOpen(true);
+                  }}
+                  className="h-8 gap-1.5 text-xs rounded-xl"
+                  title={t("walkthrough.trigger")}
+                >
+                  <Compass className="size-3.5 text-primary" />
+                  <span className="hidden sm:inline">{t("walkthrough.trigger")}</span>
+                </Button>
+              }
             />
           </div>
         </motion.div>
@@ -303,6 +329,13 @@ export function HomeView({
           onLoadPack={loadPack}
         />
       )}
+
+      {/* Interactive Walkthrough */}
+      <WalkthroughDialog
+        tour="qbank"
+        open={walkthroughOpen}
+        onOpenChange={setWalkthroughOpen}
+      />
     </div>
   );
 }
