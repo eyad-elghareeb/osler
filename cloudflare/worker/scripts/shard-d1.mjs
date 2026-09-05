@@ -87,7 +87,9 @@ if (config.includes(`database_id = "REPLACE_WITH_D1_DATABASE_ID"`)) {
 const beginAt = config.indexOf(BEGIN);
 const endAt = config.indexOf(END);
 if (beginAt < 0 || endAt < 0) throw new Error("wrangler.toml shard markers not found — restore the template block from git");
-const activeBlocks = SHARDS.map((s) => `[[d1_databases]]
+const activeBlocks = `# Account-specific database IDs — kept local, do NOT commit.
+# Re-run \`npm run db:shard\` to re-copy data (--force) or prune the primary copies (--prune).
+` + SHARDS.map((s) => `[[d1_databases]]
 binding = "${s.binding}"
 database_name = "${s.database}"
 database_id = "${ids[s.database]}"

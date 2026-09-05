@@ -252,11 +252,10 @@ npm run db:list              # list applied/pending migrations
 
 Always run `npm run db:migrate:local` first when developing new migrations to catch syntax errors before touching production.
 
-If the optional D1 shards are enabled (`DB_SYNC` / `DB_TELEMETRY` bindings, see the worker README's "D1 sharding"), also apply their own migration dirs after changing `migrations-sync/` or `migrations-telemetry/`:
+If the optional D1 shards are enabled (`DB_SYNC` / `DB_TELEMETRY` bindings, see the worker README's "D1 sharding"), apply their own migration dirs after changing `migrations-sync/` or `migrations-telemetry/`:
 
 ```bash
-npx wrangler d1 migrations apply osler-sync --remote
-npx wrangler d1 migrations apply osler-telemetry --remote
+npm run db:migrate:shards     # applies osler-sync + osler-telemetry (remote)
 ```
 
 > **Note:** the schema used to live in 25 migration files (`0001_initial.sql`

@@ -84,7 +84,7 @@ npm run db:shard -- --prune   # after verifying the app, drop the copied rows
                               # from the primary database
 ```
 
-The ID changes to wrangler.toml stay local (git keeps placeholders, same as the primary database ID). Shard schema lives in `migrations-sync/` and `migrations-telemetry/`; future changes there are applied with `npx wrangler d1 migrations apply osler-sync --remote` (and `osler-telemetry`).
+The ID changes to wrangler.toml stay local (git keeps placeholders, same as the primary database ID). Shard schema lives in `migrations-sync/` and `migrations-telemetry/`; future changes there are applied with `npm run db:migrate:shards` (or `npx wrangler d1 migrations apply osler-sync --local` for `wrangler dev`).
 
 ## Scripts
 
@@ -97,6 +97,7 @@ The ID changes to wrangler.toml stay local (git keeps placeholders, same as the 
 | `npm run db:migrate:local` | Apply pending D1 migrations to the local dev database. |
 | `npm run db:list` | List applied and pending migrations. |
 | `npm run db:shard` | One-time optional D1 shard setup: create + wire + migrate + copy + verify (see "D1 sharding"). |
+| `npm run db:migrate:shards` | Apply pending migrations to the optional sync + telemetry shards (after editing `migrations-sync/` / `migrations-telemetry/`). |
 | `npm run tail` | Tail live logs from the deployed Worker (`wrangler tail`). |
 | `npm run secret:list` | List configured Worker secrets (names only, not values). |
 

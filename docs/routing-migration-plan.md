@@ -340,7 +340,7 @@ the implementation stays within them:
 | Resource | Free tier limit | How we stay within |
 |---|---|---|
 | Worker requests | 100K/day | Public content cached at edge (`cache-control: public, max-age=86400` for binary, `max-age=60` for JSON). Client-side Serwist caching for offline. |
-| D1 rows written | 100K/day | Analytics capped at 50K/day global + 12 batches/min/IP. Sync writes are merged into single progress_documents rows. Cron prunes old sessions, audit logs (>1yr), analytics (>30d). |
+| D1 rows written | 100K/day (account-wide) | Analytics capped at 10K/day global + 12 batches/min/IP. Sync writes are merged into single progress_documents rows. Cron prunes old sessions, audit logs (>1yr), analytics (>30d). |
 | D1 rows read | 5M/day | Admin endpoints use pagination. Public content reads come from R2, not D1. |
 | R2 storage | 10 GB | Content is the only large storage; expected to be well under 10 GB for a single course. |
 | R2 Class A ops | 1M/month | Writes only happen on admin publish / config update. Reads are cached. |

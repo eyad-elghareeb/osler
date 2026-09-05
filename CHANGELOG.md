@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Optional D1 sharding (core / sync / telemetry)** — `npm run db:shard` splits `progress_documents` (sync shard) and `analytics_events` + choice stats + their daily counters (telemetry shard) into their own free-tier databases, each with its own 500 MB ceiling; row read/write quotas stay account-wide. Queries route per shard with graceful single-database fallback, and `GET /v1/admin/analytics/cloudflare-limits` now returns `d1Shards`, `d1MeasuredBytes` (real summed file size), and a per-table `shard` label rendered in the quota panel.
 - **Audit log viewer** — new `/admin/audit` page (admin only) with paginated audit log (50 entries/page), action-type filter, and actor display. Backed by new `GET /v1/admin/audit?page=&action=` endpoint.
 - **Session management** — admins can now view active sessions per user (`GET /v1/admin/users/:id/sessions`) and revoke all sessions for a user (`DELETE /v1/admin/users/:id/sessions`). User detail endpoint now returns `activeSessionCount` and recent content (up to 25 items).
 - **Content title search** — `GET /v1/admin/content?status=&q=` now supports an optional title search parameter. LIKE wildcards (`%`, `_`) are escaped in user-supplied search terms.
@@ -27,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **D1 storage limit corrected to 500 MB/database** — the quota panel and docs claimed a 5 GB ceiling; the D1 free tier allows 500 MB per database and, unlike the read/write row quotas, the storage ceiling does not pool across databases. With `D1 Read` added to the analytics token, the storage gauge shows real measured file size (REST `file_size` sum); otherwise it keeps the per-table estimates.
+- **Analytics daily write cap tightened to 10k rows/day** (was 25k) — sized for ~200 DAU with hours of headroom, reserving most of the account-wide 100k/day write budget for auth, sync, and content. Retention stays at 30 days (the admin overview derives "this month" metrics from `analytics_events`), and the safety-throttles panel rows render cap figures from the constants instead of hardcoded strings.
 - **Password policy** — now requires at least 2 character classes (lowercase / uppercase / digit / symbol) in addition to the existing minimum 10 characters. Enforced on registration, password change, password reset, and admin-initiated reset.
 - **Admin user deletion reassigns content** — `DELETE /v1/admin/users/:id` no longer cascade-deletes the user's `content_objects`. Instead, ownership is reassigned to the acting admin so published content stays live. Self-service `DELETE /v1/account` still cascades.
 - **Admin self-demotion blocked** — `PATCH /v1/admin/users/:id` now returns 400 if you attempt to demote yourself. Ask another admin to demote you.
