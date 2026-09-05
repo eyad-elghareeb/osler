@@ -25,8 +25,9 @@
 //
 // Safe to run while an OLD worker is still deployed: it only adds rows to
 // the new shards and fills the mapping column — the legacy database keeps
-// serving the old worker until cutover. Idempotent up to the copy step;
-// re-copying over populated shards needs --force.
+// serving the old worker until cutover. Fully idempotent: a user whose
+// shard already holds at least their legacy row count is skipped (the new
+// worker is authoritative there); --force re-copies those users anyway.
 //
 // Usage (from cloudflare/worker):  npm run db:shard [-- --prune] [-- --force]
 
@@ -194,25 +195,33 @@ try {
     if (legacyTotal > 0) {
       const rows = d1Json(wrangler(["d1", "execute", legacyName, "--remote", "--json", "--command",
         "SELECT user_id, kind, payload, compressed, raw_bytes, updated_at FROM progress_documents"]))[0]?.results ?? [];
-      const byShard = new Map();
+      const legacyByUser = new Map();
       for (const row of rows) {
-        const shard = userShards.get(row.user_id) ?? syncShardForUserId(row.user_id);
-        if (!byShard.has(shard)) byShard.set(shard, []);
-        byShard.get(shard).push(row);
+        if (!legacyByUser.has(row.user_id)) legacyByUser.set(row.user_id, []);
+        legacyByUser.get(row.user_id).push(row);
       }
-      for (const [shard, userRows] of byShard) {
+      let moved = 0, skipped = 0;
+      for (const [userId, userRows] of legacyByUser) {
+        const shard = userShards.get(userId) ?? syncShardForUserId(userId);
         const target = SHARDS[shard - 1].database;
-        if (force) {
+        // A shard already holding >= the legacy count for this user is
+        // authoritative (the new worker writes there after cutover, and the
+        // first migration pass copied these rows) — never re-insert blindly,
+        // or the re-run dies on the (user_id, kind) primary key.
+        const got = countOf(target, "progress_documents", ` WHERE user_id = ${sqlString(userId)}`);
+        if (got >= userRows.length && !force) { skipped += userRows.length; continue; }
+        if (got > 0 || force) {
           wrangler(["d1", "execute", target, "--remote", "--yes", "--command",
-            `DELETE FROM progress_documents WHERE user_id IN (${[...new Set(userRows.map((r) => sqlString(r.user_id)))].join(", ")})`]);
+            `DELETE FROM progress_documents WHERE user_id = ${sqlString(userId)}`]);
         }
-        const dumpFile = join(tmpDir, `shard-${shard}.sql`);
+        const dumpFile = join(tmpDir, `user-${shard}-${sqlString(userId).replace(/[^a-zA-Z0-9]/g, "").slice(0, 20)}.sql`);
         writeFileSync(dumpFile, userRows.map((r) =>
           `INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (${sqlString(r.user_id)}, ${sqlString(r.kind)}, ${sqlString(r.payload)}, ${Number(r.compressed) || 0}, ${Number(r.raw_bytes) || 0}, ${Number(r.updated_at) || 0});`,
         ).join("\n") + "\n");
-        console.log(`   moving ${userRows.length} row(s) → ${target}…`);
         wrangler(["d1", "execute", target, "--remote", "--yes", "--file", dumpFile]);
+        moved += userRows.length;
       }
+      console.log(`   moved ${moved} row(s) into their shards, skipped ${skipped} (already migrated or owned by the new worker)`);
     }
   }
 } finally {
