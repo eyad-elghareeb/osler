@@ -321,9 +321,14 @@ export function HomeView({
         tour="qbank-hub"
         open={walkthroughOpen}
         onOpenChange={setWalkthroughOpen}
-        onAction={(tabId) => {
-          if (tabId === "content" || tabId === "create" || tabId === "tracker") {
-            onHomeTabChange(tabId);
+        onAction={(action) => {
+          if (action === "content" || action === "create" || action === "tracker") {
+            onHomeTabChange(action);
+          } else if (action === "open-launch-dialog") {
+            // Tour reached the launch-dialog steps without a pack click —
+            // open the first pack so the dialog section can play out.
+            const first = data?.items[0]?.node;
+            if (first) onOpenPack?.(first);
           }
         }}
       />
