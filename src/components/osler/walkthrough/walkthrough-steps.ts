@@ -147,7 +147,6 @@ export const QBANK_HUB_STEPS: WalkthroughStep[] = [
     preferredPlacement: "bottom",
     highlightPadding: 8,
     highlightRadius: 14,
-    onEnterAction: "open-launch-dialog",
     skipIfMissing: true,
   },
   {
@@ -160,7 +159,6 @@ export const QBANK_HUB_STEPS: WalkthroughStep[] = [
     preferredPlacement: "bottom",
     highlightPadding: 8,
     highlightRadius: 14,
-    onEnterAction: "open-launch-dialog",
     skipIfMissing: true,
   },
   {
@@ -173,7 +171,6 @@ export const QBANK_HUB_STEPS: WalkthroughStep[] = [
     preferredPlacement: "top",
     highlightPadding: 8,
     highlightRadius: 14,
-    onEnterAction: "open-launch-dialog",
     skipIfMissing: true,
   },
   {
@@ -187,7 +184,6 @@ export const QBANK_HUB_STEPS: WalkthroughStep[] = [
     preferredPlacement: "top",
     highlightPadding: 8,
     highlightRadius: 12,
-    onEnterAction: "open-launch-dialog",
     skipIfMissing: true,
   },
 ];

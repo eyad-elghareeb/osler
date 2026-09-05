@@ -3257,11 +3257,7 @@ export const ar = {
     "walkthrough.step": "{current} من {total}",
     "walkthrough.trigger": "دليل سريع",
     "walkthrough.tapToAdvance": "اضغط على الزر المظلل",
-    "walkthrough.clickToContinue": "اضغط على الزر المظلل للمتابعة",
     "walkthrough.coachTip": "تلميح",
-    "walkthrough.keyNav": "← → أو Enter",
-    "walkthrough.settingsTipTitle": "إعدادات الاختبار",
-    "walkthrough.reportTipTitle": "الإبلاغ عن مشكلة",
 
     // QBank Hub Walkthrough
     "walkthrough.qbankHub.badge": "دليل الأسئلة",

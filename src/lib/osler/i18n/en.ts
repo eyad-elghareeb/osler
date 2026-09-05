@@ -3264,11 +3264,7 @@ export const en = {
     "walkthrough.step": "{current} of {total}",
     "walkthrough.trigger": "Quick Guide",
     "walkthrough.tapToAdvance": "Tap the highlighted button",
-    "walkthrough.clickToContinue": "Tap the highlighted button to proceed",
     "walkthrough.coachTip": "Tip",
-    "walkthrough.keyNav": "← → or Enter",
-    "walkthrough.settingsTipTitle": "Quiz Settings",
-    "walkthrough.reportTipTitle": "Report Issue",
 
     // QBank Hub Walkthrough
     "walkthrough.qbankHub.badge": "QBank Guide",

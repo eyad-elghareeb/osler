@@ -150,9 +150,12 @@ export function SpotlightWalkthrough({
         r.top >= 0 && r.bottom <= window.innerHeight &&
         r.left >= 0 && r.right <= window.innerWidth;
       if (!visible) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setSpotlightRect({ top: Math.max(0, r.top - p), left: Math.max(0, r.left - p), width: r.width + p * 2, height: r.height + p * 2, found: true });
+      setSpotlightRect((prev) => {
+        const next = { top: Math.max(0, r.top - p), left: Math.max(0, r.left - p), width: r.width + p * 2, height: r.height + p * 2, found: true };
+        return prev.found === next.found && prev.top === next.top && prev.left === next.left && prev.width === next.width && prev.height === next.height ? prev : next;
+      });
     } else {
-      setSpotlightRect({ top: 0, left: 0, width: 0, height: 0, found: false });
+      setSpotlightRect((prev) => prev.found ? { top: 0, left: 0, width: 0, height: 0, found: false } : prev);
     }
   }, [open, currentStep]);
 
@@ -164,6 +167,11 @@ export function SpotlightWalkthrough({
     const onUpdate = () => updateTargetRect();
     window.addEventListener("resize", onUpdate, { passive: true });
     window.addEventListener("scroll", onUpdate, { passive: true, capture: true });
+    // Steps whose UI is mounted by an async action (dialog navigation,
+    // panel open) have no scroll/resize event to announce their target —
+    // poll until it shows up; the change-guard keeps this free when the
+    // rect is stable.
+    const poll = setInterval(updateTargetRect, 300);
     let obs: ResizeObserver | null = null;
     if (currentStep?.targetSelector) {
       try {
@@ -177,6 +185,7 @@ export function SpotlightWalkthrough({
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      clearInterval(poll);
       window.removeEventListener("resize", onUpdate);
       window.removeEventListener("scroll", onUpdate, { capture: true });
       obs?.disconnect();
@@ -226,14 +235,16 @@ export function SpotlightWalkthrough({
   }, [open, spotlightRect, handleNext]);
 
   // ── skipIfMissing: conditional targets (dialog sections, desktop-only
-  // toggles) vanish gracefully — re-checked at two beats (tab switches and
-  // dialog animations, then slower navigation + content fetches) and a
-  // still-missing target auto-advances (or finishes on last). The checks
-  // clear as soon as the target appears.
+  // toggles) vanish gracefully — re-checked at two beats and a still-missing
+  // target auto-advances (or finishes on last). Steps that fire an action
+  // (tab switch, dialog navigation) get slower beats so the UI they trigger
+  // has time to mount before the step is given up on. The checks clear as
+  // soon as the target appears.
   React.useEffect(() => {
     if (!open || !currentStep?.skipIfMissing || spotlightRect.found) return;
     if (skippedRef.current === index) return;
-    const timers = [600, 1500].map((delay) =>
+    const beats = currentStep.onEnterAction ? [1500, 5000] : [600, 1500];
+    const timers = beats.map((delay) =>
       setTimeout(() => {
         if (skippedRef.current === index) return;
         skippedRef.current = index;
