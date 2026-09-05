@@ -70,3 +70,4 @@ worker.log
 output/playwright
 .playwright-cli
 .cortexkit/.gitignore
+screenshots
