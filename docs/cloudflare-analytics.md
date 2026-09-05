@@ -22,7 +22,7 @@ query fails, that section falls back to its estimate and the rest stay live.
 | Worker CPU p50 | Shown as client-measured API latency, **never** percented against the 10 ms limit (any real RTT would false-alarm) | `workersInvocationsAdaptive` CPU p50 (reported in µs, converted to ms) vs the 10 ms limit |
 | D1 row writes/day | Today's `analytics_events` + `admin_audit` + `sessions` rows + 15% headroom | Still estimated — D1 row metering has no confirmed per-database usage schema; use Workers & Pages → D1 → Metrics for the billed number |
 | D1 row reads/day | Heuristic from telemetry volume | Still estimated (same reason) |
-| D1 storage | Real row counts × per-table byte estimates vs the **5 GB** free limit | Same (row counts are real; byte sizes are estimates) |
+| D1 storage | Real row counts × per-table byte estimates vs the **500 MB per-database** free limit | Same (row counts are real; byte sizes are estimates) |
 | R2 storage | `list()` byte sum → content-object estimate | GraphQL storage gauge → `CONTENT.list()` byte sum → estimate |
 | R2 Class A/B ops/month | Heuristic from content/admin activity | `r2OperationsAdaptiveGroups` grouped by action type (see mapping) |
 | Subrequests | Design bound (≤ 40 per run of the 50 cap) | Same — bounded in code, not measured |
@@ -74,7 +74,7 @@ curl -s -H "Authorization: Bearer <admin-session-token>" \
 | Workers requests | 100,000 / day | UTC midnight | 1102 / exceeded-resources errors |
 | D1 rows written | 100,000 / day | UTC midnight | Queries fail until reset (enforced since 2026-09-01 — email alert sent) |
 | D1 rows read | 5,000,000 / day | UTC midnight | Same enforcement as writes |
-| D1 storage | 5 GB total | — | Writes rejected when full |
+| D1 storage | 500 MB per database | — | Writes rejected when full |
 | R2 storage | 10 GB-month / month | Monthly | Overage billing (paid) / blocked (free) |
 | R2 Class A ops | 1,000,000 / month | Monthly | Overage billing |
 | R2 Class B ops | 10,000,000 / month | Monthly | Overage billing |

@@ -2864,7 +2864,7 @@ export const ar = {
     "admin.analytics.cf.d1Reads": "قراءة صفوف D1",
     "admin.analytics.cf.d1ReadsDesc": "حد 5,000,000 صف مقروء / يوم",
     "admin.analytics.cf.d1Storage": "مساحة تخزين قاعدة بيانات D1",
-    "admin.analytics.cf.d1StorageDesc": "حد 5 غيغابايت لقاعدة البيانات",
+    "admin.analytics.cf.d1StorageDesc": "حد 500 ميغابايت لكل قاعدة بيانات",
     "admin.analytics.cf.r2Storage": "تخزين الملفات R2",
     "admin.analytics.cf.r2StorageDesc": "حد 10 غيغابايت/شهر تخزين مجاني",
     "admin.analytics.cf.r2ClassA": "عمليات R2 فئة A",

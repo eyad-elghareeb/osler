@@ -11,7 +11,7 @@ The browser loads the static site from Pages, then talks to the Worker over CORS
 | --- | --- | --- |
 | Frontend (Next.js static export) | Cloudflare Pages (`.pages.dev`) | Unlimited requests, 500 builds/month |
 | Backend (auth, sync, content, admin) | Cloudflare Worker (`.workers.dev`) | 100,000 requests/day, 10ms CPU/req |
-| Database | Cloudflare D1 | 5 GB storage, 5 M rows read/day, 100 K rows written/day |
+| Database | Cloudflare D1 | 500 MB storage/database, 5 M rows read/day, 100 K rows written/day (read/write quotas are account-wide, not per database) |
 | Object storage (content) | Cloudflare R2 | 10 GB storage, 1 M Class A ops/month |
 | Scheduled cleanup | Worker cron trigger | 5 cron triggers max |
 

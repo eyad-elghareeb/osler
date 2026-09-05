@@ -3171,13 +3171,15 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
     const estimatedD1WritesToday = analyticsToday + auditToday + sessionsToday + Math.round(analyticsToday * 0.15);
 
     // Free Tier limits (verified against the pricing docs 2026-09: D1 is
-    // 5M reads/day, 100k writes/day, 5 GB storage; Workers 100k reqs/day,
-    // 10ms CPU, 50 subrequests; R2 10 GB-mo, 1M Class A, 10M Class B).
+    // 5M reads/day, 100k writes/day, 500 MB storage PER DATABASE; Workers
+    // 100k reqs/day, 10ms CPU, 50 subrequests; R2 10 GB-mo, 1M Class A,
+    // 10M Class B). Unlike reads/writes, the storage ceiling does NOT pool —
+    // each bound D1 database gets its own 500 MB.
     const LIMITS = {
       workerDailyRequests: 100_000,
       d1DailyWrites: 100_000,
       d1DailyReads: 5_000_000,
-      d1DatabaseStorageBytes: 5 * 1024 * 1024 * 1024, // 5 GB
+      d1DatabaseStorageBytes: 500 * 1024 * 1024, // 500 MB per D1 database
       r2StorageBytes: 10 * 1024 * 1024 * 1024, // 10 GB
       r2MonthlyClassA: 1_000_000,
       r2MonthlyClassB: 10_000_000,

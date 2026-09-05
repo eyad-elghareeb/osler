@@ -62,7 +62,7 @@ Osler ships as a Next.js **static export** (`output: "export"` → `out/`) plus 
 | Vendor | Limit | Notes |
 |---|---|---|
 | Cloudflare Workers | 100,000 requests/day | Cron triggers: 5 maximum. |
-| Cloudflare D1 | 5 GB storage, 5M rows read/day | Covers ~500 active students easily. |
+| Cloudflare D1 | 500 MB storage/database, 5M rows read/day | Covers ~500 active students easily. |
 | Cloudflare R2 | 10 GB storage, 1M Class A ops/month | Plenty for content objects. |
 | Cloudflare Pages | 500 builds/month, unlimited bandwidth | Hobby-tier generous. |
 | Vercel (Hobby) | 100 GB bandwidth, 100 GB-Hours compute | Adequate for small instances. |
@@ -1641,7 +1641,7 @@ Set up a Cloudflare Worker cron to alert on:
 | Frontend p99 latency | > 2s | > 5s |
 | Worker p99 latency | > 500ms | > 2s |
 | Worker error rate (5xx) | > 1% | > 5% |
-| D1 storage | > 4 GB (80% of 5 GB) | > 4.5 GB |
+| D1 storage | > 400 MB per database (80% of the 500 MB/database free limit) | > 450 MB per database |
 | R2 storage | > 8 GB | > 9.5 GB |
 | Failed login attempts (per IP, 5 min) | > 50 | > 200 |
 | New user signups (per hour) | > 100 (likely spam) | > 500 |

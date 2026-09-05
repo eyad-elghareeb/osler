@@ -59,7 +59,7 @@ The worker is sized so ~1000 monthly-active users stay comfortably inside every 
 | Worker requests | 100K/day | ~10–20K/day | Client sync is opt-in and event-driven: pushes are 1 direct PUT (no HEAD), poke pulls GET only the changed kinds, foreground pulls are throttled to one per 60s, hidden tabs make zero requests. Telemetry batches up to 50 events per POST and samples successful `api_call` events. |
 | D1 rows written | 100K/day | ~30–40K/day | Analytics ≤ 25K (daily cap enforces it), choice stats ≤ 25K (daily cap), sync writes ride inside `progress_documents` upserts (~1 row per changed kind per push). |
 | D1 rows read | 5M/day | < 200K/day | Daily-cap guards are 1-row point reads on `daily_counters` (never a table scan); sync reads are per-user doc lookups; realtime heartbeats are answered at the edge and never wake the D1. |
-| D1 storage | 5GB total | < 1GB | Sync docs are gzip-compressed with a 15MB/user budget; analytics events are pruned after 30 days. |
+| D1 storage | 500 MB/database | < 1GB | Sync docs are gzip-compressed with a 15MB/user budget; analytics events are pruned after 30 days. The optional 3-database shard (see "D1 sharding") triples the ceiling. |
 | Durable Objects (sync hub) | SQLite-backed free tier | 1 DO per active user, socket open only while the tab is visible | Heartbeats use `setWebSocketAutoResponse` at the edge — they don't wake or bill the DO. |
 
 The two telemetry daily caps (`ANALYTICS_DAILY_WRITE_CAP`, `QBANK_STATS_DAILY_WRITE_CAP`) act as the safety valve: under an abnormal flood they return 429 to telemetry only — auth, sync, and content keep working.

@@ -40,7 +40,7 @@ Osler ships as a **static export** (Next.js `output: "export"`) plus an optional
 | Vendor | Limit | Notes |
 | --- | --- | --- |
 | Cloudflare Workers | 100,000 requests/day | Cron triggers: 5 maximum. |
-| Cloudflare D1 | 5 GB storage, 5M rows read/day | Easily covers a school of ~500 students. |
+| Cloudflare D1 | 500 MB storage/database, 5M rows read/day | Easily covers a school of ~500 students. |
 | Cloudflare R2 | 10 GB storage, 1M Class A ops/month | Plenty for content objects. |
 | Vercel (Hobby) | 100 GB bandwidth, 100 GB-Hours compute | Adequate for small instances. |
 | Resend (free) | 100 emails/day, 3000/month | Enough for password resets. |
