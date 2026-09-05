@@ -234,28 +234,53 @@ export function SpotlightWalkthrough({
   const radius = currentStep.highlightRadius ?? 12;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] overflow-hidden" role="dialog" aria-modal="true" aria-label={t("walkthrough.trigger")}>
+    <div className="fixed inset-0 z-[9999] overflow-hidden pointer-events-none" role="dialog" aria-modal="true" aria-label={t("walkthrough.trigger")}>
 
-      {/* ── Dim overlay with SVG cutout (pointer-events:none so real button is clickable) ── */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-        <defs>
-          <mask id="osler-spotlight-mask">
-            <rect x="0" y="0" width="100%" height="100%" fill="#ffffff" />
-            {spotlightRect.found && (
-              <rect
-                x={spotlightRect.left} y={spotlightRect.top}
-                width={spotlightRect.width} height={spotlightRect.height}
-                rx={radius} ry={radius} fill="#000000"
-                style={{ transition: "x 0.25s cubic-bezier(0.32,0.72,0,1),y 0.25s cubic-bezier(0.32,0.72,0,1),width 0.25s cubic-bezier(0.32,0.72,0,1),height 0.25s cubic-bezier(0.32,0.72,0,1)" }}
-              />
-            )}
-          </mask>
-        </defs>
-        <rect x="0" y="0" width="100%" height="100%" fill="rgba(5,12,24,0.82)" mask="url(#osler-spotlight-mask)" />
-      </svg>
-
-      {/* ── Backdrop click catcher — only covers dimmed area (below halo z-index) ── */}
-      <div className="absolute inset-0 z-10" aria-hidden="true" onClick={handleBackdropClick} />
+      {/* ── Dim layer: 4 strips around the spotlight so the hole stays fully
+          transparent (no SVG mask to misalign) and fully click-through.
+          The outer container is pointer-events-none; only these strips and
+          the card re-enable pointer events, so taps in the hole reach the
+          real button underneath. ── */}
+      {spotlightRect.found ? (
+        <>
+          {/* top strip */}
+          <div
+            className="absolute z-10 pointer-events-auto"
+            style={{ top: 0, left: 0, right: 0, height: spotlightRect.top, backgroundColor: "rgba(5,12,24,0.82)" }}
+            aria-hidden="true"
+            onClick={handleBackdropClick}
+          />
+          {/* bottom strip */}
+          <div
+            className="absolute z-10 pointer-events-auto"
+            style={{ top: spotlightRect.top + spotlightRect.height, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(5,12,24,0.82)" }}
+            aria-hidden="true"
+            onClick={handleBackdropClick}
+          />
+          {/* left strip */}
+          <div
+            className="absolute z-10 pointer-events-auto"
+            style={{ top: spotlightRect.top, height: spotlightRect.height, left: 0, width: spotlightRect.left, backgroundColor: "rgba(5,12,24,0.82)" }}
+            aria-hidden="true"
+            onClick={handleBackdropClick}
+          />
+          {/* right strip */}
+          <div
+            className="absolute z-10 pointer-events-auto"
+            style={{ top: spotlightRect.top, height: spotlightRect.height, left: spotlightRect.left + spotlightRect.width, right: 0, backgroundColor: "rgba(5,12,24,0.82)" }}
+            aria-hidden="true"
+            onClick={handleBackdropClick}
+          />
+        </>
+      ) : (
+        /* No spotlight found — full dim backdrop catches clicks */
+        <div
+          className="absolute inset-0 z-10 pointer-events-auto"
+          style={{ backgroundColor: "rgba(5,12,24,0.82)" }}
+          aria-hidden="true"
+          onClick={handleBackdropClick}
+        />
+      )}
 
       {/* ── Halo ring (pointer-events:none so clicks pass through to real button) ── */}
       {spotlightRect.found && (
