@@ -22,10 +22,15 @@
  *
  *   3. Batched + throttled. Events accumulate in an in-memory ring buffer
  *      and are flushed:
- *        - on a periodic timer (every 20s),
- *        - when the buffer hits 25 events,
+ *        - on a periodic timer (every 60s),
+ *        - when the buffer hits 40 events,
  *        - on `visibilitychange` to `hidden`,
  *        - on `beforeunload`.
+ *      Each POST carries at most MAX_BATCH_PER_POST events — sized to the
+ *      worker's per-batch cap so no request is ever rejected for size.
+ *      api_call telemetry additionally samples successful requests (failures
+ *      are always recorded) — the biggest event source by volume, and the
+ *      trend dashboards don't need every datapoint.
  *
  *   4. Respects Do-Not-Track. If `navigator.doNotTrack === "1"` we never
  *      start collection. The provider also reads a localStorage flag so
@@ -69,9 +74,15 @@ export interface AnalyticsBatch {
 
 // ─── Internal state ────────────────────────────────────────────────────────
 
-const BUFFER_LIMIT = 50;
-const FLUSH_INTERVAL_MS = 20_000;
-const FLUSH_THRESHOLD = 25;
+const BUFFER_LIMIT = 60;
+const FLUSH_INTERVAL_MS = 60_000;
+const FLUSH_THRESHOLD = 40;
+/** Per-POST event cap — must stay ≤ the worker's ANALYTICS_MAX_BATCH. */
+const MAX_BATCH_PER_POST = 50;
+/** Fraction of SUCCESSFUL api_call events recorded (failures always are).
+ *  Cloud requests are the highest-volume event source; the trend dashboards
+ *  are sampling-tolerant, and this cuts telemetry rows ~4x at scale. */
+const API_CALL_SAMPLE_RATE = 0.25;
 const SESSION_ROTATION_MS = 30 * 60 * 1000;
 /** Max consecutive network failures before we drop the buffer to avoid
  *  unbounded stale-event re-queueing (e.g. persistent 401 after logout). */
@@ -79,6 +90,7 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 
 let buffer: AnalyticsEvent[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
+let flushing = false;
 let listenersBound = false;
 let sessionId: string = "";
 let sessionIssuedAt: number = 0;
@@ -313,8 +325,13 @@ export const analytics = {
       // The worker also scrubs, but this prevents PII from hitting the wire.
       detail: { message: scrubPiiClient(message.slice(0, 500)), ...detail },
     }),
-  apiCall: (endpoint: string, durationMs: number, detail?: Record<string, unknown>) =>
-    track({ type: "api_call", metric: endpoint.slice(0, 80), value: Math.round(durationMs), detail }),
+  apiCall: (endpoint: string, durationMs: number, detail?: Record<string, unknown>) => {
+    // Sample successful calls; failures and slow outliers always record.
+    const status = typeof detail?.status === "number" ? detail.status : 0;
+    const failed = status < 200 || status >= 400;
+    if (!failed && durationMs < 1_000 && Math.random() >= API_CALL_SAMPLE_RATE) return;
+    track({ type: "api_call", metric: endpoint.slice(0, 80), value: Math.round(durationMs), detail });
+  },
 };
 
 function apiUrl(): string | null {
@@ -328,62 +345,85 @@ function apiUrl(): string | null {
   return null;
 }
 
-/** POST the buffered events to the worker. Resets the buffer optimistically. */
+/** POST the buffered events to the worker, in per-POST chunks that always
+ *  fit the worker's batch cap. Concurrent calls collapse; a failed chunk
+ *  re-queues (up to the failure limit) and stops the drain. */
 export async function flush(): Promise<void> {
   if (!analyticsEnabled()) return;
-  if (buffer.length === 0) return;
+  if (flushing || buffer.length === 0) return;
   const base = apiUrl();
   if (!base) return;
-
-  const batch: AnalyticsBatch = {
-    sessionId: ensureSessionId(),
-    events: buffer,
-  };
-  buffer = [];
+  flushing = true;
 
   const session = readCloudSession();
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (session?.token) headers["authorization"] = `Bearer ${session.token}`;
 
   try {
-    const res = await fetch(`${base}/v1/analytics/events`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(batch),
-      keepalive: true,
-      credentials: "omit",
-    });
-    if (res.ok) {
-      consecutiveFailures = 0;
-      return;
-    }
-    if (res.status === 429) {
-      // Worker is rate-limiting us — back off by doubling the timer interval.
-      if (flushTimer) {
-        clearInterval(flushTimer);
-        flushTimer = setInterval(() => void flush(), FLUSH_INTERVAL_MS * 2);
+    while (buffer.length > 0) {
+      const events = buffer.splice(0, MAX_BATCH_PER_POST);
+      const batch: AnalyticsBatch = {
+        sessionId: ensureSessionId(),
+        events,
+      };
+
+      try {
+        const res = await fetch(`${base}/v1/analytics/events`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(batch),
+          keepalive: true,
+          credentials: "omit",
+        });
+        if (res.ok) {
+          consecutiveFailures = 0;
+          continue;
+        }
+        if (res.status === 429) {
+          // Worker is rate-limiting / over its daily write cap — back off by
+          // doubling the timer interval and re-queue what wasn't sent.
+          if (flushTimer) {
+            clearInterval(flushTimer);
+            flushTimer = setInterval(() => void flush(), FLUSH_INTERVAL_MS * 2);
+          }
+          requeue(events);
+          return;
+        }
+        if (res.status === 401 || res.status === 403) {
+          // Auth failure — the session is dead. DON'T re-queue indefinitely;
+          // the events were tied to a now-invalid session. Drop the backlog.
+          consecutiveFailures = 0;
+          buffer = [];
+          return;
+        }
+        // Other server error — re-queue with a failure counter so we
+        // eventually give up instead of retrying forever.
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          buffer = [];
+          return;
+        }
+        requeue(events);
+        return;
+      } catch {
+        // Network error — same failure-counter treatment.
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          buffer = [];
+          return;
+        }
+        requeue(events);
+        return;
       }
-      // Re-queue — rate limiting is transient.
-      buffer = [...batch.events, ...buffer].slice(0, BUFFER_LIMIT);
-    } else if (res.status === 401 || res.status === 403) {
-      // Auth failure — the session is dead. DON'T re-queue indefinitely;
-      // the events were tied to a now-invalid session. Drop them.
-      consecutiveFailures = 0;
-    } else {
-      // Other server error — re-queue with a failure counter so we
-      // eventually give up instead of retrying forever.
-      consecutiveFailures += 1;
-      if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
-        buffer = [...batch.events, ...buffer].slice(0, BUFFER_LIMIT);
-      }
     }
-  } catch {
-    // Network error — re-queue with a failure counter.
-    consecutiveFailures += 1;
-    if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
-      buffer = [...batch.events, ...buffer].slice(0, BUFFER_LIMIT);
-    }
+  } finally {
+    flushing = false;
   }
+}
+
+/** Put unsent events back at the head of the buffer (newest last). */
+function requeue(events: AnalyticsEvent[]): void {
+  buffer = [...events, ...buffer].slice(0, BUFFER_LIMIT);
 }
 
 function onVisibilityChange(): void {

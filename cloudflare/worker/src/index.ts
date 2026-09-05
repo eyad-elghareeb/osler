@@ -131,17 +131,19 @@ const ANALYTICS_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 // AND D1 row-write quota. Each event = 1 row written. The D1 free tier
 // allows 100,000 rows written per day for the ENTIRE database (auth, sync,
 // content, analytics). The caps below + the daily global cap keep analytics
-// from starving the rest of the app.
-const ANALYTICS_MAX_BATCH = 20;
+// from starving the rest of the app. Larger batches cost fewer WORKER
+// requests (the free tier's 100K/day request budget) without changing the
+// D1 row math — the client flushes in exactly this batch size.
+const ANALYTICS_MAX_BATCH = 50;
 const ANALYTICS_MAX_PATH_LEN = 255;
 const ANALYTICS_MAX_DETAIL_BYTES = 512;
 // Global daily write cap for analytics events. When exceeded, new events
 // are rejected with 429 until the next UTC midnight. This protects the D1
-// daily row-write quota (100K/day free tier) from being exhausted by a
-// single determined authenticated user. Cached in-memory per worker
-// instance for 60s to avoid a COUNT(*) on every request.
-const ANALYTICS_DAILY_WRITE_CAP = 50_000;
-const ANALYTICS_DAILY_CAP_CACHE_TTL_MS = 60_000;
+// daily row-write quota (100K/day free tier) from being exhausted. Sized
+// for ~1000 MAU: even a heavy exam-season day (~600 DAU × ~100 events)
+// writes ~24K rows, while sync + auth + content stay well under 15K —
+// together comfortably inside the 100K/day budget.
+const ANALYTICS_DAILY_WRITE_CAP = 25_000;
 
 // Per-question choice stats ("62% of users chose B") — pre-aggregated counters
 // in question_choice_stats, one upsert row per answered question per finished
@@ -155,7 +157,6 @@ const QBANK_STATS_ID_MAX_LEN = 160;
 // small self-hosted instance, where the default would hide all data).
 const QBANK_STATS_DEFAULT_MIN_SAMPLE = 5;
 const QBANK_STATS_DAILY_WRITE_CAP = 25_000;
-const QBANK_STATS_DAILY_CAP_CACHE_TTL_MS = 60_000;
 
 /** Resolve the effective student-facing minimum sample from the environment.
  *  Invalid/absent values fall back to the privacy-safe default of 5. */
@@ -1021,6 +1022,8 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
       env.DB.prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
+      // Daily write-cap counters: keep ~90 days for trend debugging, then drop.
+      env.DB.prepare("DELETE FROM daily_counters WHERE day < ?").bind(utcDateString(now() - 90 * 24 * 60 * 60 * 1000)),
       // Choice-stats respondent rows: only needed to dedup contributors;
       // past this window a contributor may legitimately count again.
       env.DB.prepare("DELETE FROM question_choice_respondents WHERE created_at < ?").bind(now() - QBANK_STATS_RESPONDENT_RETENTION_MS),
@@ -2033,64 +2036,67 @@ const ANALYTICS_VALID_CONNECTIONS = new Set([
   "4g", "3g", "2g", "slow-2g", "unknown",
 ]);
 
-// ── Global daily write cap (DoS protection for D1 quota) ──
+// ── Global daily write caps (DoS protection for D1 quota) ──
 //
 // The D1 free tier allows 100,000 rows written per day for the ENTIRE
-// database. A single authenticated user sending 50 events per batch at
-// 60 batches/min could exhaust this in ~33 minutes, taking down auth,
-// sync, and content management. This cap rejects new events once the
-// daily total reaches ANALYTICS_DAILY_WRITE_CAP (50K), leaving 50K for
-// the rest of the app.
+// database (auth, sync, content, analytics). Telemetry that ignored caps
+// could exhaust this in minutes, taking down auth, sync, and content
+// management with it. Two flows are capped per day:
+//   analytics — ANALYTICS_DAILY_WRITE_CAP rows
+//   qstats    — QBANK_STATS_DAILY_WRITE_CAP row writes
+// Together with the uncapped-but-bounded sync/auth writes, a ~1000-MAU
+// deployment stays inside the budget (see README "Free-tier capacity").
 //
-// Implementation: in-memory cache per worker instance, refreshed every 60s
-// via a COUNT(*) query. Multiple worker instances may each have their own
-// cache, so the effective cap is (N_instances * 60s_worth_of_writes) above
-// the target — acceptable given the 50K margin.
+// Implementation: a per-day counter row in `daily_counters`, bumped in the
+// SAME D1 batch that writes the telemetry rows (1 extra row write per
+// ingest), so the guard check itself is a 1-row point read cached 60s per
+// isolate — never a COUNT(*) scan over the events table, which at 30-day
+// retention would read hundreds of thousands of rows per check and blow
+// D1's 5M rows-read/day budget.
 
-let analyticsDailyCount: { date: string; count: number; checkedAt: number } = {
-  date: "",
-  count: 0,
-  checkedAt: 0,
-};
+let dailyCounterCache: Record<string, { day: string; n: number; checkedAt: number }> = {};
+const DAILY_CAP_CACHE_TTL_MS = 60_000;
 
 /** Returns the UTC date string (YYYY-MM-DD) for the given epoch ms. */
 function utcDateString(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
-/** Check if the global daily analytics write cap has been exceeded.
- *  Cached for ANALYTICS_DAILY_CAP_CACHE_TTL_MS to avoid a COUNT(*) per
- *  request. Returns true if writes are allowed, false if over cap. */
-async function analyticsDailyCapOk(env: Env): Promise<boolean> {
-  const today = utcDateString(now());
+/** True while the named counter is under its daily cap. Point-reads the
+ *  counter row, cached per isolate; a DB error allows the write (the
+ *  per-IP / per-user rate limits still apply). */
+async function dailyWriteCountOk(env: Env, name: string, cap: number): Promise<boolean> {
   const t = now();
-  // Cache hit — return cached result.
-  if (
-    analyticsDailyCount.date === today &&
-    t - analyticsDailyCount.checkedAt < ANALYTICS_DAILY_CAP_CACHE_TTL_MS
-  ) {
-    return analyticsDailyCount.count < ANALYTICS_DAILY_WRITE_CAP;
+  const day = utcDateString(t);
+  const cached = dailyCounterCache[name];
+  if (cached && cached.day === day && t - cached.checkedAt < DAILY_CAP_CACHE_TTL_MS) {
+    return cached.n < cap;
   }
-  // Cache miss or date changed — query D1 for today's count.
-  // Start of today in UTC millis.
-  const startOfToday = Date.UTC(
-    new Date(t).getUTCFullYear(),
-    new Date(t).getUTCMonth(),
-    new Date(t).getUTCDate(),
-  );
   try {
-    const row = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM analytics_events WHERE created_at >= ?"
-    ).bind(startOfToday).first<{ n: number }>();
-    const count = row?.n ?? 0;
-    analyticsDailyCount = { date: today, count, checkedAt: t };
-    return count < ANALYTICS_DAILY_WRITE_CAP;
+    const row = await env.DB.prepare("SELECT n FROM daily_counters WHERE name = ? AND day = ?")
+      .bind(name, day)
+      .first<{ n: number }>();
+    dailyCounterCache[name] = { day, n: row?.n ?? 0, checkedAt: t };
+    return (row?.n ?? 0) < cap;
   } catch {
-    // If the COUNT fails (DB error), allow the write — better to risk
-    // exceeding the cap than to block legitimate telemetry. The per-IP
-    // and per-user rate limits still apply.
     return true;
   }
+}
+
+/** Optimistically add `delta` to this isolate's cached counter so
+ *  rapid-fire ingests don't re-read D1. The durable bump happens in the
+ *  same batch that writes the telemetry rows (see the ingest handlers). */
+function bumpCachedDailyCounter(name: string, delta: number): void {
+  const cached = dailyCounterCache[name];
+  if (cached && cached.day === utcDateString(now())) cached.n += delta;
+}
+
+/** SQL fragment appending a `delta` to the named counter's today-row —
+ *  pushed into the ingest batch itself so no extra round-trip is needed. */
+function dailyCounterBumpStmt(env: Env, name: string, delta: number): D1PreparedStatement {
+  return env.DB.prepare(
+    "INSERT INTO daily_counters (name, day, n) VALUES (?, ?, ?) ON CONFLICT(name, day) DO UPDATE SET n = n + excluded.n"
+  ).bind(name, utcDateString(now()), delta);
 }
 
 // ── PII scrubbing ──
@@ -2201,7 +2207,7 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
 
   // Global daily write cap — protects D1 free-tier quota (100K rows/day
   // for the ENTIRE database) from being exhausted by analytics alone.
-  if (!(await analyticsDailyCapOk(env))) {
+  if (!(await dailyWriteCountOk(env, "analytics", ANALYTICS_DAILY_WRITE_CAP))) {
     return json({ error: "Analytics daily write cap reached" }, 429, origin, log);
   }
 
@@ -2255,8 +2261,12 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
   }
 
   if (stmts.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
+  // Bump today's write counter in the same batch — no extra round-trip, and
+  // the daily cap guard stays a 1-row point read.
+  stmts.push(dailyCounterBumpStmt(env, "analytics", accepted));
   try {
     await env.DB.batch(stmts);
+    bumpCachedDailyCounter("analytics", accepted);
   } catch (error: any) {
     log.error("analytics ingest failed", { error: error.message, count: stmts.length });
     return json({ error: "Failed to store analytics events" }, 500, origin, log);
@@ -2283,35 +2293,6 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
  * and QBANK_STATS_DAILY_WRITE_CAP.
  */
 
-let qstatsDailyCount: { date: string; count: number; checkedAt: number } = {
-  date: "",
-  count: 0,
-  checkedAt: 0,
-};
-
-/** Same pattern as analyticsDailyCapOk: cached COUNT guard protecting the D1
- *  daily row-write quota from being exhausted by choice-stats reports. */
-async function qstatsDailyCapOk(env: Env): Promise<boolean> {
-  const t = now();
-  const today = new Date(t).toISOString().slice(0, 10);
-  if (
-    qstatsDailyCount.date === today &&
-    t - qstatsDailyCount.checkedAt < QBANK_STATS_DAILY_CAP_CACHE_TTL_MS
-  ) {
-    return qstatsDailyCount.count < QBANK_STATS_DAILY_WRITE_CAP;
-  }
-  const row = await env.DB
-    .prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?")
-    .bind(t - 24 * 60 * 60 * 1000)
-    .first<{ n: number }>();
-  // Note: this counts rows TOUCHED in the window, not writes — a hot (uid,qid,
-  // choice) counter updated many times counts once. That under-counts, but the
-  // per-question write volume is inherently small (first attempts only), so
-  // the guard still catches flooding while staying cheap.
-  qstatsDailyCount = { date: today, count: row?.n ?? 0, checkedAt: t };
-  return qstatsDailyCount.count < QBANK_STATS_DAILY_WRITE_CAP;
-}
-
 function sanitizeStatsId(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length === 0) return null;
   const v = raw.slice(0, QBANK_STATS_ID_MAX_LEN);
@@ -2324,7 +2305,7 @@ async function handleQuestionStatsReport(request: Request, env: Env, session: Se
   if (contentLength > 100_000) {
     return json({ error: "Request body too large" }, 413, origin, log);
   }
-  if (!(await qstatsDailyCapOk(env))) {
+  if (!(await dailyWriteCountOk(env, "qstats", QBANK_STATS_DAILY_WRITE_CAP))) {
     return json({ error: "Choice stats daily write cap reached" }, 429, origin, log);
   }
 
@@ -2393,11 +2374,16 @@ async function handleQuestionStatsReport(request: Request, env: Env, session: Se
   }
 
   if (stmts.length === 0) return json({ ok: true, accepted: 0 }, 200, origin, log);
+  // Bump today's write counter in the same batch. Appended LAST so the
+  // odd-index "respondent insert" result mapping below is unaffected.
+  const dataRowCount = stmts.length;
+  stmts.push(dailyCounterBumpStmt(env, "qstats", dataRowCount));
   try {
     const results = await env.DB.batch(stmts);
     // Odd-indexed results are the respondent inserts; changes === 1 means
     // this contributor's first-ever answer to that question was counted.
     const accepted = results.filter((_, i) => i % 2 === 1).reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
+    bumpCachedDailyCounter("qstats", dataRowCount);
     return json({ ok: true, accepted }, 200, origin, log);
   } catch (error: any) {
     log.error("choice stats report failed", { error: error.message, count: stmts.length });
@@ -5708,7 +5694,10 @@ export default {
             ctx.waitUntil(env.USER_SYNC_HUB.getByName(session.user.id).notify(request.headers.get("x-osler-realtime-conn") ?? "", changedKinds).catch(() => {}));
           }
         }
-        return json(response, 200, origin, log);
+        // Include the storage budget in the PUT response so push-only sync
+        // cycles (which no longer HEAD first) keep the client's quota widget
+        // fresh without an extra request.
+        return json({ ...response, quota: { usedBytes: projectedBytes, limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
       }
 
       return json({ error: "Not found" }, 404, origin, log);
