@@ -179,6 +179,14 @@ let googleKeys: { expiresAt: number; keys: JsonWebKey[] } = { expiresAt: 0, keys
 
 interface Env {
   DB: D1Database;
+  /** Optional sync shard — holds progress_documents (per-user sync payloads).
+   *  Absent ⇒ progress_documents stays in DB (single-database mode). See
+   *  wrangler.toml "Optional D1 shards" + `npm run db:shard`. */
+  DB_SYNC?: D1Database;
+  /** Optional telemetry shard — holds analytics_events, question_choice_*,
+   *  and daily_counters. Absent ⇒ telemetry stays in DB (single-database
+   *  mode). */
+  DB_TELEMETRY?: D1Database;
   CONTENT?: R2Bucket;
   /** Realtime poke hub (per-user Durable Object). Optional binding: instances
    *  that never applied the DO migration keep working — sync still runs over
@@ -208,6 +216,39 @@ interface Env {
   CF_ANALYTICS_TOKEN?: string;
   /** R2 bucket name for live ops/storage queries (default "osler-content"). */
   CF_R2_BUCKET?: string;
+}
+
+// ── D1 shard routing ─────────────────────────────────────────────────────────
+//
+// The D1 free tier allows 500 MB of storage PER DATABASE, but the read/write
+// row quotas (5M reads / 100K writes per day) are ACCOUNT-WIDE — splitting
+// into multiple databases multiplies only the storage ceiling. That is still
+// decisive: it isolates the table most likely to fill up fastest
+// (analytics_events) from the table users actually care about protecting
+// (progress_documents), and both from the small-but-precious auth/content
+// tables. Shard bindings are optional — these accessors fall back to the
+// single primary DB, so a deployment without the extra databases behaves
+// exactly as before.
+
+/** Sync shard: progress_documents (per-user sync payloads). */
+function syncDb(env: Env): D1Database {
+  return env.DB_SYNC ?? env.DB;
+}
+
+/** Telemetry shard: analytics_events, question_choice_* + their daily
+ *  write-cap counters (counters are bumped in the same batch as the
+ *  telemetry rows they guard, so they must share its database). */
+function telemetryDb(env: Env): D1Database {
+  return env.DB_TELEMETRY ?? env.DB;
+}
+
+/** Free-tier storage ceiling per D1 database. */
+const D1_FREE_TIER_DB_BYTES = 500 * 1024 * 1024;
+
+/** Number of D1 databases this deployment binds (1 unsharded, 3 fully
+ *  sharded). Only the STORAGE quota scales with this. */
+function d1ShardCount(env: Env): number {
+  return 1 + (env.DB_SYNC ? 1 : 0) + (env.DB_TELEMETRY ? 1 : 0);
 }
 
 function isManagedOnly(env: Env): boolean {
@@ -748,7 +789,7 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
 // mergeQbank / mergeFlashcards now live in ./sync-docs (pure, unit-tested).
 
 async function getDocument(env: Env, userId: string, kind: string): Promise<{ records: Record<string, any>; updatedAt: number }> {
-  const row = await env.DB.prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(userId, kind).first<{ payload: string; compressed: number; updated_at: number }>();
+  const row = await syncDb(env).prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(userId, kind).first<{ payload: string; compressed: number; updated_at: number }>();
   if (!row || !row.payload) return { records: {}, updatedAt: 0 };
   try {
     const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
@@ -773,7 +814,7 @@ async function getSelectedDocuments(env: Env, userId: string, kinds: string[]): 
 }
 
 async function getSyncHead(env: Env, userId: string): Promise<{ timestamps: Record<string, number>; usedBytes: number }> {
-  const rows = await env.DB.prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(userId).all<{ kind: string; updated_at: number; raw_bytes: number }>();
+  const rows = await syncDb(env).prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(userId).all<{ kind: string; updated_at: number; raw_bytes: number }>();
   const timestamps: Record<string, number> = {};
   for (const k of SYNC_KINDS) timestamps[k] = 0;
   let usedBytes = 0;
@@ -1022,12 +1063,17 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       // Lockout rows past their lock window are dead weight - drop them.
       env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
-      env.DB.prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
+    ]);
+    // Telemetry tables live in the telemetry shard when bound (falls back to
+    // the primary DB otherwise), so they are pruned in their own batch — a
+    // D1 batch cannot span two databases.
+    await telemetryDb(env).batch([
+      telemetryDb(env).prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
       // Daily write-cap counters: keep ~90 days for trend debugging, then drop.
-      env.DB.prepare("DELETE FROM daily_counters WHERE day < ?").bind(utcDateString(now() - 90 * 24 * 60 * 60 * 1000)),
+      telemetryDb(env).prepare("DELETE FROM daily_counters WHERE day < ?").bind(utcDateString(now() - 90 * 24 * 60 * 60 * 1000)),
       // Choice-stats respondent rows: only needed to dedup contributors;
       // past this window a contributor may legitimately count again.
-      env.DB.prepare("DELETE FROM question_choice_respondents WHERE created_at < ?").bind(now() - QBANK_STATS_RESPONDENT_RETENTION_MS),
+      telemetryDb(env).prepare("DELETE FROM question_choice_respondents WHERE created_at < ?").bind(now() - QBANK_STATS_RESPONDENT_RETENTION_MS),
     ]);
     log.info("cleanupStale completed");
   } catch (error: any) {
@@ -2075,7 +2121,7 @@ async function dailyWriteCountOk(env: Env, name: string, cap: number): Promise<b
     return cached.n < cap;
   }
   try {
-    const row = await env.DB.prepare("SELECT n FROM daily_counters WHERE name = ? AND day = ?")
+    const row = await telemetryDb(env).prepare("SELECT n FROM daily_counters WHERE name = ? AND day = ?")
       .bind(name, day)
       .first<{ n: number }>();
     dailyCounterCache[name] = { day, n: row?.n ?? 0, checkedAt: t };
@@ -2096,7 +2142,7 @@ function bumpCachedDailyCounter(name: string, delta: number): void {
 /** SQL fragment appending a `delta` to the named counter's today-row —
  *  pushed into the ingest batch itself so no extra round-trip is needed. */
 function dailyCounterBumpStmt(env: Env, name: string, delta: number): D1PreparedStatement {
-  return env.DB.prepare(
+  return telemetryDb(env).prepare(
     "INSERT INTO daily_counters (name, day, n) VALUES (?, ?, ?) ON CONFLICT(name, day) DO UPDATE SET n = n + excluded.n"
   ).bind(name, utcDateString(now()), delta);
 }
@@ -2255,7 +2301,7 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
       : t;
 
     stmts.push(
-      env.DB.prepare(
+      telemetryDb(env).prepare(
         "INSERT INTO analytics_events (id, session_id, event_type, path, metric_name, value, detail, browser, device, connection, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(id(), clientSessionId, eventType, path, metricName, value, detail, browser, device, connection, clientTs)
     );
@@ -2267,7 +2313,7 @@ async function handleAnalyticsIngest(request: Request, env: Env, origin: string,
   // the daily cap guard stays a 1-row point read.
   stmts.push(dailyCounterBumpStmt(env, "analytics", accepted));
   try {
-    await env.DB.batch(stmts);
+    await telemetryDb(env).batch(stmts);
     bumpCachedDailyCounter("analytics", accepted);
   } catch (error: any) {
     log.error("analytics ingest failed", { error: error.message, count: stmts.length });
@@ -2361,7 +2407,7 @@ async function handleQuestionStatsReport(request: Request, env: Env, session: Se
     // finds the committed respondent row and becomes a no-op. The batch is
     // a single transaction, so the pair succeeds or fails together.
     stmts.push(
-      env.DB.prepare(
+      telemetryDb(env).prepare(
         `INSERT INTO question_choice_stats (uid, qid, choice, options_count, count, updated_at)
          SELECT ?, ?, ?, ?, 1, ?
          WHERE NOT EXISTS (SELECT 1 FROM question_choice_respondents WHERE aid = ? AND uid = ? AND qid = ?)
@@ -2369,7 +2415,7 @@ async function handleQuestionStatsReport(request: Request, env: Env, session: Se
       ).bind(uid, qid, choice, optionsCount, t, aid, uid, qid)
     );
     stmts.push(
-      env.DB.prepare(
+      telemetryDb(env).prepare(
         "INSERT INTO question_choice_respondents (aid, uid, qid, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(aid, uid, qid) DO NOTHING"
       ).bind(aid, uid, qid, t)
     );
@@ -2381,7 +2427,7 @@ async function handleQuestionStatsReport(request: Request, env: Env, session: Se
   const dataRowCount = stmts.length;
   stmts.push(dailyCounterBumpStmt(env, "qstats", dataRowCount));
   try {
-    const results = await env.DB.batch(stmts);
+    const results = await telemetryDb(env).batch(stmts);
     // Odd-indexed results are the respondent inserts; changes === 1 means
     // this contributor's first-ever answer to that question was counted.
     const accepted = results.filter((_, i) => i % 2 === 1).reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
@@ -2400,7 +2446,7 @@ async function handleQuestionStatsGet(url: URL, env: Env, origin: string, log: L
   interface StatsRow { qid: string; choice: number; options_count: number; count: number }
   let rows: StatsRow[];
   try {
-    ({ results: rows } = await env.DB.prepare(
+    ({ results: rows } = await telemetryDb(env).prepare(
       "SELECT qid, choice, options_count, count FROM question_choice_stats WHERE uid = ?"
     ).bind(uid).all<StatsRow>());
   } catch (error: any) {
@@ -2499,7 +2545,7 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
 
   const [userRows, docRows] = await Promise.all([
     env.DB.prepare("SELECT id, username, display_name FROM users").all<{ id: string; username: string | null; display_name: string | null }>(),
-    env.DB.prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind IN ('qbank','flashcards')").all<{ user_id: string; kind: string; payload: string; compressed: number }>(),
+    syncDb(env).prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind IN ('qbank','flashcards')").all<{ user_id: string; kind: string; payload: string; compressed: number }>(),
   ]);
 
   const userNames = new Map<string, string>();
@@ -2727,7 +2773,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
   if (request.method === "GET" && path === "/v1/admin/analytics/overview") {
     const since = now() - analyticsRangeMs(url);
     const since24h = now() - 24 * 60 * 60 * 1000;
-    const row = await env.DB.prepare(
+    const row = await telemetryDb(env).prepare(
       `SELECT
          COUNT(*) AS total_events,
          COUNT(DISTINCT session_id) AS total_sessions,
@@ -2739,7 +2785,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
          MAX(created_at) AS last_event_at
        FROM analytics_events WHERE created_at >= ?`
     ).bind(since).first<any>();
-    const row24 = await env.DB.prepare(
+    const row24 = await telemetryDb(env).prepare(
       `SELECT
          COUNT(*) AS events_24h,
          COUNT(DISTINCT session_id) AS sessions_24h,
@@ -2769,7 +2815,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const since = now() - rangeMs;
     // Bucket: 1h for 24h, 6h for 7d, 1d for 30d. Keeps the chart readable.
     const bucketMs = range === "24h" ? 60 * 60 * 1000 : range === "7d" ? 6 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-    const rows = await env.DB.prepare(
+    const rows = await telemetryDb(env).prepare(
       `SELECT
          (created_at / CAST(? AS INTEGER)) * CAST(? AS INTEGER) AS bucket,
          event_type,
@@ -2806,7 +2852,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
   /* ── Web Vitals ── */
   if (request.method === "GET" && path === "/v1/admin/analytics/web-vitals") {
     const since = now() - analyticsRangeMs(url);
-    const rows = await env.DB.prepare(
+    const rows = await telemetryDb(env).prepare(
       "SELECT metric_name, value FROM analytics_events WHERE event_type = 'web_vital' AND value IS NOT NULL AND created_at >= ? LIMIT 10000"
     ).bind(since).all<any>();
     const byMetric: Record<string, number[]> = {};
@@ -2835,7 +2881,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
   if (request.method === "GET" && path === "/v1/admin/analytics/top-pages") {
     const since = now() - analyticsRangeMs(url);
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
-    const rows = await env.DB.prepare(
+    const rows = await telemetryDb(env).prepare(
       `SELECT path, COUNT(*) AS views, COUNT(DISTINCT session_id) AS unique_sessions, MAX(created_at) AS last_seen
        FROM analytics_events
        WHERE event_type = 'page_view' AND path IS NOT NULL AND created_at >= ?
@@ -2857,7 +2903,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     // to the raw detail text if json_extract returns null. json_extract
     // THROWS on malformed JSON (rather than returning null), so guard with
     // json_valid first — legacy details may be plain text, not JSON.
-    const rows = await env.DB.prepare(
+    const rows = await telemetryDb(env).prepare(
       `SELECT
          CASE WHEN json_valid(detail)
            THEN COALESCE(json_extract(detail, '$.message'), detail, '(unknown)')
@@ -2890,7 +2936,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 20)));
     // Fetch raw (endpoint, value) pairs and aggregate in JS so we can compute
     // p50/p95 without N+1 queries.
-    const rows = await env.DB.prepare(
+    const rows = await telemetryDb(env).prepare(
       "SELECT metric_name AS endpoint, value FROM analytics_events WHERE event_type = 'api_call' AND value IS NOT NULL AND created_at >= ? LIMIT 10000"
     ).bind(since).all<any>();
     const byEndpoint: Record<string, number[]> = {};
@@ -2926,7 +2972,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
   if (request.method === "GET" && path === "/v1/admin/analytics/question-stats") {
     const uid = sanitizeStatsId(url.searchParams.get("uid"));
     if (!uid) {
-      const packs = await env.DB.prepare(
+      const packs = await telemetryDb(env).prepare(
         "SELECT uid, SUM(count) AS responses, COUNT(DISTINCT qid) AS questions FROM question_choice_stats GROUP BY uid ORDER BY responses DESC LIMIT 50"
       ).all<{ uid: string; responses: number; questions: number }>();
       return json({
@@ -2938,7 +2984,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
       }, 200, origin, log);
     }
     interface StatsRow { qid: string; choice: number; options_count: number; count: number }
-    const rows = await env.DB.prepare(
+    const rows = await telemetryDb(env).prepare(
       "SELECT qid, choice, options_count, count FROM question_choice_stats WHERE uid = ?"
     ).bind(uid).all<StatsRow>();
     return json({ pack: uid, stats: groupChoiceRows(rows.results || [], 0) }, 200, origin, log);
@@ -3141,10 +3187,10 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       verifiesRow,
       apiPerfRows,
     ] = await Promise.all([
-      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_month FROM analytics_events").bind(startOfToday, startOfMonth).first<{ total: number; today: number; this_month: number }>().catch(() => ({ total: 0, today: 0, this_month: 0 })),
-      env.DB.prepare("SELECT COUNT(*) AS total, SUM(count) AS total_responses FROM question_choice_stats").first<{ total: number; total_responses: number }>().catch(() => ({ total: 0, total_responses: 0 })),
-      env.DB.prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?").bind(startOfToday).first<{ n: number }>().catch(() => ({ n: 0 })),
-      env.DB.prepare("SELECT COUNT(*) AS total, SUM(raw_bytes) AS raw_bytes, SUM(LENGTH(payload)) AS compressed_bytes FROM progress_documents").first<{ total: number; raw_bytes: number; compressed_bytes: number }>().catch(() => ({ total: 0, raw_bytes: 0, compressed_bytes: 0 })),
+      telemetryDb(env).prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_month FROM analytics_events").bind(startOfToday, startOfMonth).first<{ total: number; today: number; this_month: number }>().catch(() => ({ total: 0, today: 0, this_month: 0 })),
+      telemetryDb(env).prepare("SELECT COUNT(*) AS total, SUM(count) AS total_responses FROM question_choice_stats").first<{ total: number; total_responses: number }>().catch(() => ({ total: 0, total_responses: 0 })),
+      telemetryDb(env).prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?").bind(startOfToday).first<{ n: number }>().catch(() => ({ n: 0 })),
+      syncDb(env).prepare("SELECT COUNT(*) AS total, SUM(raw_bytes) AS raw_bytes, SUM(LENGTH(payload)) AS compressed_bytes FROM progress_documents").first<{ total: number; raw_bytes: number; compressed_bytes: number }>().catch(() => ({ total: 0, raw_bytes: 0, compressed_bytes: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published, SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS drafts FROM content_objects").first<{ total: number; published: number; drafts: number }>().catch(() => ({ total: 0, published: 0, drafts: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today FROM admin_audit").bind(startOfToday).first<{ total: number; today: number }>().catch(() => ({ total: 0, today: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>().catch(() => ({ total: 0 })),
@@ -3154,7 +3200,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       env.DB.prepare("SELECT COUNT(*) AS total FROM auth_identities").first<{ total: number }>().catch(() => ({ total: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total FROM password_reset_tokens").first<{ total: number }>().catch(() => ({ total: 0 })),
       env.DB.prepare("SELECT COUNT(*) AS total FROM email_verify_tokens").first<{ total: number }>().catch(() => ({ total: 0 })),
-      env.DB.prepare("SELECT value FROM analytics_events WHERE event_type = 'api_call' AND value IS NOT NULL AND created_at >= ? ORDER BY value ASC LIMIT 5000").bind(startOfToday).all<{ value: number }>().catch(() => ({ results: [] })),
+      telemetryDb(env).prepare("SELECT value FROM analytics_events WHERE event_type = 'api_call' AND value IS NOT NULL AND created_at >= ? ORDER BY value ASC LIMIT 5000").bind(startOfToday).all<{ value: number }>().catch(() => ({ results: [] })),
     ]);
 
     const analyticsToday = Number(analyticsRow?.today) || 0;
@@ -3181,7 +3227,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       workerDailyRequests: 100_000,
       d1DailyWrites: 100_000,
       d1DailyReads: 5_000_000,
-      d1DatabaseStorageBytes: 500 * 1024 * 1024, // 500 MB per D1 database
+      d1DatabaseStorageBytes: D1_FREE_TIER_DB_BYTES * d1ShardCount(env), // 500 MB × bound databases
       r2StorageBytes: 10 * 1024 * 1024 * 1024, // 10 GB
       r2MonthlyClassA: 1_000_000,
       r2MonthlyClassB: 10_000_000,
@@ -3191,20 +3237,22 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       qstatsDailyWriteCap: QBANK_STATS_DAILY_WRITE_CAP,
     };
 
-    // Table stats with estimated byte sizes
+    // Table stats with estimated byte sizes. `shard` names the D1 database
+    // that holds the table ("core" on single-database deployments too — the
+    // shards fall back to DB there, so the label is about logical ownership).
     const d1Tables = [
-      { table: "analytics_events", rowCount: Number(analyticsRow?.total) || 0, estimatedBytes: (Number(analyticsRow?.total) || 0) * 220, retention: "30 days" },
-      { table: "progress_documents", rowCount: Number(progressRow?.total) || 0, estimatedBytes: Number(progressRow?.compressed_bytes) || (Number(progressRow?.total) || 0) * 1024, retention: "Active" },
-      { table: "question_choice_stats", rowCount: Number(qstatsRow?.total) || 0, estimatedBytes: (Number(qstatsRow?.total) || 0) * 128, retention: "90 days" },
-      { table: "admin_audit", rowCount: Number(auditRow?.total) || 0, estimatedBytes: (Number(auditRow?.total) || 0) * 280, retention: "365 days" },
-      { table: "sessions", rowCount: Number(sessionsRow?.total) || 0, estimatedBytes: (Number(sessionsRow?.total) || 0) * 160, retention: "Active (max 12/user)" },
-      { table: "users", rowCount: Number(usersRow?.total) || 0, estimatedBytes: (Number(usersRow?.total) || 0) * 256, retention: "Permanent" },
-      { table: "content_objects", rowCount: Number(contentRow?.total) || 0, estimatedBytes: (Number(contentRow?.total) || 0) * 512, retention: "Managed" },
-      { table: "support_tickets", rowCount: Number(ticketsRow?.total) || 0, estimatedBytes: (Number(ticketsRow?.total) || 0) * 350, retention: "Active" },
-      { table: "auth_identities", rowCount: Number(identitiesRow?.total) || 0, estimatedBytes: (Number(identitiesRow?.total) || 0) * 120, retention: "Permanent" },
-      { table: "webhooks", rowCount: Number(webhooksRow?.total) || 0, estimatedBytes: (Number(webhooksRow?.total) || 0) * 180, retention: "Config" },
-      { table: "password_reset_tokens", rowCount: Number(resetsRow?.total) || 0, estimatedBytes: (Number(resetsRow?.total) || 0) * 120, retention: "1 hour" },
-      { table: "email_verify_tokens", rowCount: Number(verifiesRow?.total) || 0, estimatedBytes: (Number(verifiesRow?.total) || 0) * 120, retention: "1 hour" },
+      { table: "analytics_events", shard: "telemetry", rowCount: Number(analyticsRow?.total) || 0, estimatedBytes: (Number(analyticsRow?.total) || 0) * 220, retention: "30 days" },
+      { table: "progress_documents", shard: "sync", rowCount: Number(progressRow?.total) || 0, estimatedBytes: Number(progressRow?.compressed_bytes) || (Number(progressRow?.total) || 0) * 1024, retention: "Active" },
+      { table: "question_choice_stats", shard: "telemetry", rowCount: Number(qstatsRow?.total) || 0, estimatedBytes: (Number(qstatsRow?.total) || 0) * 128, retention: "90 days" },
+      { table: "admin_audit", shard: "core", rowCount: Number(auditRow?.total) || 0, estimatedBytes: (Number(auditRow?.total) || 0) * 280, retention: "365 days" },
+      { table: "sessions", shard: "core", rowCount: Number(sessionsRow?.total) || 0, estimatedBytes: (Number(sessionsRow?.total) || 0) * 160, retention: "Active (max 12/user)" },
+      { table: "users", shard: "core", rowCount: Number(usersRow?.total) || 0, estimatedBytes: (Number(usersRow?.total) || 0) * 256, retention: "Permanent" },
+      { table: "content_objects", shard: "core", rowCount: Number(contentRow?.total) || 0, estimatedBytes: (Number(contentRow?.total) || 0) * 512, retention: "Managed" },
+      { table: "support_tickets", shard: "core", rowCount: Number(ticketsRow?.total) || 0, estimatedBytes: (Number(ticketsRow?.total) || 0) * 350, retention: "Active" },
+      { table: "auth_identities", shard: "core", rowCount: Number(identitiesRow?.total) || 0, estimatedBytes: (Number(identitiesRow?.total) || 0) * 120, retention: "Permanent" },
+      { table: "webhooks", shard: "core", rowCount: Number(webhooksRow?.total) || 0, estimatedBytes: (Number(webhooksRow?.total) || 0) * 180, retention: "Config" },
+      { table: "password_reset_tokens", shard: "core", rowCount: Number(resetsRow?.total) || 0, estimatedBytes: (Number(resetsRow?.total) || 0) * 120, retention: "1 hour" },
+      { table: "email_verify_tokens", shard: "core", rowCount: Number(verifiesRow?.total) || 0, estimatedBytes: (Number(verifiesRow?.total) || 0) * 120, retention: "1 hour" },
     ];
 
     const totalD1Rows = d1Tables.reduce((acc, t) => acc + t.rowCount, 0);
@@ -3377,6 +3425,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       d1Tables,
       totalD1Rows,
       totalD1EstimatedBytes,
+      d1Shards: d1ShardCount(env),
       safetyThrottles: [
         { name: "Analytics Daily Write Cap", threshold: `${ANALYTICS_DAILY_WRITE_CAP.toLocaleString("en-US")} / day`, status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
         { name: "QBank Choice Stats Write Cap", threshold: `${QBANK_STATS_DAILY_WRITE_CAP.toLocaleString("en-US")} / day`, status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
@@ -3697,13 +3746,17 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         await env.DB.batch([
           env.DB.prepare("PRAGMA foreign_keys = ON;"),
           env.DB.prepare("UPDATE content_objects SET created_by = ? WHERE created_by = ?").bind(session.user.id, targetId),
-          env.DB.prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM users WHERE id = ?").bind(targetId),
         ]);
+        // progress_documents may live on the sync shard, where the users FK
+        // cannot cascade across databases — delete it explicitly, after the
+        // core removal succeeded (an orphaned progress row is inert; a
+        // deleted user who still owns one is a storage leak).
+        await syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(targetId).run();
         await auditLog(env, session.user.id, "delete_user", targetId, { username: user.username, contentReassignedTo: session.user.id }, log);
         return json({ ok: true }, 200, origin, log);
       }
@@ -5552,13 +5605,14 @@ export default {
         if (Number(session.user.has_password ?? 1) === 1 && !await passwordMatches(String(body.password || ""), session.user.password_salt, session.user.password_hash)) return json({ error: "Current password is incorrect" }, 401, origin, log);
         await env.DB.batch([
           env.DB.prepare("PRAGMA foreign_keys = ON;"),
-          env.DB.prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM users WHERE id = ?").bind(session.user.id),
         ]);
+        // Sync shard: no FK cascade across databases (see admin user delete).
+        await syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ?").bind(session.user.id).run();
         return json({ ok: true }, 200, origin, log);
       }
 
@@ -5618,7 +5672,7 @@ export default {
         const docs = requestedKinds && requestedKinds.length > 0
           ? await getSelectedDocuments(env, session.user.id, requestedKinds)
           : await getAllDocuments(env, session.user.id);
-        const sizeRow = await env.DB.prepare("SELECT COALESCE(SUM(raw_bytes),0) as total FROM progress_documents WHERE user_id = ?").bind(session.user.id).first<{ total: number }>();
+        const sizeRow = await syncDb(env).prepare("SELECT COALESCE(SUM(raw_bytes),0) as total FROM progress_documents WHERE user_id = ?").bind(session.user.id).first<{ total: number }>();
         return json({ ...docs, quota: { usedBytes: Number(sizeRow?.total ?? 0), limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
       }
       if (request.method === "PUT" && url.pathname === "/v1/sync") {
@@ -5631,7 +5685,7 @@ export default {
         // previously each kind's doc was awaited sequentially inside the loop,
         // stretching a multi-kind push to N round-trips.
         const [sizeRows, ...currentDocs] = await Promise.all([
-          env.DB.prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>(),
+          syncDb(env).prepare("SELECT kind, raw_bytes FROM progress_documents WHERE user_id = ?").bind(session.user.id).all<{ kind: string; raw_bytes: number }>(),
           ...kindsToSync.map((kind) => getDocument(env, session.user.id, kind)),
         ]);
         const currentByKind = new Map<string, { records: Record<string, any>; updatedAt: number }>();
@@ -5642,7 +5696,7 @@ export default {
         // they exist — so they stop counting against the user's storage budget.
         const retiredSet = new Set<string>(RETIRED_SYNC_KINDS);
         const retiredCleanup = (sizeRows.results || []).some((row) => retiredSet.has(row?.kind ?? ""))
-          ? [env.DB.prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind IN ('highlights', 'writtenDrafts')").bind(session.user.id)]
+          ? [syncDb(env).prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind IN ('highlights', 'writtenDrafts')").bind(session.user.id)]
           : [];
         // Per-user storage budget: start from the raw bytes of stored docs NOT
         // being rewritten in this request, then add each merged doc's size.
@@ -5682,11 +5736,11 @@ export default {
           // Store gzip-compressed to save D1 space (~5-8x) and support far more
           // progress per user; raw_bytes tracks the uncompressed JSON so the
           // per-user budget is enforced on real content, not compressed size.
-          statements.push(env.DB.prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
+          statements.push(syncDb(env).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
           changedKinds.push(kind);
         }
         if (statements.length || retiredCleanup.length) {
-          await env.DB.batch([...statements, ...retiredCleanup]);
+          await syncDb(env).batch([...statements, ...retiredCleanup]);
           // Fire-and-forget poke: the user's other connected devices pull
           // immediately over the realtime hub (clients no longer idle-poll).
           // The pushing

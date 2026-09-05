@@ -179,6 +179,11 @@ npm run db:migrate
 # → Applies the consolidated schema (cloudflare/worker/migrations/0001_schema.sql)
 ```
 
+Optional but recommended as data grows: shard D1 into three databases (core /
+sync / telemetry), each with its own 500 MB free-tier ceiling —
+`npm run db:shard` (see the worker README's "D1 sharding"). Read/write row
+quotas are account-wide, so sharding multiplies only storage.
+
 Verify the schema:
 
 ```bash

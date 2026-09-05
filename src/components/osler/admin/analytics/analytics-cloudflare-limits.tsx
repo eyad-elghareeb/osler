@@ -334,13 +334,15 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
             </h3>
             <span className="text-xs text-muted-foreground tabular-nums shrink-0">
               {t("admin.analytics.cf.totalSize", { size: formatBytes(data.totalD1EstimatedBytes) })}
+              {(data.d1Shards ?? 1) > 1 ? ` · ${t("admin.analytics.cf.d1ShardCount", { count: data.d1Shards ?? 1 })}` : ""}
             </span>
           </div>
           <div className="max-h-64 overflow-auto rounded-lg border border-border">
-            <table className="w-full min-w-[540px] text-xs">
+            <table className="w-full min-w-[600px] text-xs">
               <thead className="bg-muted/50 text-muted-foreground sticky top-0 border-b border-border">
                 <tr>
                   <th className="py-2 px-3 text-left font-medium">{t("admin.analytics.cf.col.table")}</th>
+                  <th className="py-2 px-3 text-left font-medium">{t("admin.analytics.cf.col.shard")}</th>
                   <th className="py-2 px-3 text-right font-medium">{t("admin.analytics.cf.col.rows")}</th>
                   <th className="py-2 px-3 text-right font-medium">{t("admin.analytics.cf.col.size")}</th>
                   <th className="py-2 px-3 text-right font-medium">{t("admin.analytics.cf.col.retention")}</th>
@@ -350,6 +352,7 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
                 {d1Tables.map((tbl) => (
                   <tr key={tbl.table} className="hover:bg-muted/30">
                     <td className="py-1.5 px-3 font-mono text-[11px] text-foreground">{tbl.table}</td>
+                    <td className="py-1.5 px-3 font-mono text-[11px] text-muted-foreground">{tbl.shard ?? "core"}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums text-muted-foreground">{tbl.rowCount.toLocaleString()}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums text-muted-foreground">{formatBytes(tbl.estimatedBytes)}</td>
                     <td className="py-1.5 px-3 text-right text-[11px] text-muted-foreground">{tbl.retention}</td>

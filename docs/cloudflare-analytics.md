@@ -86,6 +86,21 @@ Osler's internal caps sit far below these (10k analytics writes/day,
 so the app throttles itself before Cloudflare does — the panel's "safety
 throttles" table lists every guard and which quota it protects.
 
+## D1 sharding
+
+The D1 storage ceiling is **per database**. Osler can split its data across
+up to three bound databases — core (`DB`: users, sessions, content),
+sync (`DB_SYNC`: `progress_documents`), and telemetry (`DB_TELEMETRY`:
+`analytics_events` + choice stats) — each with its own 500 MB. Read/write
+row quotas are account-wide and do **not** multiply with sharding.
+
+The quota panel reflects the setup automatically: it scales the storage
+gauge by the number of bound databases and labels each table row with its
+shard. Shards are opt-in — without the extra bindings everything lives in
+the single primary database and the gauge reports the 500 MB ceiling. Setup
+and one-time data migration: `npm run db:shard` in `cloudflare/worker`
+(documented in the worker README's "D1 sharding" section).
+
 ## R2 Class A/B mapping
 
 GraphQL reports raw `actionType` values; the Worker buckets them:

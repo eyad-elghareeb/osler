@@ -64,6 +64,28 @@ The worker is sized so ~1000 monthly-active users stay comfortably inside every 
 
 The two telemetry daily caps (`ANALYTICS_DAILY_WRITE_CAP`, `QBANK_STATS_DAILY_WRITE_CAP`) act as the safety valve: under an abnormal flood they return 429 to telemetry only — auth, sync, and content keep working.
 
+## D1 sharding (optional)
+
+The D1 free tier allows **500 MB of storage per database**, while the read/write row quotas (5M reads / 100K writes per day) are **account-wide** — splitting into multiple databases multiplies only the storage ceiling. Sharding by data domain does exactly that, isolating the table most likely to fill up fastest from the tables users care about protecting:
+
+| Binding | Database | Tables | Why |
+| --- | --- | --- | --- |
+| `DB` (core) | `osler-cloud` | users, sessions, content_objects, admin_audit, … | small, slow-growing |
+| `DB_SYNC` | `osler-sync` | `progress_documents` | per-user payloads, protected from telemetry churn |
+| `DB_TELEMETRY` | `osler-telemetry` | `analytics_events`, `question_choice_*`, `daily_counters` | highest-volume, most disposable |
+
+Shard bindings are optional: without them the worker keeps every table in the primary database and behaves exactly as before. To enable them:
+
+```sh
+npm run db:shard              # creates the shard DBs, fills wrangler.toml IDs,
+                              # applies their migrations, copies + verifies data
+npm run deploy                # deploy the sharded worker
+npm run db:shard -- --prune   # after verifying the app, drop the copied rows
+                              # from the primary database
+```
+
+The ID changes to wrangler.toml stay local (git keeps placeholders, same as the primary database ID). Shard schema lives in `migrations-sync/` and `migrations-telemetry/`; future changes there are applied with `npx wrangler d1 migrations apply osler-sync --remote` (and `osler-telemetry`).
+
 ## Scripts
 
 | Script | Description |
@@ -74,6 +96,7 @@ The two telemetry daily caps (`ANALYTICS_DAILY_WRITE_CAP`, `QBANK_STATS_DAILY_WR
 | `npm run db:migrate` | Apply pending D1 migrations to the remote database. |
 | `npm run db:migrate:local` | Apply pending D1 migrations to the local dev database. |
 | `npm run db:list` | List applied and pending migrations. |
+| `npm run db:shard` | One-time optional D1 shard setup: create + wire + migrate + copy + verify (see "D1 sharding"). |
 | `npm run tail` | Tail live logs from the deployed Worker (`wrangler tail`). |
 | `npm run secret:list` | List configured Worker secrets (names only, not values). |
 
@@ -85,6 +108,12 @@ cloudflare/worker/
 │   └── index.mjs              # Worker entry point (single file, zero deps)
 ├── migrations/
 │   └── 0001_schema.sql        # consolidated schema: users, sessions, sync docs, OAuth, content_objects, admin_audit, FTS, analytics, lockout, tickets, tokens, MCP OAuth (replaces the old 0001-0025 chain)
+├── migrations-sync/
+│   └── 0001_schema.sql        # optional sync shard: progress_documents (applied by `npm run db:shard`)
+├── migrations-telemetry/
+│   └── 0001_schema.sql        # optional telemetry shard: analytics + choice stats + daily_counters
+├── scripts/
+│   └── shard-d1.mjs           # one-time optional shard setup + data migration
 ├── .dev.vars.example          # local secrets template (gitignored)
 ├── .env.example               # documentation reference for env vars
 ├── package.json

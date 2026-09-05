@@ -614,6 +614,9 @@ export interface CloudflareLimitMetric {
 
 export interface CloudflareTableStat {
   table: string;
+  /** D1 database that holds the table ("core" | "sync" | "telemetry").
+   *  Absent on older Workers — treat as "core". */
+  shard?: "core" | "sync" | "telemetry";
   rowCount: number;
   estimatedBytes: number;
   retention: string;
@@ -667,6 +670,9 @@ export interface CloudflareLimitsData {
   d1Tables: CloudflareTableStat[];
   totalD1Rows: number;
   totalD1EstimatedBytes: number;
+  /** Number of bound D1 databases (1 unsharded, 3 fully sharded).
+   *  Absent on older Workers — treat as 1. */
+  d1Shards?: number;
   safetyThrottles: CloudflareSafetyThrottle[];
 }
 

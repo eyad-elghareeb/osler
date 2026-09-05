@@ -43,6 +43,7 @@ npx wrangler d1 create osler-cloud
 # Paste the returned database_id into wrangler.toml
 npx wrangler secret put JWT_SECRET
 npm run db:migrate          # applies the consolidated schema (0001_schema.sql)
+# Optional: npm run db:shard first to split D1 into core/sync/telemetry shards
 npm run deploy
 ```
 
@@ -250,6 +251,13 @@ npm run db:list              # list applied/pending migrations
 ```
 
 Always run `npm run db:migrate:local` first when developing new migrations to catch syntax errors before touching production.
+
+If the optional D1 shards are enabled (`DB_SYNC` / `DB_TELEMETRY` bindings, see the worker README's "D1 sharding"), also apply their own migration dirs after changing `migrations-sync/` or `migrations-telemetry/`:
+
+```bash
+npx wrangler d1 migrations apply osler-sync --remote
+npx wrangler d1 migrations apply osler-telemetry --remote
+```
 
 > **Note:** the schema used to live in 25 migration files (`0001_initial.sql`
 > through `0025_mcp_oauth.sql`). Those were consolidated into the single
