@@ -2871,6 +2871,7 @@ export const en = {
     "admin.analytics.cf.d1Storage": "D1 Database Storage",
     "admin.analytics.cf.d1StorageDesc": "500 MB per-database free limit",
     "admin.analytics.cf.d1ShardCount": "{count} D1 databases",
+    "admin.analytics.cf.d1Measured": "measured",
     "admin.analytics.cf.r2Storage": "R2 Object Storage",
     "admin.analytics.cf.r2StorageDesc": "10 GB-month free storage",
     "admin.analytics.cf.r2ClassA": "R2 Class A Ops",

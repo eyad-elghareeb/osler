@@ -333,8 +333,9 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
               <span className="truncate">{t("admin.analytics.cf.d1Breakdown")}</span>
             </h3>
             <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-              {t("admin.analytics.cf.totalSize", { size: formatBytes(data.totalD1EstimatedBytes) })}
+              {t("admin.analytics.cf.totalSize", { size: formatBytes(data.d1MeasuredBytes ?? data.totalD1EstimatedBytes) })}
               {(data.d1Shards ?? 1) > 1 ? ` · ${t("admin.analytics.cf.d1ShardCount", { count: data.d1Shards ?? 1 })}` : ""}
+              {data.d1MeasuredBytes != null ? ` · ${t("admin.analytics.cf.d1Measured")}` : ""}
             </span>
           </div>
           <div className="max-h-64 overflow-auto rounded-lg border border-border">

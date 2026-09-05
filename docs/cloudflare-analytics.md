@@ -22,7 +22,7 @@ query fails, that section falls back to its estimate and the rest stay live.
 | Worker CPU p50 | Shown as client-measured API latency, **never** percented against the 10 ms limit (any real RTT would false-alarm) | `workersInvocationsAdaptive` CPU p50 (reported in µs, converted to ms) vs the 10 ms limit |
 | D1 row writes/day | Today's `analytics_events` + `admin_audit` + `sessions` rows + 15% headroom | Still estimated — D1 row metering has no confirmed per-database usage schema; use Workers & Pages → D1 → Metrics for the billed number |
 | D1 row reads/day | Heuristic from telemetry volume | Still estimated (same reason) |
-| D1 storage | Real row counts × per-table byte estimates vs the **500 MB per-database** free limit | Same (row counts are real; byte sizes are estimates) |
+| D1 storage | Row counts × per-table byte estimates vs the **500 MB per-database** free limit | **Measured**: REST `/d1/database` `file_size` sum (needs **D1 → Read** on the token); account-level, like the requests metric. Falls back to the estimate if that query fails |
 | R2 storage | `list()` byte sum → content-object estimate | GraphQL storage gauge → `CONTENT.list()` byte sum → estimate |
 | R2 Class A/B ops/month | Heuristic from content/admin activity | `r2OperationsAdaptiveGroups` grouped by action type (see mapping) |
 | Subrequests | Design bound (≤ 40 per run of the 50 cap) | Same — bounded in code, not measured |
@@ -44,6 +44,8 @@ Cloudflare dashboard sidebar (or the account URL) → 32 hex characters.
 **2. Create an API token with exactly one permission.**
 My Profile → API Tokens → Create Token → Custom token:
 - Permissions: **Account → Account Analytics → Read**
+- Optional: also add **Account → D1 → Read** so the D1 storage gauge shows
+  real database file sizes instead of per-table estimates.
 - No zone permissions, no write access. A read-only analytics token cannot
   change anything even if leaked; rotate it like any secret if exposed.
 
@@ -114,8 +116,9 @@ GraphQL reports raw `actionType` values; the Worker buckets them:
 
 ## Overhead
 
-- One panel load = ≤ 4 GraphQL subrequests + the usual D1 reads, cached
-  5 min per isolate. Well inside the 50-subrequest free cap.
+- One panel load = ≤ 4 GraphQL subrequests + 1 REST GET (D1 file sizes) +
+  the usual D1 reads, cached 5 min per isolate. Well inside the
+  50-subrequest free cap.
 - The R2 `list()` fallback walks ≤ 40 pages (1 Class B op per 1,000 objects)
   and only runs when the storage gauge query fails.
 - The endpoint is admin-only (`403` otherwise); the token never leaves the
@@ -134,5 +137,8 @@ GraphQL reports raw `actionType` values; the Worker buckets them:
 - **CPU card shows latency, not CPU** — the `quantiles.cpuTimeP50` field is
   best-effort; if Cloudflare renames it, that card falls back to the
   client-measured latency framing instead of breaking.
-- **D1 sections always estimated** — by design (no confirmed schema); the
-  billed source of truth is the dashboard D1 Metrics page.
+- **D1 rows read/written always estimated** — no confirmed metering schema.
+  D1 **storage** becomes measured once the token also carries **D1 → Read**
+  (REST `file_size` sum — D1 SQL cannot report its own file size; pragma
+  queries for it are rejected with SQLITE_AUTH). The billed source of truth
+  for row quotas remains the dashboard's D1 Metrics page.

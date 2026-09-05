@@ -670,6 +670,11 @@ export interface CloudflareLimitsData {
   d1Tables: CloudflareTableStat[];
   totalD1Rows: number;
   totalD1EstimatedBytes: number;
+  /** Real summed file size across every bound D1 database (pragma
+   *  page_count × page_size), or null when any database rejected the query
+   *  and the gauge fell back to the per-table estimates. Absent on older
+   *  Workers. */
+  d1MeasuredBytes?: number | null;
   /** Number of bound D1 databases (1 unsharded, 3 fully sharded).
    *  Absent on older Workers — treat as 1. */
   d1Shards?: number;

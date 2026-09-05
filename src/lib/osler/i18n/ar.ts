@@ -2866,6 +2866,7 @@ export const ar = {
     "admin.analytics.cf.d1Storage": "مساحة تخزين قاعدة بيانات D1",
     "admin.analytics.cf.d1StorageDesc": "حد 500 ميغابايت لكل قاعدة بيانات",
     "admin.analytics.cf.d1ShardCount": "{count} قواعد بيانات D1",
+    "admin.analytics.cf.d1Measured": "مُقاس",
     "admin.analytics.cf.r2Storage": "تخزين الملفات R2",
     "admin.analytics.cf.r2StorageDesc": "حد 10 غيغابايت/شهر تخزين مجاني",
     "admin.analytics.cf.r2ClassA": "عمليات R2 فئة A",

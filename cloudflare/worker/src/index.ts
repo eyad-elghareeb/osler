@@ -3001,10 +3001,10 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
  * Each query is isolated (own try/catch): a schema drift in one dataset
  * degrades that section to the estimate instead of failing the endpoint.
  * Results are cached in-isolate for 5 minutes; one panel load costs at most
- * 4 subrequests. D1 row metering has no confirmed per-database GraphQL
- * schema, so D1 reads/writes stay estimated from real table counts — check
- * the dashboard (Workers & Pages → D1 → Metrics) for the billed numbers.
- * Full setup: docs/cloudflare-analytics.md.
+ * 4 GraphQL subrequests + 1 REST GET (D1 file sizes). D1 row metering has
+ * no confirmed per-database GraphQL schema, so D1 reads/writes stay
+ * estimated from real table counts — check the dashboard (Workers & Pages →
+ * D1 → Metrics) for the billed numbers. Full setup: docs/cloudflare-analytics.md.
  */
 const CF_GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const CF_LIVE_TTL_MS = 5 * 60 * 1000;
@@ -3020,11 +3020,16 @@ interface CfLiveUsage {
   r2ClassAOpsMonth: number | null;
   r2ClassBOpsMonth: number | null;
   r2Bytes: number | null;
+  /** Summed file_size of every D1 database on the account (REST
+   *  /d1/database list — needs the token to also carry D1 Read). Null when
+   *  the query failed or the token lacks the permission. */
+  d1FileBytesTotal: number | null;
 }
 
 const CF_LIVE_NONE: CfLiveUsage = {
   connected: false, at: null, workersRequestsToday: null, cpuP50Ms: null,
   r2ClassAOpsMonth: null, r2ClassBOpsMonth: null, r2Bytes: null,
+  d1FileBytesTotal: null,
 };
 let cfLiveCache: { at: number; data: CfLiveUsage } | null = null;
 
@@ -3043,6 +3048,36 @@ async function cfGraphql(token: string, query: string, variables: Record<string,
     const body = (await res.json()) as { data?: any; errors?: unknown[] };
     if (!body || (Array.isArray(body.errors) && body.errors.length > 0)) return null;
     return body.data ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Sum the file_size of every D1 database on the account via the REST API —
+ *  the same real numbers `wrangler d1 list` shows and the quantity the
+ *  free-tier per-database storage ceiling bills. Account-level (every
+ *  database, bound or not); null when the token lacks D1 Read. */
+async function cfD1FileBytes(token: string, account: string): Promise<number | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CF_GRAPHQL_TIMEOUT_MS);
+  try {
+    // The free tier caps accounts at 10 D1 databases — one page covers it.
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database?per_page=25`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const body = await res.json() as { success?: boolean; result?: Array<{ file_size?: unknown }> };
+    if (!body?.success || !Array.isArray(body.result)) return null;
+    // `seen` guards against a shape change reporting a silent 0 bytes.
+    let bytes = 0, seen = false;
+    for (const db of body.result) {
+      const size = Number(db?.file_size);
+      if (Number.isFinite(size) && size >= 0) { bytes += size; seen = true; }
+    }
+    return seen ? bytes : null;
   } catch {
     return null;
   } finally {
@@ -3073,7 +3108,7 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
   if (cfLiveCache && t - cfLiveCache.at < CF_LIVE_TTL_MS) return cfLiveCache.data;
   const bucket = (env.CF_R2_BUCKET ?? "").trim() || "osler-content";
   const weekAgoIso = new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const [inv, cpu, ops, stor] = await Promise.all([
+  const [inv, cpu, ops, stor, d1Bytes] = await Promise.all([
     cfGraphql(token,
       `query W($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
       { a: account, s: dayStartIso, e: nowIso }),
@@ -3086,6 +3121,7 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
     cfGraphql(token,
       `query S($a: string!, $w: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:100,filter:{datetime_geq:$w,datetime_leq:$e,bucketName:$b}){max{payloadSize}}}}}`,
       { a: account, w: weekAgoIso, e: nowIso, b: bucket }),
+    cfD1FileBytes(token, account),
   ]);
   const out: CfLiveUsage = { ...CF_LIVE_NONE };
   try {
@@ -3128,6 +3164,9 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
       if (best !== null) { out.r2Bytes = Math.round(best); out.connected = true; }
     }
   } catch { /* estimated fallback */ }
+  // D1 storage is a REST fetch, not GraphQL — the helper never throws, so a
+  // plain null check degrades the section like every other live query.
+  if (d1Bytes !== null) { out.d1FileBytesTotal = Math.round(d1Bytes); out.connected = true; }
   out.at = t;
   cfLiveCache = { at: t, data: out };
   return out;
@@ -3214,6 +3253,11 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
     // chain: GraphQL gauge → list() sum → size estimate.
     const live = await fetchCfLiveUsage(env, new Date(startOfToday).toISOString(), new Date(startOfMonth).toISOString(), new Date(t).toISOString());
     const listedR2Bytes = live.r2Bytes !== null ? null : await r2BucketBytes(env);
+    // Real D1 storage from the REST API (account-wide file_size sum). Falls
+    // back to the per-table estimates when no token is configured or it
+    // lacks the D1 Read permission — the same per-section degradation as
+    // every other live query.
+    const measuredD1Bytes = live.d1FileBytesTotal;
 
     // Estimate total D1 writes today across all features
     const estimatedD1WritesToday = analyticsToday + auditToday + sessionsToday + Math.round(analyticsToday * 0.15);
@@ -3257,6 +3301,9 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
 
     const totalD1Rows = d1Tables.reduce((acc, t) => acc + t.rowCount, 0);
     const totalD1EstimatedBytes = d1Tables.reduce((acc, t) => acc + t.estimatedBytes, 0);
+    // Storage gauge value: real measured file size when every bound database
+    // answered the pragma query, else the per-table row-count estimate.
+    const d1StorageCurrent = measuredD1Bytes ?? totalD1EstimatedBytes;
 
     // Worker requests: live GraphQL sum when connected, else the D1-telemetry
     // heuristic (analytics batches ×2, sessions ×5 — public reads included).
@@ -3320,11 +3367,11 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
         period: "daily" as const,
       },
       d1Storage: {
-        current: totalD1EstimatedBytes,
+        current: d1StorageCurrent,
         limit: LIMITS.d1DatabaseStorageBytes,
         unit: "bytes",
-        percentage: Math.min(100, Math.round((totalD1EstimatedBytes / LIMITS.d1DatabaseStorageBytes) * 1000) / 10),
-        status: calcStatus(totalD1EstimatedBytes, LIMITS.d1DatabaseStorageBytes),
+        percentage: Math.min(100, Math.round((d1StorageCurrent / LIMITS.d1DatabaseStorageBytes) * 1000) / 10),
+        status: calcStatus(d1StorageCurrent, LIMITS.d1DatabaseStorageBytes),
         period: "storage" as const,
       },
       r2Storage: {
@@ -3398,7 +3445,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
         workerRequests: live.workersRequestsToday !== null ? "live" : "estimated",
         d1Writes: "estimated",
         d1Reads: "estimated",
-        d1Storage: "estimated",
+        d1Storage: live.d1FileBytesTotal !== null ? "live" : "estimated",
         r2Storage: live.r2Bytes !== null || listedR2Bytes !== null ? "live" : "estimated",
         r2ClassAOps: live.r2ClassAOpsMonth !== null ? "live" : "estimated",
         r2ClassBOps: live.r2ClassBOpsMonth !== null ? "live" : "estimated",
@@ -3425,6 +3472,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       d1Tables,
       totalD1Rows,
       totalD1EstimatedBytes,
+      d1MeasuredBytes: measuredD1Bytes,
       d1Shards: d1ShardCount(env),
       safetyThrottles: [
         { name: "Analytics Daily Write Cap", threshold: `${ANALYTICS_DAILY_WRITE_CAP.toLocaleString("en-US")} / day`, status: "active", protectedQuota: "D1 Database Writes (100k/day)" },

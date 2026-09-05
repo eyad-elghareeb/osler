@@ -80,6 +80,8 @@ WORKER_URL = "http://localhost:8787"
 #   2. Set the token as a SECRET (never commit it here):
 #        npx wrangler secret put CF_ANALYTICS_TOKEN
 #      The token needs one permission: Account → Account Analytics → Read.
+#      Optionally add Account → D1 → Read so the panel's D1 storage gauge
+#      shows real database file sizes instead of per-table estimates.
 #   3. Redeploy the Worker. Full guide: docs/cloudflare-analytics.md
 # CF_ACCOUNT_ID = "00000000000000000000000000000000"
 # CF_R2_BUCKET = "osler-content"
