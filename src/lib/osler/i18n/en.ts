@@ -3255,6 +3255,14 @@ export const en = {
     "walkthrough.trigger": "Interactive Guide",
     "walkthrough.settingsTipTitle": "How to change settings",
     "walkthrough.reportTipTitle": "How to report problems",
+    "walkthrough.preview.live": "Live Preview",
+    "walkthrough.preview.instantSync": "Instant Sync",
+    "walkthrough.preview.peerStats": "Peer Accuracy",
+    "walkthrough.preview.tools": "Clinical Tools",
+    "walkthrough.preview.customizable": "Customizable",
+    "walkthrough.preview.editorialReview": "Editorial Review",
+    "walkthrough.preview.offlineExport": "Offline & PDF",
+    "walkthrough.preview.ready": "Ready",
 
     // QBank Walkthrough
     "walkthrough.qbank.badge": "QBank Walkthrough",
