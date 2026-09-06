@@ -35,6 +35,30 @@ fn config_path(root: &Path) -> PathBuf {
     root.join(CONFIG_REL)
 }
 
+/// Top-level trees that must NEVER land in a generated instance, no matter how
+/// the folder walk in `generate_instance_sync` is broadened later.
+/// `tauri-admin/` is maintainer tooling (the desktop generator app's Rust
+/// source + build tree) — an instance runs on Node.js alone and never needs
+/// it. The rest are caches, VCS state, or previous admin/backup sidecars.
+fn is_generator_excluded(rel: &str) -> bool {
+    let rel = rel.replace('\\', "/");
+    let rel = rel.trim_start_matches('/');
+    let first = rel.split('/').next().unwrap_or("");
+    matches!(
+        first,
+        "tauri-admin"
+            | ".git"
+            | "node_modules"
+            | "target"
+            | ".next"
+            | "out"
+            | "dist"
+            | ".wrangler"
+            | ".osler-backup"
+            | ".osler-admin"
+    )
+}
+
 fn resolve_source_root() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         let mut curr = exe.parent();
@@ -196,6 +220,11 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
                     }
                     if let Ok(rel) = path.strip_prefix(&src_root) {
                         let rel_str = rel.to_string_lossy().replace('\\', "/");
+                        // Maintainer-only trees (notably `tauri-admin/`) never
+                        // ship in instances — see `is_generator_excluded`.
+                        if is_generator_excluded(&rel_str) {
+                            continue;
+                        }
                         let tgt_file = target.join(rel);
                         if entry.file_type().is_dir() {
                             let _ = fs::create_dir_all(&tgt_file);
@@ -365,7 +394,7 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
 
     // ── 5. README.md & .gitignore ───────────────────────────────────
     let readme = format!(
-        "# {name}\n\n{tagline}\n\nThis instance was scaffolded by the Osler Admin instance generator.\n\n- **GitHub repo:** {repo}\n- **Organisation:** {org}\n- **Default theme:** {theme}\n- **Default language:** {lang}\n- **Enabled engines:** {engines}\n- **Cloud accounts and sync:** {cloud}\n\n## Getting started\n\n```bash\nnpm install\nnpm run generate-manifests\nnpm run dev\n```\n\n## Cloud Deploy commands\n\n```bash\nnpm run deploy:pages   # Deploy static web app to Cloudflare Pages\nnpm run deploy:worker  # Deploy backend Worker to Cloudflare Workers\n```\n\nSee `public/osler.config.json` to customise the site name, engines, themes, and cloud mode.\n",
+        "# {name}\n\n{tagline}\n\nThis instance was scaffolded by the Osler Admin instance generator.\n\nIt needs only Node.js — the `tauri-admin/` desktop tooling from upstream is maintainer-only and intentionally not included.\n\n- **GitHub repo:** {repo}\n- **Organisation:** {org}\n- **Default theme:** {theme}\n- **Default language:** {lang}\n- **Enabled engines:** {engines}\n- **Cloud accounts and sync:** {cloud}\n\n## Getting started\n\n```bash\nnpm install\nnpm run generate-manifests\nnpm run dev\n```\n\n## Cloud Deploy commands\n\n```bash\nnpm run deploy:pages   # Deploy static web app to Cloudflare Pages\nnpm run deploy:worker  # Deploy backend Worker to Cloudflare Workers\n```\n\nSee `public/osler.config.json` to customise the site name, engines, themes, and cloud mode.\n",
         name = opts.site_name,
         tagline = opts.tagline,
         repo = opts.github_repo,
@@ -455,4 +484,59 @@ fn chrono_now_iso() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     format!("<epoch:{}>", secs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_generator_excluded;
+
+    #[test]
+    fn tauri_admin_never_lands_in_instances() {
+        for p in [
+            "tauri-admin",
+            "tauri-admin/src/main.rs",
+            "tauri-admin/src/config.rs",
+            "tauri-admin/frontend/views/instance.js",
+            "tauri-admin/Cargo.toml",
+            "tauri-admin/Cargo.lock",
+            "tauri-admin/target/debug/osler-admin",
+            "tauri-admin\\.gen\\schemas\\x.json",
+        ] {
+            assert!(is_generator_excluded(p), "should exclude: {}", p);
+        }
+    }
+
+    #[test]
+    fn instance_paths_still_pass_through() {
+        for p in [
+            "src/app/page.tsx",
+            "src/lib/osler/config.ts",
+            "scripts/generate-content-manifests.js",
+            "cloudflare/worker/src/index.ts",
+            "cloudflare/worker/migrations/0001_schema.sql",
+            "package.json",
+            "public/osler.config.json",
+            // Prefix lookalike — a different top-level dir, must pass.
+            "tauri-admin-notes/todo.md",
+        ] {
+            assert!(!is_generator_excluded(p), "should pass: {}", p);
+        }
+    }
+
+    #[test]
+    fn caches_and_sidecars_stay_out() {
+        for p in [
+            ".git/HEAD",
+            "node_modules/next/dist/x.js",
+            "target/debug/app",
+            ".next/static/x.js",
+            "out/index.html",
+            "dist/bundle.js",
+            ".wrangler/state/x.json",
+            ".osler-backup/backup-1/src/y.ts",
+            ".osler-admin/deploy.json",
+        ] {
+            assert!(is_generator_excluded(p), "should exclude: {}", p);
+        }
+    }
 }

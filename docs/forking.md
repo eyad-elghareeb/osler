@@ -79,6 +79,13 @@ npm run dev:full        # frontend + worker concurrently
 npm run dev:worker      # worker only on http://localhost:8787
 ```
 
+### Do you need `tauri-admin/`?
+
+No — unless you maintain the desktop tooling itself. `tauri-admin/` is the Rust source of the desktop admin app. An instance runs on Node.js alone: nothing in `src/`, `scripts/`, `cloudflare/`, or `package.json` references it at build or runtime.
+
+- **Generator-made instances** never contain it — the generator only copies `src/`, `scripts/`, and `cloudflare/`, and explicitly excludes maintainer-only trees.
+- **Forks** do contain it (you cloned the whole repo). Leaving it alone is the zero-friction option: it is never built or deployed with your instance, and `target/` (the multi-gigabyte Rust build tree) is already gitignored, so clones stay light. If you want a lean repo and never sync framework updates via git merge, `git rm -r tauri-admin` is safe — the desktop admin and the instance updater both run from upstream regardless.
+
 ---
 
 ## 3. The single source of truth: `osler.config.json`
