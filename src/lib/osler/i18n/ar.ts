@@ -114,7 +114,6 @@ export const ar = {
     "login.sendVerify": "إرسال رابط التحقق",
     "login.verifySent": "إذا كان بريدك الإلكتروني بحاجة إلى التحقق، فسيصل رابط قريبًا.",
     "login.unverified": "لم يتم التحقق من البريد الإلكتروني لهذا الحساب بعد — لقد أرسلنا لك رابطًا جديدًا. تحقق منه لتسجيل الدخول.",
-    "login.unverifiedResend": "استخدام بريد إلكتروني آخر",
     "login.checkSpam": "لا تجدها؟ تحقق من مجلد الرسائل غير المرغوب فيها — غالبًا ما تصل الرسائل التلقائية إلى هناك.",
     "login.verifyChecking": "جارٍ التحقق من بريدك الإلكتروني…",
     "login.verifyConfirmed": "تم تأكيد البريد الإلكتروني. يمكنك الآن تسجيل الدخول.",
@@ -129,7 +128,6 @@ export const ar = {
     "login.google": "المتابعة باستخدام Google",
     "login.googleError": "فشل تسجيل الدخول باستخدام Google. يرجى المحاولة مرة أخرى.",
     "login.googleEmailClaimed": "هذا البريد مرتبط بالفعل بحساب بكلمة مرور لم يتم التحقق منه. سجّل الدخول بكلمة مرور ذلك الحساب، أو تحقق من البريد أولًا.",
-    "login.noEmailWarning": "بدون عنوان بريد إلكتروني، لن تتوفر ميزة استعادة كلمة المرور.",
     "login.sessionExpired": "انتهت صلاحية جلستك أو تم تسجيل الخروج منها على جهاز آخر. يرجى تسجيل الدخول مرة أخرى لمواصلة مزامنة تقدّمك.",
 
     "settings.section.account": "الحساب",
@@ -155,6 +153,7 @@ export const ar = {
     "settings.account.noEmail": "لم يتم تعيين بريد إلكتروني",
     "settings.account.updateProfile": "تحديث الملف الشخصي",
     "settings.account.profileUpdated": "تم تحديث الملف الشخصي بنجاح.",
+    "settings.account.verifyEmailSent": "تم حفظ الملف الشخصي. أرسلنا رابط تحقق إلى عنوانك الجديد — تحقق منه قبل تسجيل الدخول التالي.",
     "settings.account.security": "الأمان وبيانات الدخول",
     "settings.account.changePassword": "تغيير كلمة المرور",
     "settings.account.setPassword": "تعيين كلمة المرور",

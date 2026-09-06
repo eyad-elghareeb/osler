@@ -89,7 +89,13 @@ export function AccountSettingsSection() {
         email: email.trim() || null,
       });
       setAccount(updated);
-      setProfileMsg({ text: t("settings.account.profileUpdated") });
+      // A new address must be verified before the next sign-in — say so now
+      // so the user isn't locked out without understanding why.
+      const newEmail = email.trim().toLowerCase();
+      const oldEmail = (account?.user.email || "").toLowerCase();
+      setProfileMsg({
+        text: newEmail && newEmail !== oldEmail ? t("settings.account.verifyEmailSent") : t("settings.account.profileUpdated"),
+      });
       haptic("success");
     } catch (err) {
       setProfileMsg({ text: err instanceof CloudApiError ? err.message : t("login.cloud.error"), error: true });

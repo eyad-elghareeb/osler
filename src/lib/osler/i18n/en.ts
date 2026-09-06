@@ -113,7 +113,6 @@ export const en = {
     "login.sendVerify": "Send verification email",
     "login.verifySent": "If your email needs verification, a link is on its way.",
     "login.unverified": "This account's email isn't verified yet — we just sent a fresh link. Verify it to sign in.",
-    "login.unverifiedResend": "Use a different email",
     "login.checkSpam": "Can't find it? Check your spam or junk folder — automated emails often land there.",
     "login.verifyChecking": "Verifying your email…",
     "login.verifyConfirmed": "Email confirmed. You can now sign in.",
@@ -128,7 +127,6 @@ export const en = {
     "login.google": "Continue with Google",
     "login.googleError": "Google sign-in failed. Please try again.",
     "login.googleEmailClaimed": "This email is already linked to a password account that has not been verified. Sign in with that account's password, or verify the email first.",
-    "login.noEmailWarning": "Without an email address, password recovery will be unavailable.",
     "login.sessionExpired": "Your session has expired or was signed out on another device. Please sign in again to continue syncing your progress.",
 
     "settings.section.account": "Account",
@@ -154,6 +152,7 @@ export const en = {
     "settings.account.noEmail": "No email set",
     "settings.account.updateProfile": "Update Profile",
     "settings.account.profileUpdated": "Profile updated successfully.",
+    "settings.account.verifyEmailSent": "Profile saved. We sent a verification link to your new address — verify it before your next sign-in.",
     "settings.account.security": "Security & Credentials",
     "settings.account.changePassword": "Change Password",
     "settings.account.setPassword": "Set Password",
