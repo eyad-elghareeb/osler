@@ -247,8 +247,12 @@ export async function registerCloudAccount(input: {
   displayName: string;
   password: string;
   turnstileToken?: string;
-}): Promise<CloudSession> {
-  const session = await request<CloudSession>("/v1/auth/register", { method: "POST", body: JSON.stringify(input) });
+}): Promise<CloudSession | { ok: boolean; verifySent: boolean }> {
+  const res = await request<CloudSession & { ok?: boolean; verifySent?: boolean }>("/v1/auth/register", { method: "POST", body: JSON.stringify(input) });
+  // Email signups get no session until they verify — only persist when the
+  // server actually issued one.
+  if (!res.token) return { ok: true, verifySent: res.verifySent === true };
+  const session = res as CloudSession;
   saveCloudSession(session);
   // New account has no server settings yet — the first device's local
   // settings will be pushed on the first sync; no pull needed here.

@@ -319,16 +319,25 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
             haptic("error");
             return;
           }
-          // Signup is username-only — the email address is added later in
-          // Settings, where saving it triggers the verification mail.
-          const session = await registerCloudAccount({
+          const res = await registerCloudAccount({
             username: username.trim(),
+            email: email.trim() || undefined,
             displayName: displayName.trim() || username.trim(),
             password,
             turnstileToken: turnstileToken || undefined,
           });
+          if (!("token" in res) || !res.token) {
+            // Email signup verifies before its first session: land on the
+            // verification form with the address prefilled and the link
+            // already on its way.
+            if (email.trim()) setEmail(email.trim());
+            setVerifySent(true);
+            setCloudMode("verify");
+            haptic("success");
+            return;
+          }
           haptic("success");
-          onLogin(session.user.displayName);
+          onLogin(res.user.displayName);
           return;
         }
         if (cloudMode === "reset") {
@@ -504,7 +513,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
             )}
           </div>
 
-          {cloudActive && (cloudMode === "reset" || cloudMode === "verify") && !resetToken && (
+          {cloudActive && (cloudMode === "register" || cloudMode === "reset" || cloudMode === "verify") && !resetToken && (
             <div>
               <label htmlFor="email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.email")}
@@ -519,6 +528,11 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                 required={cloudMode === "reset" || cloudMode === "verify"}
                 className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
+              {cloudMode === "register" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {email.trim() ? t("login.emailOptional") : t("login.noEmailWarning")}
+                </p>
+              )}
             </div>
           )}
 
