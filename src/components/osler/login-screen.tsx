@@ -493,7 +493,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
 
           <div>
             <label htmlFor="username" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {cloudActive ? t("login.identifier") : t("login.username")}
+              {cloudActive && cloudMode !== "register" ? t("login.identifier") : t("login.username")}
             </label>
             <input
               id="username"
@@ -501,7 +501,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
               value={username}
               onChange={(e) => { setUsername(e.target.value); setUsernameStatus("idle"); }}
               onBlur={checkUsername}
-              placeholder={cloudActive ? t("login.identifierPlaceholder") : t("login.usernamePlaceholder")}
+              placeholder={cloudActive && cloudMode !== "register" ? t("login.identifierPlaceholder") : t("login.usernamePlaceholder")}
               autoComplete="username"
               autoFocus
               className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
