@@ -1,8 +1,7 @@
 # Osler Suite — Tauri Desktop Guide (v0.3)
 
-The Osler suite is a standalone **Tauri 2 desktop application** (Rust backend + plain HTML/JS frontend) that lives at [`tauri-admin/`](../tauri-admin/). It provides two focused applications:
-1. **Osler Instance & Cloud Manager** (`instance-manager.html`): Automated step-by-step instance generator, full Cloudflare stack deployment (Worker, D1 SQL, R2 content storage, Pages frontend), prerequisites diagnostics and auto-installer, and instance code patch/updater.
-2. **Osler Content Studio (CMS)** (`studio.html`): Dedicated authoring CMS for medical educators to edit Question Banks, Flashcards, OSCE Stations, Written Clinical Cases, and Markdown Articles.
+The Osler suite is a standalone **Tauri 2 desktop application** (Rust backend + plain HTML/JS frontend) that lives at [`tauri-admin/`](../tauri-admin/). It is a single focused application:
+1. **Osler Instance & Cloud Manager** (`instance-manager.html`): Automated step-by-step instance generator and full A-to-Z setup - Cloudflare stack deployment (Worker, D1 SQL, R2 content storage, Pages frontend), prerequisites diagnostics and auto-installer, Google Sign-In configuration, first-admin promotion, health verification, and the instance code patch/updater.
 
 This guide is the **operator manual** for the admin app. For the architectural overview, see [`tauri-admin/README.md`](../tauri-admin/README.md). For the web app's admin panel (the in-browser one at `/admin`), see [`admin-guide.md`](./admin-guide.md).
 
@@ -15,50 +14,54 @@ This guide is the **operator manual** for the admin app. For the architectural o
 ## Table of Contents
 
 1. [What is the Tauri admin suite?](#1-what-is-the-tauri-admin-suite)
-2. [Prerequisites & Diagnostic Tool](#2-prerequisites--diagnostic-tool)
+2. [Prerequisites](#2-prerequisites)
 3. [Building the admin](#3-building-the-admin)
-4. [Dual-App Architecture (Instance Manager vs Content Studio)](#4-dual-app-architecture)
-5. [Automated Instance Generator (Step-by-Step)](#5-automated-instance-generator)
-6. [Cloudflare Full-Stack Deployment](#6-cloudflare-full-stack-deployment)
-7. [Instance Code Patch & Update Engine](#7-instance-code-patch--update-engine)
-8. [Content Studio (CMS)](#8-content-studio-cms)
-9. [Config Editor & Setup Wizard](#9-config-editor--setup-wizard)
-10. [Manifest Regeneration](#10-manifest-regeneration)
-11. [Build & Start Runner](#11-build--start-runner)
-12. [Git & GitHub Operations](#12-git--github-operations)
-13. [Deployment Providers](#13-deployment-providers)
-14. [Cross-Platform Builds](#14-cross-platform-builds)
-15. [Capabilities and Permissions](#15-capabilities-and-permissions)
+4. [First-run experience](#4-first-run-experience)
+5. [Main UI sections](#5-main-ui-sections)
+6. [Setup Wizard](#6-setup-wizard)
+7. [Config Editor](#7-config-editor)
+8. [Instance Generator](#8-instance-generator)
+9. [Post-deploy assisted setup (Google Sign-In, first admin, health)](#9-post-deploy-assisted-setup-google-sign-in-first-admin-health)
+10. [Build & start runner](#10-build--start-runner)
+11. [Git operations](#11-git-operations)
+12. [Deployment providers](#12-deployment-providers)
+13. [GitHub OAuth setup](#13-github-oauth-setup)
+14. [Build-time GitHub OAuth secret injection](#14-build-time-github-oauth-secret-injection)
+15. [Cross-platform builds](#15-cross-platform-builds)
+16. [Updating the admin](#16-updating-the-admin)
+17. [Troubleshooting](#17-troubleshooting)
+18. [Frontend-only preview](#18-frontend-only-preview)
+19. [Capabilities and permissions](#19-capabilities-and-permissions)
 
 ---
 
 ## 1. What is the Tauri admin suite?
 
-The Tauri admin suite is a desktop application that manages **Osler instances and content workflows**. It operates as two unified environments:
+The Tauri admin suite is a desktop application that manages **Osler instances end to end**.
 
 ### Architecture at a glance
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                 Osler Suite (Tauri 2)                    │
+│                 Osler Instance Manager (Tauri 2)                    │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │  Frontend (Dual-App Mode: Instance Mgr vs Studio)  │  │
-│  │  ├── index.html / instance-manager.html / studio.html │
-│  │  ├── main.js (Tauri bridge + multi-app router)     │  │
+│  │  Frontend (Instance Manager)  │  │
+│  │  ├── index.html / instance-manager.html │
+│  │  ├── main.js (Tauri bridge + router)     │  │
 │  │  ├── i18n.js (en + ar translations)                │  │
-│  │  ├── styles.css (design tokens + RTL + EasyMDE)    │  │
-│  │  └── views/ (instance, updater, prereq, content…)  │  │
+│  │  ├── styles.css (design tokens + RTL)    │  │
+│  │  └── views/ (instance, updater, deploy, prereq…)  │  │
 │  └─────────────────┬──────────────────────────────────┘  │
 │                    │ invoke("command", args)              │
 │  ┌─────────────────▼──────────────────────────────────┐  │
 │  │  Rust backend                                      │  │
-│  │  ├── commands.rs (file CRUD, manifest, build/start)│  │
+│  │  ├── commands.rs (file CRUD, build/start)│  │
 │  │  ├── config.rs (osler.config.json + instance gen)  │  │
 │  │  ├── deploy.rs (Cloudflare full-stack + CLI deploy)│  │
 │  │  ├── instance_updater.rs (code diffs + backups)    │  │
 │  │  ├── prereq.rs (Node, Git, Wrangler, CF auth check)│  │
 │  │  ├── github.rs (OAuth + repo sync)                 │  │
-│  │  ├── manifest.rs (manifest generator)              │  │
+│  │  ├── setup.rs (secrets, first admin, health check)              │  │
 │  │  └── runner.rs (build/start process state)         │  │
 │  └─────────────────┬──────────────────────────────────┘  │
 │                    │ std::process / std::fs / ureq        │
@@ -294,7 +297,6 @@ The admin shell has four top-level sections, each accessible from the sidebar:
 | Section | Route | Component | Purpose |
 |---|---|---|---|
 | **Dashboard** | `#dashboard` | `views/dashboard.js` | Project overview: quick stats (file count, last build, git status), recent activity log, quick-action buttons, GitHub link card |
-| **Content** | `#content` | `views/content.js` + `content-editor.js` + `markdown-editor.js` + `manifest.js` | Tree browser for `public/osler-content/`; structured JSON editor for known types (quiz, bank, written, flashcard, osce, video); EasyMDE for `.md` files; per-category manifest viewer + regenerator |
 | **Configure** | `#configure` | `views/configure.js` (hub) → `views/wizard.js` / `views/instance.js` / `views/config.js` | Hub for the three config-related views: Setup Wizard, Instance Generator, Config Editor |
 | **Run & Publish** | `#run-publish` | `views/run-publish.js` (hub) → `views/build.js` / `views/start.js` / `views/git.js` / `views/github.js` / `views/deploy.js` | Hub for build, start, git, and deploy — all the "do something to the project" actions |
 | **Settings** | `#settings` | `views/settings.js` | UI language (EN/AR), theme (light/dark), project root rebinding |
@@ -500,208 +502,25 @@ The Instance Generator view collects:
 
 ---
 
-## 9. Content editor
+## 9. Post-deploy assisted setup (Google Sign-In, first admin, health)
 
-The Content view (`views/content.js`) is the primary editor for files under `public/osler-content/`. All file CRUD is sandboxed to that folder — the admin refuses to read or write files outside `public/osler-content/`.
+Step 5 of the Instance Generator ("Ready") includes a **Finish setup** card that covers everything only possible once the Worker is live. These run through four dedicated Tauri commands in `src/setup.rs`:
 
-### Tree browser
+| Command | What it does |
+| --- | --- |
+| `setup_generate_secret` | Returns a cryptographically random secret (Node crypto, no new Rust deps) |
+| `setup_write_secrets` | Writes Worker secrets via `npx wrangler secret put` with stdin piping; values are never logged or written to disk |
+| `setup_promote_admin` | Runs the `UPDATE users SET role = 'admin'` SQL against the instance's D1 database (admin is never granted at registration) |
+| `setup_check_health` | `GET /v1/health` from the Rust side, since the webview CSP blocks cross-origin fetches |
 
-The left pane shows a recursive tree of `public/osler-content/`:
+The flow:
 
-```
-osler-content/
-├── qbank/
-│   ├── cardiology/
-│   │   ├── arrhythmias/
-│   │   │   ├── questions.json    ← click to open
-│   │   │   ├── passages.json
-│   │   │   └── images/
-│   │   └── ...
-│   └── ...
-├── flashcard/
-├── osce/
-├── library/
-│   └── cardiology/
-│       ├── aortic-stenosis.md    ← click to open
-│       └── images/
-└── videos/
-```
+1. **Health check** - one click verifies `GET /v1/health` against the deployed Worker.
+2. **Google Sign-In** - step 3 collects the OAuth Client ID + Secret (optional); after deploy they are written as Worker secrets automatically. If skipped, the Ready card shows the exact **Authorized redirect URI** (`https://<worker>/v1/auth/google/callback`) to register in Google Cloud Console, plus inputs to save the credentials later. The Google button goes live on the login screen immediately, with no redeploy needed.
+3. **First admin** - register an account in the new instance, enter the username in the Ready card, click **Promote to admin**, reload.
 
-Right-click any node for a context menu:
 
-| Action | Folder | File |
-|---|---|---|
-| New file | ✅ | — |
-| New folder | ✅ | — |
-| Rename | ✅ | ✅ |
-| Delete | ✅ | ✅ |
-| Move to… | ✅ | ✅ |
-
-### JSON editor (structured form)
-
-When you click a `.json` file, the right pane shows a **structured form editor** that adapts to the file's content type:
-
-| Content type | Detected from | Form fields |
-|---|---|---|
-| `quiz` | `questions` key | Per-question: id, stem (textarea), 5 choices, answer (radio), explanation (textarea), tags (comma-separated), images (multi-select from sibling `images/` folder) |
-| `bank` | `passages` key | Per-passage: id, passage (textarea), then nested per-question editor (same as quiz) |
-| `written` | `prompts` key | Per-prompt: id, prompt (textarea), rubric (list of strings), timeLimitSec |
-| `flashcard` | Auto-typed from folder | Per-card: id, type (`basic`/`cloze`), front, back (for basic) or front with `{{c1::answer}}` syntax (for cloze) |
-| `osce` | Auto-typed from folder | Per-station: id, title, scenario, patientProfile, redFlags, differential, rubric |
-| `video` | Auto-typed from folder | Per-video: id, title, source (youtube/invidious/mp4/hls), videoId, duration, chapters, relatedArticleId |
-
-The form supports:
-
-- **Add / duplicate / delete** items at every level
-- **Drag-to-reorder** via `@dnd-kit`-style handles
-- **Validate-on-save** — calls `validate_content` Rust command, which runs the schema validator in `src/validate.rs` and shows inline errors per field
-- **Search** — filter the visible items by id, stem, or tag
-
-### Markdown editor (EasyMDE)
-
-When you click a `.md` file (typically a Library article), the right pane shows **EasyMDE** (loaded on demand from jsDelivr CDN), with a 20-button toolbar:
-
-| Group | Buttons |
-|---|---|
-| Text style | Bold, Italic, Strikethrough |
-| Headings | H1, H2, H3 |
-| Lists | Unordered, Ordered |
-| Block | Quote, Code (inline), Code (block), Table |
-| Links | Link, Image |
-| View | Preview, Side-by-side, Fullscreen |
-| History | Undo, Redo |
-| Help | Guide (opens EasyMDE docs) |
-
-The status bar shows live line / word / cursor counts. The editor's CSS overrides (in `styles.css` under "EasyMDE overrides") make it match the design system: dark navy palette, primary-color cursor, amber emphasis, primary-color links, OKLCH-based syntax highlighting.
-
-If the CDN is unreachable (offline use), the wrapper falls back to a plain `<textarea>` with a warning toast so you can still edit raw markdown.
-
-### Validate-on-save
-
-Both editors call `validate_content` before writing to disk. If validation fails:
-
-1. The save is **blocked** — the file on disk is not modified.
-2. Inline error messages appear next to each invalid field.
-3. A toast summarizes the error count.
-
-Common validation errors:
-
-- Missing required field (e.g. `id`, `stem`)
-- Wrong type (e.g. `answer` is a string instead of a number for quiz)
-- `answer` out of range (e.g. `5` for a 5-choice question — must be 0–4)
-- Duplicate `id` within the same file
-- Unknown `lang` value (must be `"en"` or `"ar"`)
-- Image referenced in content but not present in the sibling `images/` folder (warning, not error)
-
-### File CRUD commands (Rust → frontend)
-
-These commands are exposed in `src/commands.rs` and called via `invoke()` from the frontend:
-
-| Command | Args | Returns |
-|---|---|---|
-| `list_files` | — | `{ items: [...] }` (recursive tree of `public/osler-content/`) |
-| `load_file` | `{ path }` | `{ path, content }` |
-| `save_file` | `{ path, content }` | `{ saved, path }` |
-| `create_file` | `{ path, content? }` | `{ created, path }` (auto-scaffolds empty JSON) |
-| `create_folder` | `{ path }` | `{ created, path }` |
-| `delete_path` | `{ path }` | `{ deleted, path }` |
-| `move_path` | `{ from, to_folder }` | `{ moved, from, to }` |
-| `rename_path` | `{ path, new_name }` | `{ renamed, from, to }` |
-
-All `path` arguments are relative to `public/osler-content/` — the Rust backend refuses paths that escape that folder (e.g. `../../etc/passwd` returns an error).
-
----
-
-## 10. Manifest regeneration
-
-Every category under `public/osler-content/` has a `manifest.json` that lists the tree structure, file counts, and per-node metadata. The web app reads these manifests on load instead of scanning the filesystem (which would be slow over HTTP).
-
-### When to regenerate
-
-Regenerate manifests whenever you:
-
-- ✅ Add a new content pack (folder + JSON file)
-- ✅ Delete a content pack
-- ✅ Rename a folder
-- ✅ Add or remove images from a pack's `images/` subfolder
-- ✅ Change a pack's `lang` metadata
-
-You do **not** need to regenerate when:
-
-- ❌ Editing content inside an existing JSON file (the manifest doesn't know about question-level changes)
-- ❌ Editing a Markdown article's body (the manifest only tracks file existence)
-
-### How to regenerate
-
-**From the admin:**
-
-1. Go to **Content** view
-2. Click the **Manifest** sub-tab at the top
-3. Pick a category (or "All categories")
-4. Click **Regenerate**
-
-The admin calls `generate_manifest` (Rust port of `scripts/generate-content-manifests.js`) and writes the new `manifest.json` files to disk. A toast confirms success and shows the file count per category.
-
-**From the command line:**
-
-```bash
-npm run generate-manifests
-```
-
-This runs the Node.js version. Use this if the admin is unavailable or you're scripting a CI pipeline.
-
-### Manifest schema
-
-Each `public/osler-content/<category>/manifest.json` looks like:
-
-```jsonc
-{
-  "category": "qbank",
-  "generatedAt": "2025-01-15T10:30:00.000Z",
-  "root": {
-    "name": "qbank",
-    "type": "branch",
-    "children": [
-      {
-        "name": "cardiology",
-        "type": "branch",
-        "children": [
-          {
-            "name": "arrhythmias",
-            "type": "leaf",
-            "files": ["questions.json", "passages.json"],
-            "images": ["ecg-strip.png"],
-            "contentType": "quiz",        // detected from file keys
-            "uid": "qbank-cardiology-arrhythmias",
-            "lang": "en",                 // optional
-            "cardCount": 42,
-            "passageCount": 3
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The top-level `public/osler-content/manifest.json` is an index of all categories:
-
-```jsonc
-{
-  "categories": ["qbank", "flashcard", "osce", "library", "videos"],
-  "generatedAt": "2025-01-15T10:30:00.000Z"
-}
-```
-
-### When regeneration fails
-
-The most common failure is a JSON syntax error in a content file. The Rust manifest generator parses every `.json` file under each category; if parsing fails, it logs the file path and skips it (the manifest is still written, but the broken file is omitted from the tree).
-
-Check the admin's log panel after regeneration for any "Failed to parse" warnings, then open the offending file in the Content editor to fix the syntax.
-
----
-
-## 11. Build & start runner
+## 10. Build & start runner
 
 The **Run & Publish → Build** sub-view lets you run `npm run build` and `npm run start` (or `bun` equivalents) with live-streamed stdout/stderr logs.
 
@@ -779,7 +598,7 @@ The admin deliberately uses `npm run build` / `npm run start` as subprocesses ra
 
 ---
 
-## 12. Git operations
+## 11. Git operations
 
 The **Run & Publish → Git** sub-view (`views/git.js`) gives you point-and-click access to the most common git operations. All git commands run as subprocesses at the project root.
 
@@ -843,7 +662,7 @@ The Git view is a **convenience layer** for the 80% case (stage → commit → p
 
 ---
 
-## 13. Deployment providers
+## 12. Deployment providers
 
 The **Run & Publish → Deploy** sub-view (`views/deploy.js`) lets you trigger production deploys to four providers, each via REST API + Personal Access Tokens stored on disk.
 
@@ -909,7 +728,7 @@ See [`deployment.md`](./deployment.md) §1 for the full decision matrix. The sho
 
 ---
 
-## 14. GitHub OAuth setup
+## 13. GitHub OAuth setup
 
 The admin's GitHub integration (`views/github.js` + `src/github.rs`) lets you bind a GitHub repository and push/pull without entering a PAT every time. It uses GitHub's OAuth App flow.
 
@@ -972,7 +791,7 @@ To rotate the OAuth App itself (e.g. if the client secret leaks):
 
 ---
 
-## 15. Build-time GitHub OAuth secret injection
+## 14. Build-time GitHub OAuth secret injection
 
 For organizations distributing a pre-built admin binary to their staff, you can bake the GitHub OAuth credentials into the binary at build time so end users don't need to enter anything.
 
@@ -1045,7 +864,7 @@ strings target/release/osler-admin | grep "Iv1\." | head -1
 
 ---
 
-## 16. Cross-platform builds
+## 15. Cross-platform builds
 
 The admin builds and runs on macOS, Windows, and Linux. Each platform has quirks.
 
@@ -1097,7 +916,7 @@ For CI, use GitHub Actions matrix builds with `runs-on: macos-latest`, `windows-
 
 ---
 
-## 17. Updating the admin
+## 16. Updating the admin
 
 To update the admin to the latest version:
 
@@ -1172,7 +991,7 @@ If you have a CI pipeline that builds the admin, add a step to commit the update
 
 ---
 
-## 18. Troubleshooting
+## 17. Troubleshooting
 
 ### Common issues
 
@@ -1282,12 +1101,6 @@ WEBKIT_DISABLE_DMABUF_RENDERER=1 /path/to/osler-admin
 2. Use a git credential helper (`git config --global credential.helper store`) and push once from the terminal to cache your credentials
 3. Switch the remote to HTTPS with an embedded PAT: `git remote set-url origin https://<username>:<pat>@github.com/<username>/osler.git` (less secure — PAT visible in `.git/config`)
 
-#### Content editor shows "Failed to load file" for a JSON file
-
-**Cause:** The JSON file has a syntax error (missing comma, trailing comma, unquoted key, etc.).
-
-**Fix:** Open the file in a JSON-aware editor (VS Code, `jq`) and fix the syntax. The admin's structured form editor would have caught this on save, so the file was likely edited externally.
-
 #### Manifest regeneration shows "Failed to parse: <path>"
 
 **Cause:** One of the JSON files in that category has a syntax error.
@@ -1323,12 +1136,6 @@ defaults delete com.osler.admin
 # Linux: delete ~/.config/osler-admin/window-state.json
 ```
 
-#### EasyMDE fails to load (offline)
-
-**Cause:** The CDN (`https://cdn.jsdelivr.net`) is unreachable.
-
-**Fix:** The admin falls back to a plain `<textarea>` automatically. To force the structured editor for markdown, copy the EasyMDE assets locally and update the CSP in `tauri.conf.json` to allow `script-src 'self'`.
-
 ### Getting more help
 
 If none of the above fixes your issue:
@@ -1343,7 +1150,7 @@ If none of the above fixes your issue:
 
 ---
 
-## 19. Frontend-only preview
+## 18. Frontend-only preview
 
 The admin's frontend is plain HTML/CSS/JS with no build step. You can open it directly in a browser to preview the UI without compiling Tauri — useful for quick design iterations or for contributors who don't have the Rust toolchain installed.
 
@@ -1387,7 +1194,6 @@ In preview mode:
 | Mock data display (Dashboard cards, file tree) | ✅ (with fake data) |
 | RTL / Arabic UI | ✅ |
 | Theme tokens (light/dark) | ✅ |
-| EasyMDE markdown editor | ✅ (loads from CDN) |
 | Toast notifications | ✅ |
 | File CRUD (save, create, delete) | ❌ (mocked, no-op) |
 | Git operations | ❌ (mocked) |
@@ -1419,7 +1225,7 @@ localStorage.removeItem("osler-admin-preview");
 
 ---
 
-## 20. Capabilities and permissions
+## 19. Capabilities and permissions
 
 Tauri 2 uses a capabilities system to gate which native APIs the webview can call. The admin's capabilities live at [`tauri-admin/capabilities/default.json`](../tauri-admin/capabilities/default.json) and define exactly what the admin is allowed to do.
 
@@ -1508,8 +1314,6 @@ connect-src 'self' ipc: http://ipc.localhost https://api.github.com https://cdn.
 | `default-src 'self'` | Default deny — only same-origin resources allowed unless explicitly listed |
 | `img-src 'self' data: https:` | Allow images from anywhere (article images, GitHub avatars, etc.) |
 | `style-src` includes `fonts.googleapis.com` | Cairo font CSS loads from Google Fonts |
-| `style-src` includes `cdn.jsdelivr.net` | EasyMDE CSS loads from jsDelivr |
-| `script-src` includes `cdn.jsdelivr.net` | EasyMDE JS loads from jsDelivr |
 | `connect-src` includes `api.github.com` | GitHub API calls (repo info, OAuth) |
 | `connect-src` includes `ipc: http://ipc.localhost` | Tauri IPC (webview ↔ Rust backend) |
 | `'unsafe-inline'` for script-src | Required for the pre-hydration script in `index.html` that sets the language before paint (avoids RTL flash) |

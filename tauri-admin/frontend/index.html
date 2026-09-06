@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Osler Suite — Instance Manager &amp; Content Studio</title>
+  <title>Osler Instance Manager</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -11,8 +11,6 @@
     rel="stylesheet"
   />
   <link rel="stylesheet" href="styles.css" />
-  <!-- EasyMDE CSS — loaded once, used on demand by the markdown editor -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css" />
   <!-- Pre-hydration script: apply <html lang/dir> from localStorage BEFORE
        the page paints, so users who picked Arabic don't see an LTR flash. -->
@@ -45,28 +43,14 @@
             </svg>
           </span>
           <span class="brand-text">
-            <span class="brand-name" id="app-title-display">Osler Suite</span>
-            <span class="brand-tagline" id="app-subtitle-display">Instance &amp; Content Management</span>
+            <span class="brand-name" id="app-title-display">Osler Instance Manager</span>
+            <span class="brand-tagline" id="app-subtitle-display">Generate, Deploy &amp; Manage Instances</span>
           </span>
         </button>
       </div>
 
-      <!-- App Switcher + Project Pill -->
+      <!-- Project Pill -->
       <div class="topbar-center" data-tauri-drag-region>
-        <div class="mode-switcher" id="app-switcher">
-          <button class="mode-btn active" id="btn-mode-instance" type="button">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-            <span data-i18n="app.mode.instanceManager">Instance Manager</span>
-          </button>
-          <span class="mode-divider" aria-hidden="true"></span>
-          <button class="mode-btn" id="btn-mode-studio" type="button">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            <span data-i18n="app.mode.contentStudio">Content Studio</span>
-          </button>
-        </div>
-
-        <div class="topbar-sep" aria-hidden="true"></div>
-
         <button id="project-pill" class="project-pill" type="button" title="Pick project root">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-3H4a1 1 0 0 0-1 1z" />
@@ -145,17 +129,12 @@
   <script src="constants.js"></script>
   <script src="i18n.js"></script>
   <script src="components/log-console.js"></script>
-  <script src="views/markdown-editor.js"></script>
-  <script src="views/mermaid-editor.js"></script>
   <script src="views/prereq.js"></script>
   <script src="views/instance.js"></script>
   <script src="views/instance-updater.js"></script>
   <script src="views/wizard.js"></script>
   <script src="views/config.js"></script>
   <script src="views/dashboard.js"></script>
-  <script src="views/content-editor.js"></script>
-  <script src="views/content.js"></script>
-  <script src="views/manifest.js"></script>
   <script src="views/build.js"></script>
   <script src="views/git.js"></script>
   <script src="views/github.js"></script>

@@ -3,13 +3,11 @@
 // The app binds to a project root (an Osler Next.js project folder) on launch.
 // All commands operate relative to that root:
 //   - File CRUD on `public/osler-content/`
-//   - Manifest generation (port of scripts/generate-content-manifests.js)
 //   - Run `npm`/`bun` build and start, with streamed stdout/stderr
 //   - Git add/commit/push/pull against the project's git remote
 //
 // The frontend polls `runner_status` for build/start log lines.
 
-use crate::{manifest, validate};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -245,73 +243,6 @@ fn walk_dir(dir: &Path, base: &Path) -> Result<Vec<Value>, String> {
     Ok(out)
 }
 
-/// Upload a binary asset (image) next to a content file. The asset is written
-/// into an `images/` subfolder beside the referenced content file (or folder),
-/// keeping the same convention QBank/Flashcard/Library use for resolving
-/// relative image references. `content_path` is the content-relative path of
-/// the owning file (e.g. `library/cardiology/stemi.md`); `file_name` is the
-/// desired asset name (e.g. `ecg.png`); `data` is the file bytes (base64).
-#[tauri::command]
-pub async fn upload_content_asset(
-  content_path: String,
-  file_name: String,
-  data: String,
-  state: State<'_, ProjectRoot>,
-) -> Result<Value, String> {
-  let root = root_or_err(&state)?;
-  tauri::async_runtime::spawn_blocking(move || {
-    let base = content_root(&root);
-    let rel_dir = if content_path.ends_with(".md")
-      || content_path.ends_with(".json")
-      || content_path.ends_with(".html")
-      || content_path.ends_with(".pdf")
-    {
-      let idx = content_path.rfind('/').unwrap_or(0);
-      content_path[..idx].to_string()
-    } else {
-      content_path.trim_end_matches('/').to_string()
-    };
-    let images_dir = if rel_dir.is_empty() { base.join("images") } else { base.join(&rel_dir).join("images") };
-    std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
-    let clean_name = file_name.rsplit('/').next().unwrap_or(&file_name).to_string();
-    if clean_name.is_empty() || clean_name.contains("..") {
-      return Err("Invalid asset file name".to_string());
-    }
-    let asset_path = images_dir.join(&clean_name);
-    let bytes = base64_decode(&data)?;
-    std::fs::write(&asset_path, bytes).map_err(|e| e.to_string())?;
-    Ok(json!({ "saved": true, "reference": format!("images/{}", clean_name) }))
-  })
-  .await
-  .map_err(|e| e.to_string())?
-}
-
-fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
-  use base64::{engine::general_purpose::STANDARD, Engine};
-  STANDARD
-    .decode(s.trim())
-    .map_err(|e| format!("Invalid base64 asset data: {}", e))
-}
-
-/// Read an arbitrary file (typically an image selected via the OS dialog) and
-/// return its bytes as base64 so the frontend can forward them to
-/// `upload_content_asset`. The path must stay inside the project root.
-#[tauri::command]
-pub async fn read_file_base64(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
-  let root = root_or_err(&state)?;
-  tauri::async_runtime::spawn_blocking(move || {
-    let p = resolve(&root, &path)?;
-    if !p.is_file() { return Err(format!("Not a file: {}", path)); }
-    let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
-    use base64::{engine::general_purpose::STANDARD, Engine};
-    let encoded = STANDARD.encode(&bytes);
-    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("asset").to_string();
-    Ok(json!({ "data": encoded, "name": name }))
-  })
-  .await
-  .map_err(|e| e.to_string())?
-}
-
 #[tauri::command]
 pub async fn load_file(path: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
   let root = root_or_err(&state)?;
@@ -447,56 +378,6 @@ pub async fn rename_path(
     })
     .await
     .map_err(|e| e.to_string())?
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   Manifest
-   ═══════════════════════════════════════════════════════════════════════ */
-
-#[tauri::command]
-pub async fn generate_manifest(state: State<'_, ProjectRoot>) -> Result<Value, String> {
-    let root = root_or_err(&state)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let results = manifest::generate_all(&root)?;
-        Ok(json!({ "generated": results }))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-pub fn read_manifest(category: String, state: State<'_, ProjectRoot>) -> Result<Value, String> {
-    let root = root_or_err(&state)?;
-    let p = root.join(CONTENT_BASE).join(&category).join("manifest.json");
-    if !p.is_file() {
-        return Err(format!("No manifest for category: {}", category));
-    }
-    let raw = std::fs::read_to_string(&p).map_err(|e| e.to_string())?;
-    let parsed: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-    Ok(parsed)
-}
-
-#[tauri::command]
-pub fn write_manifest(
-    category: String,
-    json: Value,
-    state: State<'_, ProjectRoot>,
-) -> Result<Value, String> {
-    let root = root_or_err(&state)?;
-    let p = root.join(CONTENT_BASE).join(&category).join("manifest.json");
-    let body = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
-    std::fs::write(&p, body).map_err(|e| e.to_string())?;
-    Ok(json!({ "written": true, "category": category }))
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   Validate content JSON
-   ═══════════════════════════════════════════════════════════════════════ */
-
-#[tauri::command]
-pub fn validate_content(content_type: String, content_json: Value) -> Value {
-    let errors = validate::validate(&content_type, &content_json);
-    json!({ "valid": errors.is_empty(), "errors": errors })
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

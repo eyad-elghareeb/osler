@@ -71,7 +71,7 @@ Each engine is a toggleable plugin — disabled engines disappear from the UI an
 | **i18n** | Custom flat-dictionary system (en/ar) + RTL |
 | **Sync** | Cloud (Workers/D1) · PeerJS WebRTC + MQTT · QR (LZ-string + CRC32) · `.osler-backup` files |
 | **AI** | Gemini API (configurable model, user-supplied key) |
-| **Desktop admin** | Tauri (Rust) — instance generator, config editor, content studio, deploy pipelines |
+| **Desktop admin** | Tauri (Rust) — A-to-Z instance generator, config editor, deploy pipelines, updater |
 
 ---
 

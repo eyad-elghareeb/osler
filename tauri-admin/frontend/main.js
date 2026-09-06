@@ -6,8 +6,6 @@
   const TAURI_AVAILABLE =
     typeof window !== "undefined" && window.__TAURI__ && typeof window.__TAURI__.core === "object";
 
-  let currentAppMode = "instance-manager"; // "instance-manager" | "content-studio"
-
   /**
    * Invoke a Tauri command. Returns a Promise.
    * Falls back to a browser mock when not in Tauri.
@@ -264,9 +262,9 @@
     }
   }
 
-  /* ────────────────────── App Modes & Sidebar ────────────────────── */
+  /* ────────────────────── Sidebar ────────────────────── */
 
-  const NAV_ITEMS_INSTANCE_MANAGER = [
+  const NAV_ITEMS = [
     { route: "instance", icon: "M13 10V3L4 14h7v7l9-11h-7z", labelKey: "nav.instanceGenerator" },
     { route: "instance-updater", icon: "M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9", labelKey: "nav.instanceUpdater" },
     { route: "configure", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", labelKey: "nav.configure" },
@@ -274,46 +272,9 @@
     { route: "prereq", icon: "M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", labelKey: "nav.prereqs" },
   ];
 
-  const NAV_ITEMS_CONTENT_STUDIO = [
-    { route: "content", icon: "M4 4h16v16H4z M4 9h16 M9 4v16", labelKey: "nav.content" },
-    { route: "manifest", icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8", labelKey: "nav.manifest" },
-    { route: "git", icon: "M6 3v12 M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 9a9 9 0 0 1-9 9", labelKey: "nav.gitSync" },
-    { route: "settings", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", labelKey: "nav.settings" },
-  ];
-
-  function setAppMode(mode, targetRoute = null) {
-    currentAppMode = mode;
-    try {
-      localStorage.setItem("osler-admin-app-mode", mode);
-    } catch {}
-
-    // Update switcher buttons
-    const btnInst = document.getElementById("btn-mode-instance");
-    const btnStud = document.getElementById("btn-mode-studio");
-    if (btnInst) btnInst.classList.toggle("active", mode === "instance-manager");
-    if (btnInst) btnInst.setAttribute("aria-pressed", String(mode === "instance-manager"));
-    if (btnStud) btnStud.classList.toggle("active", mode === "content-studio");
-    if (btnStud) btnStud.setAttribute("aria-pressed", String(mode === "content-studio"));
-
-    // Update brand title
-    const titleEl = document.getElementById("app-title-display");
-    const subEl = document.getElementById("app-subtitle-display");
-    if (titleEl && subEl) {
-      if (mode === "instance-manager") {
-        titleEl.textContent = t("app.mode.instanceManagerTitle");
-        subEl.textContent = t("app.mode.instanceManagerSub");
-      } else {
-        titleEl.textContent = t("app.mode.contentStudioTitle");
-        subEl.textContent = t("app.mode.contentStudioSub");
-      }
-    }
-
-    // Render navigation for active mode
+  function navigateDefault(targetRoute = null) {
     renderSidebarNav();
-
-    // Navigate to default route for mode
-    const dest = targetRoute || (mode === "instance-manager" ? "instance" : "content");
-    navigate(dest);
+    navigate(targetRoute || "instance");
   }
 
   function renderSidebarNav() {
@@ -321,9 +282,7 @@
     if (!nav) return;
     nav.innerHTML = "";
 
-    const items = currentAppMode === "instance-manager" ? NAV_ITEMS_INSTANCE_MANAGER : NAV_ITEMS_CONTENT_STUDIO;
-
-    for (const item of items) {
+    for (const item of NAV_ITEMS) {
       const btn = el(
         "button",
         {
@@ -399,12 +358,8 @@
       await refreshProjectState();
       toast(t("project.state.connected"), "success");
 
-      // Auto-navigate to appropriate view
-      if (currentAppMode === "instance-manager") {
-        navigate("instance");
-      } else {
-        navigate("content");
-      }
+      // Auto-navigate to the generator
+      navigate("instance");
     } catch (e) {
       if (!TAURI_AVAILABLE) {
         toast("Not running in Tauri", "error");
@@ -477,24 +432,9 @@
 
   /* ────────────────────── Boot ────────────────────── */
 
-  function boot(forcedMode = null) {
-    // Mode setup
-    let initialMode = forcedMode || window.__oslerForcedMode;
-    if (!initialMode) {
-      try {
-        initialMode = localStorage.getItem("osler-admin-app-mode") || "instance-manager";
-      } catch {
-        initialMode = "instance-manager";
-      }
-    }
-    currentAppMode = initialMode;
-
-    // App Switcher buttons
-    document.getElementById("btn-mode-instance")?.addEventListener("click", () => setAppMode("instance-manager"));
-    document.getElementById("btn-mode-studio")?.addEventListener("click", () => setAppMode("content-studio"));
-
+  function boot() {
     document.getElementById("brand")?.addEventListener("click", () => {
-      navigate(currentAppMode === "instance-manager" ? "instance" : "content");
+      navigate("instance");
     });
     document.getElementById("project-pill")?.addEventListener("click", pickProjectRoot);
     document.getElementById("lang-toggle")?.addEventListener("click", () => {
@@ -508,8 +448,6 @@
     register("instance", window.OslerAdminViews.instance);
     register("instance-updater", window.OslerAdminViews.instanceUpdater);
     register("prereq", window.OslerAdminViews.prereq);
-    register("content", window.OslerAdminViews.content);
-    register("manifest", window.OslerAdminViews.manifest);
     register("configure", window.OslerAdminViews.configure);
     register("run-publish", window.OslerAdminViews.runPublish);
     register("start", window.OslerAdminViews.start);
@@ -533,7 +471,7 @@
           }
         }
       }
-      setAppMode(currentAppMode);
+      navigateDefault();
     });
   }
 
@@ -548,15 +486,11 @@
     pickProjectRoot,
     requireProject,
     boot,
-    setAppMode,
     get projectState() {
       return projectState;
     },
     get currentRoute() {
       return currentRoute;
-    },
-    get appMode() {
-      return currentAppMode;
     },
     helpers: { el, svgIcon, escapeHtml, t },
     TAURI_AVAILABLE,

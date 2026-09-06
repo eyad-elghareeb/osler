@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Osler Suite",
+  "productName": "Osler Instance Manager",
   "version": "0.3.0",
   "identifier": "com.osler.admin",
   "build": {
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Osler Suite — Instance Manager & Content Studio",
+        "title": "Osler Instance Manager",
         "width": 1440,
         "height": 900,
         "minWidth": 960,

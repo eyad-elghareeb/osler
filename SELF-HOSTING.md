@@ -172,18 +172,19 @@ npx wrangler d1 execute osler-cloud --remote \
 
 ## 5. The Tauri admin suite (automates §3–§4)
 
-The desktop app in [`tauri-admin/`](tauri-admin/) wraps the manual steps above into guided flows:
+The desktop app in [`tauri-admin/`](tauri-admin/) is an **instance generator and manager** — it wraps the manual steps above into guided flows and adds the post-deploy finishing touches (Google Sign-In secrets, first-admin promotion, backend health check):
 
 | App | What it does |
 |---|---|
-| **Osler Instance & Cloud Manager** (`instance-manager.html`) | 5-step instance generator (prerequisites → identity & engines → Cloudflare config → automated deployment → ready actions), prerequisites auto-installer, D1/R2/Pages/Worker provisioning, 1-click deploys, and an update engine with backups (`.osler-backup/`) |
-| **Osler Content Studio** (`studio.html`) | CMS for question banks, flashcards, OSCE stations, written cases, and articles — WYSIWYG/Markdown editors, LaTeX, Mermaid, schema validation, Git workflows |
+| **Osler Instance Manager** (`instance-manager.html`) | 5-step A-to-Z generator (prerequisites → identity & engines → Cloudflare config incl. optional Google Sign-In → automated deployment pipeline → finish setup), prerequisites auto-installer, D1/R2/Worker/Pages provisioning with `JWT_SECRET` management, 1-click deploys, and an update engine with backups (`.osler-backup/`) |
 
 ```bash
 cd tauri-admin
 cargo tauri dev      # development
 cargo tauri build    # release installer
 ```
+
+Content authoring is intentionally **not** part of the admin app — do it in the deployed web app or your editor of choice.
 
 ---
 

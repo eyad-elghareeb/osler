@@ -7,7 +7,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use osler_admin_lib::commands::{ProjectRoot, RunnerState};
-use osler_admin_lib::{commands, config, deploy, github, instance_updater, prereq};
+use osler_admin_lib::{commands, config, deploy, github, instance_updater, prereq, setup};
 use std::sync::Arc;
 
 fn main() {
@@ -30,16 +30,8 @@ fn main() {
             commands::create_file,
             commands::create_folder,
             commands::delete_path,
-            commands::upload_content_asset,
-            commands::read_file_base64,
             commands::move_path,
             commands::rename_path,
-            // Manifest
-            commands::generate_manifest,
-            commands::read_manifest,
-            commands::write_manifest,
-            // Validate
-            commands::validate_content,
             // Build / start
             commands::run_build,
             commands::run_start,
@@ -90,6 +82,11 @@ fn main() {
             // Prerequisites
             prereq::check_prerequisites,
             prereq::install_prerequisite,
+            // Assisted post-deploy setup (secrets, first admin, health check)
+            setup::setup_generate_secret,
+            setup::setup_write_secrets,
+            setup::setup_promote_admin,
+            setup::setup_check_health,
             // Instance updater & patches
             instance_updater::check_instance_update,
             instance_updater::apply_instance_patch,

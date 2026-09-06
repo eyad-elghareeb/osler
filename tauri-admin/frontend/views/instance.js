@@ -69,7 +69,12 @@
         r2Name: "osler-content",
         allowedOrigin: "http://localhost:3000",
         turnstileSiteKey: "",
+        googleClientId: "",
+        googleClientSecret: "",
+        googleConfigured: false,
       },
+      adminUsername: "",
+      health: null,
       prereqReport: null,
       deployLogs: [],
       deployRunning: false,
@@ -391,6 +396,31 @@
           "☁️ " + t("instance.cloud.r2HostingNote")
         );
         card.appendChild(r2Banner);
+
+        // ── Google Sign-In (optional, guided) ──
+        const googleCard = el("div", {
+          style: {
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-sm)",
+            padding: "1rem",
+            marginBottom: "1.25rem",
+          },
+        });
+        googleCard.appendChild(
+          el("div", { style: { fontWeight: "600", fontSize: "0.875rem", marginBottom: "0.35rem" } }, "🔐 " + t("instance.google.title"))
+        );
+        googleCard.appendChild(
+          el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: "0.75rem" } }, t("instance.google.hint"))
+        );
+        const googleGrid = el("div", { class: "grid grid-2" });
+        googleGrid.appendChild(field(t("instance.google.clientId"), state.cloud.googleClientId, (v) => state.cloud.googleClientId = v, "1234567890-abc.apps.googleusercontent.com"));
+        googleGrid.appendChild(field(t("instance.google.clientSecret"), state.cloud.googleClientSecret, (v) => state.cloud.googleClientSecret = v, "GOCSPX-…"));
+        googleCard.appendChild(googleGrid);
+        googleCard.appendChild(
+          el("div", { style: { fontSize: "0.6875rem", color: "var(--text-muted)", marginTop: "0.5rem" } }, t("instance.google.postDeployNote"))
+        );
+        card.appendChild(googleCard);
       }
 
       // Nav
@@ -526,6 +556,24 @@
             if (st.success) {
               addLog("🎉 Cloudflare Full Stack Deployment Complete!", "#3fb950");
               toast(t("instance.deployComplete"), "success");
+              // Post-deploy setup: the Worker is live, so optional secrets
+              // collected in step 3 (Google OAuth) can be written now.
+              try {
+                if (state.cloud.enabled && state.cloud.googleClientSecret) {
+                  addLog("🔐 Writing Google OAuth secrets…", "#58a6ff");
+                  await invoke("setup_write_secrets", {
+                    targetDir: state.targetDir,
+                    secrets: [
+                      { name: "GOOGLE_CLIENT_ID", value: state.cloud.googleClientId || "" },
+                      { name: "GOOGLE_CLIENT_SECRET", value: state.cloud.googleClientSecret },
+                    ],
+                  });
+                  state.cloud.googleConfigured = true;
+                  addLog("✓ Google Sign-In is configured (sign-in enabled on next login)", "#3fb950");
+                }
+              } catch (e) {
+                addLog(`⚠️ ${t("instance.google.saveFailed")}: ${String(e)}`, "#d29922");
+              }
             } else if (st.error) {
               addLog(`⚠️ Deploy notice: ${st.error}`, "#d29922");
             }
@@ -546,11 +594,107 @@
       // Summary details
       const summaryGrid = el("div", { style: { background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: "1rem", marginBottom: "1.5rem" } });
       summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem", marginBottom: "0.4rem" } }, `📁 Location: ${state.targetDir}`));
+      let workerUrl = `https://${state.cloud.workerName || "osler-cloud"}.workers.dev`;
       if (state.cloud.enabled) {
+        workerUrl = state.cloud.workerUrl || workerUrl;
         summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem", marginBottom: "0.4rem" } }, `🌐 Pages Project: https://${state.cloud.projectName}.pages.dev`));
-        summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem" } }, `⚡ Worker: ${state.cloud.workerUrl || `https://${state.cloud.workerName}.workers.dev`}`));
+        summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem" } }, `⚡ Worker: ${workerUrl}`));
       }
       card.appendChild(summaryGrid);
+
+      // ── Finish setup (cloud instances) ──
+      if (state.cloud.enabled) {
+        const setupCard = el("div", {
+          style: {
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-sm)",
+            padding: "1rem",
+            marginBottom: "1.5rem",
+          },
+        });
+        setupCard.appendChild(el("div", { style: { fontWeight: "600", fontSize: "0.875rem", marginBottom: "0.75rem" } }, "🧭 " + t("instance.setup.title")));
+
+        // 1) Health check
+        const healthRow = el("div", { style: { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" } });
+        const healthBtn = el("button", { class: "btn btn-sm" }, t("instance.setup.checkHealth"));
+        const healthOut = el("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)" } }, "");
+        healthBtn.addEventListener("click", async () => {
+          healthOut.textContent = "…";
+          healthOut.style.color = "var(--text-muted)";
+          try {
+            const res = await invoke("setup_check_health", { workerUrl });
+            state.health = res;
+            healthOut.textContent = res.ok ? `✓ ${t("instance.setup.healthy")}` : `✗ ${res.status}`;
+            healthOut.style.color = res.ok ? "var(--success)" : "var(--danger)";
+          } catch (e) {
+            state.health = { ok: false };
+            healthOut.textContent = `✗ ${String(e).slice(0, 80)}`;
+            healthOut.style.color = "var(--danger)";
+          }
+        });
+        healthRow.append(healthBtn, healthOut);
+        setupCard.appendChild(healthRow);
+
+        // 2) Google Sign-In (if not already configured during deploy)
+        if (!state.cloud.googleConfigured) {
+          const gLabel = (txt) => el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0.6rem 0 0.25rem" } }, txt);
+          setupCard.appendChild(el("div", { style: { fontWeight: "600", fontSize: "0.8125rem" } }, "🔐 " + t("instance.google.title")));
+          const cb = el("code", { style: { display: "block", fontSize: "0.6875rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", margin: "0.25rem 0 0.5rem", wordBreak: "break-all" } }, t("instance.google.callbackPrefix") + `${workerUrl}/v1/auth/google/callback`);
+          setupCard.appendChild(cb);
+          const gId = el("input", { type: "text", class: "input", value: state.cloud.googleClientId, placeholder: "…apps.googleusercontent.com", style: { marginBottom: "0.5rem" } });
+          const gSecret = el("input", { type: "text", class: "input", value: state.cloud.googleClientSecret, placeholder: "GOCSPX-…" });
+          setupCard.append(gLabel(t("instance.google.clientId")), gId, gLabel(t("instance.google.clientSecret")), gSecret);
+          const gSave = el("button", { class: "btn btn-sm", style: { marginTop: "0.6rem" } }, t("instance.google.save"));
+          const gOut = el("span", { style: { fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: "0.5rem" } }, "");
+          gSave.addEventListener("click", async () => {
+            if (!gId.value.trim() || !gSecret.value.trim()) { toast(t("instance.google.missing"), "error"); return; }
+            gOut.textContent = "…";
+            try {
+              await invoke("setup_write_secrets", {
+                targetDir: state.targetDir,
+                secrets: [
+                  { name: "GOOGLE_CLIENT_ID", value: gId.value.trim() },
+                  { name: "GOOGLE_CLIENT_SECRET", value: gSecret.value.trim() },
+                ],
+              });
+              state.cloud.googleConfigured = true;
+              gOut.textContent = "✓ " + t("instance.setup.saved");
+              gOut.style.color = "var(--success)";
+              toast(t("instance.setup.googleDone"), "success");
+            } catch (e) {
+              gOut.textContent = "✗ " + String(e).slice(0, 80);
+              gOut.style.color = "var(--danger)";
+            }
+          });
+          setupCard.append(gSave, gOut);
+        }
+
+        // 3) First admin promotion
+        setupCard.appendChild(el("div", { style: { fontWeight: "600", fontSize: "0.8125rem", margin: "0.75rem 0 0.25rem" } }, "👤 " + t("instance.admin.title")));
+        setupCard.appendChild(el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: "0.5rem" } }, t("instance.admin.hint")));
+        const adminRow = el("div", { style: { display: "flex", gap: "0.5rem" } });
+        const adminInput = el("input", { type: "text", class: "input", value: state.adminUsername, placeholder: t("instance.admin.placeholder") });
+        adminInput.addEventListener("input", () => state.adminUsername = adminInput.value);
+        const adminBtn = el("button", { class: "btn btn-sm" }, t("instance.admin.promote"));
+        adminBtn.addEventListener("click", async () => {
+          if (!state.adminUsername.trim()) { toast(t("instance.admin.missing"), "error"); return; }
+          try {
+            await invoke("setup_promote_admin", {
+              targetDir: state.targetDir,
+              d1Name: state.cloud.d1Name || "osler-cloud",
+              username: state.adminUsername.trim(),
+            });
+            toast(t("instance.admin.done"), "success");
+          } catch (e) {
+            toast(t("toast.error", { msg: String(e) }), "error");
+          }
+        });
+        adminRow.append(adminInput, adminBtn);
+        setupCard.appendChild(adminRow);
+
+        card.appendChild(setupCard);
+      }
 
       // Direct Deploy & Management Actions
       card.appendChild(el("div", { class: "label", style: { marginBottom: "0.6rem" } }, t("instance.quickActions")));
