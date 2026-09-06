@@ -62,6 +62,9 @@ export interface SpotlightWalkthroughProps {
   onOpenChange: (open: boolean) => void;
   onStepChange?: (step: WalkthroughStep, index: number) => void;
   onAction?: (actionKey: string) => void;
+  /** Fires only when the user advances past the LAST step (Done) — never
+   *  on skip/backdrop/Escape. Used to chain tours (dashboard → qbank). */
+  onFinish?: () => void;
 }
 
 export function SpotlightWalkthrough({
@@ -70,6 +73,7 @@ export function SpotlightWalkthrough({
   onOpenChange,
   onStepChange,
   onAction,
+  onFinish,
 }: SpotlightWalkthroughProps) {
   const { t, rtl } = useI18n();
   const [mounted, setMounted] = React.useState(false);
@@ -204,11 +208,12 @@ export function SpotlightWalkthrough({
       markWalkthroughCompleted(tour);
       haptic("success");
       onOpenChange(false);
+      onFinish?.();
     } else {
       setIndex((i) => Math.min(total - 1, i + 1));
       haptic("selection");
     }
-  }, [isLast, total, tour, onOpenChange]);
+  }, [isLast, total, tour, onOpenChange, onFinish]);
 
   const handleBack = React.useCallback(() => {
     setIndex((i) => Math.max(0, i - 1));

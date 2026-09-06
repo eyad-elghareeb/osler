@@ -48,6 +48,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/use-count-up";
 import { Button } from "@/components/ui/button";
+import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
+import { haptic } from "@/lib/osler/native";
 
 import { StreakCard } from "./streak-card";
 import { useOslerRouter, routeFor } from "@/lib/osler/navigation";
@@ -151,6 +153,18 @@ export function Dashboard({
   // AppShell auto-pop). The dashboard itself does NOT auto-pop the modal.
   const activeSession = useActiveSession();
   const [resumeDialogOpen, setResumeDialogOpen] = React.useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
+
+  // First-run guided tour for genuinely new users only (dashboard AND
+  // qbank tours both unseen) — finishing it opens the QBank tab, where
+  // the qbank-hub tour auto-opens for the full experience. Existing
+  // users never auto-see it; replay lives in Settings → Guides.
+  React.useEffect(() => {
+    if (leaves === null || !hydrated || walkthroughOpen) return;
+    if (!isWalkthroughCompleted("dashboard") && !isWalkthroughCompleted("qbank-hub")) {
+      setWalkthroughOpen(true);
+    }
+  }, [leaves, hydrated, walkthroughOpen]);
 
   const recentPacks = React.useMemo(() => {
     if (!leaves) return [];
@@ -264,7 +278,7 @@ export function Dashboard({
     <div className="osler-page">
       <div className="osler-page__inner--wide">
         {/* Hero — uses shared FadeIn so the same rhythm as every other page header */}
-        <FadeIn y={8} preset="slow">
+        <FadeIn y={8} preset="slow" data-walkthrough="dash-header">
           <PageHeader
             eyebrow={greeting}
             eyebrowIcon={Flame}
@@ -281,6 +295,15 @@ export function Dashboard({
           open={resumeDialogOpen}
           onOpenChange={setResumeDialogOpen}
         />
+        <WalkthroughDialog
+          tour="dashboard"
+          open={walkthroughOpen}
+          onOpenChange={setWalkthroughOpen}
+          onFinish={() => {
+            haptic("selection");
+            onViewChange("qbank");
+          }}
+        />
 
         {/* Continue card — shows the active in-progress QBank session when
             one exists. Clicking the card opens the resume dialog (same modal
@@ -290,6 +313,7 @@ export function Dashboard({
         {activeSession ? (
           <motion.button
             type="button"
+            data-walkthrough="dash-continue"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...MOTION_TRANSITION.slow, delay: 0.05 }}
@@ -352,6 +376,7 @@ export function Dashboard({
           </motion.button>
         ) : continuePack ? (
           <motion.div
+            data-walkthrough="dash-continue"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...MOTION_TRANSITION.slow, delay: 0.05 }}
@@ -400,7 +425,7 @@ export function Dashboard({
         ) : null}
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" data-walkthrough="dash-stats">
           <StatTile
             label={t("dash.packsStarted")}
             value={packsCount.display}
@@ -440,11 +465,12 @@ export function Dashboard({
         <SectionHeading>{t("dash.quickActions")}</SectionHeading>
         {/* Profile is one tap away in the tab bar / avatar menu — the quick
             action duplicated chrome navigation and left an orphan card. */}
-        <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+        <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8" data-walkthrough="dash-quickActions">
           <QuickAction
             icon={ListChecks}
             title={t("dash.qa.qbank.title")}
             subtitle={t("dash.qa.qbank.sub")}
+            walkthrough="dash-qa-qbank"
             onPrefetch={() => prefetch("qbank")}
             onClick={() => onViewChange("qbank")}
           />
@@ -633,17 +659,20 @@ function QuickAction({
   subtitle,
   onClick,
   onPrefetch,
+  walkthrough,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
   onClick: () => void;
   onPrefetch?: () => void;
+  walkthrough?: string;
 }) {
   const { rtl } = useI18n();
   return (
     <motion.button
       type="button"
+      data-walkthrough={walkthrough}
       onClick={onClick}
       onPointerEnter={onPrefetch}
       onTouchStart={onPrefetch}

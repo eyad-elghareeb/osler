@@ -1252,6 +1252,8 @@ export const en = {
     "settings.guides.osceSub": "Stations, scenario brief, consultation room.",
     "settings.guides.flashcards": "Flashcards Guide",
     "settings.guides.flashcardsSub": "Decks, spaced repetition, study flow.",
+    "settings.guides.dashboard": "Home Guide",
+    "settings.guides.dashboardSub": "Dashboard tour — finishes by opening the QBank guide.",
 
     "engine.quiz": "Quiz",
     "engine.bank": "Question Bank",
@@ -3330,6 +3332,25 @@ export const en = {
     "walkthrough.trigger": "Quick Guide",
     "walkthrough.tapToAdvance": "Tap the highlighted button",
     "walkthrough.coachTip": "Tip",
+
+    // Dashboard Walkthrough
+    "walkthrough.dashboard.badge": "Home Guide",
+    "walkthrough.dashboard.step1.title": "Your home base",
+    "walkthrough.dashboard.step1.subtitle": "This is your dashboard — progress, streaks, and shortcuts to everything live here.",
+    "walkthrough.dashboard.step2.title": "Continue learning",
+    "walkthrough.dashboard.step2.subtitle": "Pick up exactly where you left off — your active session or most recent pack.",
+    "walkthrough.dashboard.step2.desc": "The hero card always shows the freshest thing: an in-progress session first, otherwise your last studied pack.",
+    "walkthrough.dashboard.step3.title": "Your numbers",
+    "walkthrough.dashboard.step3.subtitle": "Packs started, questions attempted, correct answers, and accuracy at a glance.",
+    "walkthrough.dashboard.step3.desc": "Tap any tile to jump to the details — accuracy and history live on your profile.",
+    "walkthrough.dashboard.step4.title": "Jump anywhere",
+    "walkthrough.dashboard.step4.subtitle": "One tap opens QBank, Flashcards, Library, or Videos.",
+    "walkthrough.dashboard.step4.desc": "These cards are the fastest way around the app — each one deep-links straight into its section.",
+    "walkthrough.dashboard.step4.tip": "QBank is where most studying happens — that's our next stop.",
+    "walkthrough.dashboard.step5.title": "Next: the QBank tour",
+    "walkthrough.dashboard.step5.subtitle": "Tap Done and we'll open the QBank tab, where its own guide takes over.",
+    "walkthrough.dashboard.step5.desc": "The QBank guide walks you through building a custom test, the tracker, and launching your first quiz.",
+    "walkthrough.dashboard.step5.tip": "Finish this guide to jump straight into the QBank walkthrough.",
 
     // QBank Hub Walkthrough
     "walkthrough.qbankHub.badge": "QBank Guide",

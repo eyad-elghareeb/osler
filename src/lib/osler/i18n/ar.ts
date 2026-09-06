@@ -1247,6 +1247,8 @@ export const ar = {
     "settings.guides.osceSub": "المحطات وملخص الحالة وغرفة الاستشارة.",
     "settings.guides.flashcards": "دليل البطاقات التعليمية",
     "settings.guides.flashcardsSub": "المجموعات والتكرار المتباعد وتدفق المذاكرة.",
+    "settings.guides.dashboard": "دليل الرئيسية",
+    "settings.guides.dashboardSub": "جولة اللوحة — تنتهي بفتح دليل بنك الأسئلة.",
 
     "engine.quiz": "اختبار",
     "engine.bank": "بنك الأسئلة",
@@ -3325,6 +3327,24 @@ export const ar = {
     "walkthrough.coachTip": "تلميح",
 
     // QBank Hub Walkthrough
+    "walkthrough.dashboard.badge": "دليل الرئيسية",
+    "walkthrough.dashboard.step1.title": "نقطة البداية",
+    "walkthrough.dashboard.step1.subtitle": "هذه لوحتك الرئيسية — تقدمك وانتظامك واختصارات كل شيء هنا.",
+    "walkthrough.dashboard.step2.title": "واصل التعلّم",
+    "walkthrough.dashboard.step2.subtitle": "أكمل من حيث توقفت تمامًا — جلستك النشطة أو آخر حزمة درستها.",
+    "walkthrough.dashboard.step2.desc": "تعرض البطاقة الرئيسية دائمًا الأحدث: الجلسة الجارية أولًا، وإلا آخر حزمة درستها.",
+    "walkthrough.dashboard.step3.title": "أرقامك",
+    "walkthrough.dashboard.step3.subtitle": "الحزم المبدوءة والأسئلة المحاولة والإجابات الصحيحة والدقة بنظرة واحدة.",
+    "walkthrough.dashboard.step3.desc": "اضغط أي مربع للانتقال إلى التفاصيل — الدقة والسجل في ملفك الشخصي.",
+    "walkthrough.dashboard.step4.title": "انتقل لأي مكان",
+    "walkthrough.dashboard.step4.subtitle": "ضغطة واحدة تفتح بنك الأسئلة أو البطاقات أو المكتبة أو الفيديو.",
+    "walkthrough.dashboard.step4.desc": "هذه البطاقات أسرع طريق للتنقل — كل واحدة تفتح قسمها مباشرة.",
+    "walkthrough.dashboard.step4.tip": "بنك الأسئلة حيث تجري معظم المذاكرة — وهذه محطتنا التالية.",
+    "walkthrough.dashboard.step5.title": "التالي: جولة بنك الأسئلة",
+    "walkthrough.dashboard.step5.subtitle": "اضغط «تم» وسنفتح تبويب بنك الأسئلة حيث يتولى دليله الخاص.",
+    "walkthrough.dashboard.step5.desc": "يرشدك دليل بنك الأسئلة في بناء اختبار مخصص والمتتبع وإطلاق أول اختبار لك.",
+    "walkthrough.dashboard.step5.tip": "أنهِ هذا الدليل للانتقال مباشرة إلى جولة بنك الأسئلة.",
+
     "walkthrough.qbankHub.badge": "دليل الأسئلة",
     "walkthrough.qbankHub.step1.title": "منشئ الاختبارات المخصصة",
     "walkthrough.qbankHub.step1.subtitle": "اضغط على 'إنشاء' لبناء اختبار مخصص من أي حزم.",

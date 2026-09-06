@@ -26,11 +26,14 @@ import {
   Stethoscope,
   ClipboardList,
   Brain,
+  LayoutDashboard,
+  LayoutGrid,
+  RotateCcw,
   type LucideIcon,
 } from "lucide-react";
 import type { StringKey } from "@/lib/osler/i18n";
 
-export type TourId = "qbank-hub" | "qbank-session" | "library" | "osce" | "flashcards";
+export type TourId = "dashboard" | "qbank-hub" | "qbank-session" | "library" | "osce" | "flashcards";
 
 export interface WalkthroughStep {
   id: string;
@@ -67,12 +70,75 @@ export interface WalkthroughStep {
 
 /** Card eyebrow label per tour. */
 export const TOUR_META: Record<TourId, { badgeKey: StringKey }> = {
+  dashboard: { badgeKey: "walkthrough.dashboard.badge" },
   "qbank-hub": { badgeKey: "walkthrough.qbankHub.badge" },
   "qbank-session": { badgeKey: "walkthrough.qbank.badge" },
   library: { badgeKey: "walkthrough.library.badge" },
   osce: { badgeKey: "walkthrough.osce.badge" },
   flashcards: { badgeKey: "walkthrough.flashcards.badge" },
 };
+
+export const DASHBOARD_STEPS: WalkthroughStep[] = [
+  {
+    id: "dash-header",
+    targetSelector: "[data-walkthrough='dash-header']",
+    titleKey: "walkthrough.dashboard.step1.title",
+    subtitleKey: "walkthrough.dashboard.step1.subtitle",
+    mainIcon: LayoutDashboard,
+    preferredPlacement: "bottom",
+    highlightPadding: 8,
+    highlightRadius: 14,
+  },
+  {
+    id: "dash-continue",
+    targetSelector: "[data-walkthrough='dash-continue']",
+    titleKey: "walkthrough.dashboard.step2.title",
+    subtitleKey: "walkthrough.dashboard.step2.subtitle",
+    descriptionKey: "walkthrough.dashboard.step2.desc",
+    mainIcon: RotateCcw,
+    preferredPlacement: "bottom",
+    highlightPadding: 8,
+    highlightRadius: 16,
+    // Fresh accounts have no in-progress session or studied pack, so the
+    // hero card doesn't mount — skip ahead instead of hanging.
+    skipIfMissing: true,
+  },
+  {
+    id: "dash-stats",
+    targetSelector: "[data-walkthrough='dash-stats']",
+    titleKey: "walkthrough.dashboard.step3.title",
+    subtitleKey: "walkthrough.dashboard.step3.subtitle",
+    descriptionKey: "walkthrough.dashboard.step3.desc",
+    mainIcon: BarChart2,
+    preferredPlacement: "bottom",
+    highlightPadding: 8,
+    highlightRadius: 14,
+  },
+  {
+    id: "dash-quick",
+    targetSelector: "[data-walkthrough='dash-quickActions']",
+    titleKey: "walkthrough.dashboard.step4.title",
+    subtitleKey: "walkthrough.dashboard.step4.subtitle",
+    descriptionKey: "walkthrough.dashboard.step4.desc",
+    tipKey: "walkthrough.dashboard.step4.tip",
+    mainIcon: LayoutGrid,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 16,
+  },
+  {
+    id: "dash-to-qbank",
+    targetSelector: "[data-walkthrough='dash-qa-qbank']",
+    titleKey: "walkthrough.dashboard.step5.title",
+    subtitleKey: "walkthrough.dashboard.step5.subtitle",
+    descriptionKey: "walkthrough.dashboard.step5.desc",
+    tipKey: "walkthrough.dashboard.step5.tip",
+    mainIcon: GraduationCap,
+    preferredPlacement: "top",
+    highlightPadding: 8,
+    highlightRadius: 14,
+  },
+];
 
 export const QBANK_HUB_STEPS: WalkthroughStep[] = [
   {
@@ -591,6 +657,7 @@ export const FLASHCARD_STEPS: WalkthroughStep[] = [
 
 export function getTourSteps(tour: TourId, opts: { mobile?: boolean } = {}): WalkthroughStep[] {
   const byTour: Record<TourId, WalkthroughStep[]> = {
+    dashboard: DASHBOARD_STEPS,
     "qbank-hub": QBANK_HUB_STEPS,
     "qbank-session": QBANK_SESSION_STEPS,
     library: LIBRARY_STEPS,
