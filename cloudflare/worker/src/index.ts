@@ -5418,17 +5418,21 @@ export default {
         const authState = await env.DB.prepare("SELECT * FROM oauth_states WHERE state = ? AND expires_at > ?").bind(stateValue, now()).first<any>();
         if (authState) await env.DB.prepare("DELETE FROM oauth_states WHERE state = ?").bind(stateValue).run();
         if (!authState || !code || !googleReady(env)) return Response.redirect(`${env.ALLOWED_ORIGIN}/?cloudAuthError=google`, 302);
+        // return_to may itself carry a query (e.g. /login?next=/admin/email
+        // from the admin panel) — append with & then, not /?.
+        const rtHasQuery = authState.return_to.includes("?");
+        const rtBase = authState.return_to.replace(/\/$/, "");
         const form = new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID || "", client_secret: env.GOOGLE_CLIENT_SECRET || "", redirect_uri: workerCallback(env), grant_type: "authorization_code" });
         const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form });
-        if (!response.ok) return Response.redirect(`${authState.return_to}/?cloudAuthError=google`, 302);
+        if (!response.ok) return Response.redirect(`${rtBase}${rtHasQuery ? "&" : "/?"}cloudAuthError=google`, 302);
         const tokenResponse: any = await response.json();
         const claims = await verifyGoogleIdToken(tokenResponse.id_token, env, authState.nonce);
         const user = await googleUser(env, claims);
-        if (!user) return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/?cloudAuthError=email_claimed`, 302);
+        if (!user) return Response.redirect(`${rtBase}${rtHasQuery ? "&" : "/?"}cloudAuthError=email_claimed`, 302);
         const ticket = await createAuthHandoff(env, user.id);
         // Ticket travels in the URL fragment, not the query — fragments are
         // never sent to servers (no access logs, no Referer leakage).
-        return Response.redirect(`${authState.return_to.replace(/\/$/, "")}/#cloudAuth=${encodeURIComponent(ticket)}`, 302);
+        return Response.redirect(`${rtBase}${rtHasQuery ? "" : "/"}#cloudAuth=${encodeURIComponent(ticket)}`, 302);
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/google/consume") {
         if (!rateLimit(ip, "auth:google:consume")) return json({ error: "Too many attempts" }, 429, origin, log);
@@ -5464,6 +5468,21 @@ export default {
           await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, sync_shard, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(userId, username, email, displayName, password.hash, password.salt, syncShardForUserId(userId), now(), now()).run();
         } catch { return json({ error: "That username or email is already in use" }, 409, origin, log); }
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<any>();
+        // New accounts with an email address get a verification mail right
+        // away (best-effort — a mail outage must never fail registration).
+        // The resend form covers lost mail; login itself stays unblocked and
+        // verification gates Google sign-in linking instead.
+        if (email && (await emailEnabled(env)) && emailProviderReady(env) && env.APP_ORIGIN) {
+          try {
+            const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
+            await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), userId, await sha256(token), email, expiresAt, now()).run();
+            const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
+            const { html, text } = verifyEmail(link);
+            await sendEmail(env, env.DB, { to: email, subject: "Verify your Osler email address", text, html });
+          } catch (error) {
+            console.error("register verify-email send failed:", error);
+          }
+        }
         return json(await issueSession(user, env, request.headers.get("user-agent")), 201, origin, log);
       }
 
