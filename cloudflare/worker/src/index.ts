@@ -850,6 +850,33 @@ async function emailEnabled(env: Env): Promise<boolean> {
   }
 }
 
+/**
+ * Issue (or re-send) the address-verification mail for a user. Reuses an
+ * outstanding token when one exists so repeated triggers don't pile rows
+ * into email_verify_tokens — registration, the login gate, the resend form,
+ * and email changes all funnel through here. Never throws: callers treat
+ * mail as best-effort and must not fail auth on a mail outage.
+ */
+async function issueVerifyEmail(env: Env, userId: string, email: string): Promise<boolean> {
+  try {
+    if (!(await emailEnabled(env)) || !emailProviderReady(env) || !env.APP_ORIGIN) return false;
+    const address = email.trim().toLowerCase();
+    if (!address) return false;
+    const existing = await env.DB.prepare("SELECT id FROM email_verify_tokens WHERE user_id = ? AND used_at IS NULL AND expires_at > ?").bind(userId, now()).first<any>();
+    if (!existing) {
+      const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
+      await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), userId, await sha256(token), address, expiresAt, now()).run();
+      const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
+      const { html, text } = verifyEmail(link);
+      await sendEmail(env, env.DB, { to: address, subject: "Verify your Osler email address", text, html });
+    }
+    return true;
+  } catch (error) {
+    console.error("verify-email send failed:", error);
+    return false;
+  }
+}
+
 // ─── Validation helpers ──────────────────────────────────────────────────────
 
 function validUsername(value: unknown): value is string { return typeof value === "string" && /^[a-zA-Z0-9_.-]{3,32}$/.test(value); }
@@ -1105,8 +1132,10 @@ async function googleUser(env: Env, claims: any): Promise<UserRow | null> {
     const generatedPassword = await passwordHash(`${id()}${id()}`);
     const userId = id();
     try {
-      await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, sync_shard, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)")
-        .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, syncShardForUserId(userId), now(), now()).run();
+      // Google proved ownership of this address — stamp it verified so a
+      // later password login isn't gated by the anti-spam check.
+      await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, sync_shard, created_at, updated_at, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)")
+        .bind(userId, await availableGoogleUsername(env, claims.email), claims.email.toLowerCase(), String(claims.name || claims.email.split("@")[0]).slice(0, 80), generatedPassword.hash, generatedPassword.salt, syncShardForUserId(userId), now(), now(), now()).run();
     } catch {
       // Lost the race: an account now exists for this email (email is UNIQUE).
       // Fail closed rather than link onto it or half-create a user.
@@ -1121,6 +1150,10 @@ async function googleUser(env: Env, claims: any): Promise<UserRow | null> {
     // Concurrent Google callbacks for the same sub — the identity row already
     // exists and the account is already linked; proceed.
   }
+  // Linking proves the user controls this address right now — stamp it so a
+  // later password login isn't gated. COALESCE keeps an earlier stamp, and a
+  // stamp failure must never fail the sign-in itself.
+  await env.DB.prepare("UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?").bind(now(), user.id).run().catch(() => {});
   return user;
 }
 
@@ -5469,20 +5502,9 @@ export default {
         } catch { return json({ error: "That username or email is already in use" }, 409, origin, log); }
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<any>();
         // New accounts with an email address get a verification mail right
-        // away (best-effort — a mail outage must never fail registration).
-        // The resend form covers lost mail; login itself stays unblocked and
-        // verification gates Google sign-in linking instead.
-        if (email && (await emailEnabled(env)) && emailProviderReady(env) && env.APP_ORIGIN) {
-          try {
-            const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
-            await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), userId, await sha256(token), email, expiresAt, now()).run();
-            const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
-            const { html, text } = verifyEmail(link);
-            await sendEmail(env, env.DB, { to: email, subject: "Verify your Osler email address", text, html });
-          } catch (error) {
-            console.error("register verify-email send failed:", error);
-          }
-        }
+        // away — password login stays blocked until they verify (anti-spam
+        // gate). Best-effort: a mail outage must never fail registration.
+        if (email) await issueVerifyEmail(env, userId, email);
         return json(await issueSession(user, env, request.headers.get("user-agent")), 201, origin, log);
       }
 
@@ -5515,6 +5537,17 @@ export default {
           return json({ error: "Invalid username or password" }, 401, origin, log);
         }
         await loginFailureClear(env, identifierKey, ip);
+        // Anti-spam gate: an account with an unverified email address can't
+        // sign in — mass-registered bot accounts stay inert and never build
+        // sessions, sync rows, or mail volume. Username-only accounts (no
+        // email) and Google-provisioned accounts (stamped at link time) are
+        // unaffected. A fresh link goes out with the rejection and the resend
+        // form is the fallback. The password was correct, so this reveals
+        // nothing beyond what the requester already proved.
+        if (user.email && !user.email_verified_at) {
+          await issueVerifyEmail(env, user.id, user.email);
+          return json({ error: "Verify your email address to sign in — a fresh link is on its way.", code: "email_unverified" }, 403, origin, log);
+        }
         return json(await issueSession(user, env, request.headers.get("user-agent")), 200, origin, log);
       }
 
@@ -5601,20 +5634,9 @@ export default {
         const email = String(body.email || "").trim().toLowerCase();
         if (!validEmail(email)) return json({ error: "Invalid email" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND email_verified_at IS NULL").bind(email).first<any>();
-        if (user && emailProviderReady(env) && env.APP_ORIGIN) {
-          const existing = await env.DB.prepare("SELECT id FROM email_verify_tokens WHERE user_id = ? AND used_at IS NULL AND expires_at > ?").bind(user.id, now()).first<any>();
-          if (!existing) {
-            const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
-            await env.DB.prepare("INSERT INTO email_verify_tokens (id, user_id, token_hash, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id(), user.id, await sha256(token), email, expiresAt, now()).run();
-            const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
-            try {
-              const { html, text } = verifyEmail(link);
-              await sendEmail(env, env.DB, { to: user.email, subject: "Verify your Osler email address", text, html });
-            } catch (error) {
-              console.error("verify-email send failed:", error);
-            }
-          }
-        }
+        // The query above only matches unverified addresses; the helper
+        // reuses an outstanding token instead of piling up rows.
+        if (user) await issueVerifyEmail(env, user.id, email);
         return json({ ok: true }, 200, origin, log);
       }
       if (request.method === "POST" && url.pathname === "/v1/auth/verify/confirm") {
@@ -5996,6 +6018,9 @@ export default {
         // address could belong to someone else and become a Google-link anchor).
         const emailChanged = email !== session.user.email;
         try { await env.DB.prepare("UPDATE users SET display_name = ?, email = ?, email_verified_at = ?, updated_at = ? WHERE id = ?").bind(displayName, email, emailChanged ? null : session.user.email_verified_at ?? null, now(), session.user.id).run(); } catch { return json({ error: "That email is already in use" }, 409, origin, log); }
+        // A changed address must be re-verified before the next password
+        // login — send the link now so the user isn't locked out without one.
+        if (emailChanged && email) await issueVerifyEmail(env, session.user.id, email);
         return json(await accountPayload(env, await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>()), 200, origin, log);
       }
       if (request.method === "POST" && url.pathname === "/v1/account/password") {
