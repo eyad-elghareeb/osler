@@ -460,7 +460,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
   };
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4 bg-background safe-py relative overflow-hidden">
+    <div className="min-h-dvh flex items-center justify-center p-4 bg-background safe-py relative overflow-y-auto">
       {/* Ambient primary glow — one focal element per viewport per the
        * design-library-roadmap. Sits behind the card, never competes with
        * the form's text contrast. */}
@@ -476,7 +476,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={MOTION_TRANSITION.slow}
-        className="w-full max-w-md relative"
+        className="w-full max-w-md relative my-auto"
       >
         {/* Brand header — Motion Primitives staggered entrance */}
         <motion.div
@@ -564,6 +564,8 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
             </div>
           )}
 
+          {/* Sign-in and signup only — reset/verify take an email address. */}
+          {(cloudMode === "login" || cloudMode === "register") && (
           <div>
             <label htmlFor="username" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {cloudActive && cloudMode !== "register" ? t("login.identifier") : t("login.username")}
@@ -585,6 +587,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
               </p>
             )}
           </div>
+          )}
 
           {cloudActive && (cloudMode === "register" || cloudMode === "reset" || cloudMode === "verify") && !resetToken && (
             <div>
@@ -598,6 +601,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t("login.emailPlaceholder")}
                 autoComplete="email"
+                autoFocus
                 required={cloudMode === "reset" || cloudMode === "verify"}
                 className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
