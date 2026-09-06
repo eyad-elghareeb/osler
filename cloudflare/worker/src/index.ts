@@ -3890,7 +3890,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const to = session.user.email;
       if (!to) return json({ error: "Your account has no email address to send to" }, 400, origin, log);
       try {
-        const { html, text } = testEmail();
+        const { html, text } = testEmail(env.APP_ORIGIN);
         const res = await sendEmail(env, env.DB, { to, subject: "Osler test email", text, html });
         return json({ ok: res.ok, providerStatus: res.status }, 200, origin, log);
       } catch (error: any) {

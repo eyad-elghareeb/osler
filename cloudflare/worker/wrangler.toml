@@ -102,6 +102,10 @@ ALLOWED_ORIGIN = "http://localhost:3000"
 TURNSTILE_ENABLED = "false"
 # The Worker callback base URL. Replace after first deployment.
 WORKER_URL = "http://localhost:8787"
+# Frontend origin used for password-reset / email-verify links and required
+# by the admin email test endpoint. Must match the Pages/custom-domain origin
+# above in practice. Uncomment and set for any instance that sends email:
+# APP_ORIGIN = "https://your-app.pages.dev"
 
 # ── Optional: transactional email delivery ──
 # Three interchangeable providers (sendEmail picks the first fully configured):

@@ -236,7 +236,13 @@ async function handleSend(request: Request, env: Env): Promise<Response> {
     await command(conn, readReply, "EHLO osler", [250], "EHLO");
     await command(conn, readReply, "STARTTLS", [220], "STARTTLS");
 
-    // startTls() returns a NEW socket — every reader/writer must re-bind to it.
+    // startTls() upgrades the connection: release our locks on the plaintext
+    // streams first (the upgraded socket may share the same stream objects,
+    // and a second getWriter()/getReader() on locked streams throws
+    // "WritableStream is currently locked"), then re-bind every
+    // reader/writer to the TLS socket afterwards.
+    conn.reader.releaseLock();
+    conn.writer.releaseLock();
     conn = makeConn(conn.socket.startTls());
     readReply = makeReplyReader(conn);
 

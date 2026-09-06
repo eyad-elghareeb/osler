@@ -151,14 +151,16 @@ export function verifyEmail(link: string, expiresInLabel = "30 minutes"): Render
   return { html, text };
 }
 
-/** Branded test email for the admin Email page ("Send test email"). */
-export function testEmail(): RenderedEmail {
+/** Branded test email for the admin Email page ("Send test email").
+ *  Links back to the instance origin — never a placeholder host. */
+export function testEmail(appOrigin: string): RenderedEmail {
+  const home = appOrigin.replace(/\/$/, "");
   const html = renderShell({
     preheader: "This is a test email from your Osler instance.",
     heading: "Email is working",
     bodyHtml: `<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:${MUTED};">This is a test email sent from your Osler instance's admin panel. If you are reading this in your inbox, transactional email (password resets, address verification) is delivered correctly.</p>`,
     buttonLabel: "Open Osler",
-    buttonUrl: "https://osler",
+    buttonUrl: home,
     noteHtml: `<p style="margin:0;font-size:13px;line-height:1.6;color:${FAINT};">You received this because an administrator used the "Send test email" action.</p>`,
   });
   const text = [
