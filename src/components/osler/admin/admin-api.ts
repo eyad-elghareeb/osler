@@ -689,6 +689,35 @@ export interface CloudflareLimitsData {
   safetyThrottles: CloudflareSafetyThrottle[];
 }
 
+// ── Email delivery ──────────────────────────────────────────────────────────
+
+export interface EmailLogEntry {
+  to: string;
+  subject: string;
+  provider: string;
+  status: "sent" | "failed";
+  error: string | null;
+  createdAt: number;
+}
+
+export interface EmailOverview {
+  provider: {
+    mode: "binding" | "relay" | "resend";
+    binding: boolean;
+    relayUrl: string | null;
+    resendConfigured: boolean;
+    ready: boolean;
+  };
+  relayHealth: { ok: boolean; status: number } | null;
+  stats: { total: number; today: number; failed: number; lastSentAt: number | null };
+  log: EmailLogEntry[];
+}
+
+export const emailApi = {
+  overview: () => req<EmailOverview>("/v1/admin/email"),
+  sendTest: () => req<{ ok: boolean; providerStatus: number }>("/v1/admin/email/test", "POST"),
+};
+
 export const analyticsApi = {
   overview:        (range: AnalyticsRange = "24h") =>
                                                     req<AnalyticsOverview>(`/v1/admin/analytics/overview?range=${range}`),

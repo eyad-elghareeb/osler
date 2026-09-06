@@ -38,7 +38,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 import { SYNC_KINDS, RETIRED_SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes, MAX_DOCUMENT_BYTES, MAX_STORED_PAYLOAD_BYTES } from "./sync-docs";
 import { SEGMENTED_KINDS, splitSegmentKind, baseKindOfRow, packKindSegments } from "./sync-orchestrator";
-import { sendEmail, passwordResetEmail, verifyEmail, emailProviderReady } from "./email";
+import { sendEmail, passwordResetEmail, verifyEmail, emailProviderReady, emailProviderName, testEmail } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
@@ -204,6 +204,10 @@ interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /** Optional service binding to the Gmail relay worker (same-account
+   *  deploys). Preferred over EMAIL_WORKER_URL: traffic rides Cloudflare's
+   *  private network and cannot originate from another account. */
+  EMAIL?: Fetcher;
   /** Gmail SMTP relay worker (cloudflare/email-worker) base URL. Takes
    *  precedence over Resend when both are configured. */
   EMAIL_WORKER_URL?: string;
@@ -1270,6 +1274,8 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       // Lockout rows past their lock window are dead weight - drop them.
       env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
+      // Email delivery log: 90 days of accountability, then drop.
+      env.DB.prepare("DELETE FROM email_log WHERE created_at < ?").bind(now() - 90 * 24 * 60 * 60 * 1000),
     ]);
     // Telemetry tables live in the telemetry shard when bound (falls back to
     // the primary DB otherwise), so they are pruned in their own batch — a
@@ -3872,6 +3878,77 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     return json({ email: email ?? null }, 200, origin, { requestId: log.requestId, cacheControl: "no-store" });
   }
 
+  /* ── Email delivery admin ── */
+  if (path === "/v1/admin/email" || path === "/v1/admin/email/test") {
+    if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+
+    // POST /v1/admin/email/test — send a branded test email to the acting
+    // admin's own address. The fastest way to verify the Gmail relay or
+    // Resend setup end to end.
+    if (request.method === "POST" && path === "/v1/admin/email/test") {
+      if (!emailProviderReady(env) || !env.APP_ORIGIN) return json({ error: "Email is not configured" }, 400, origin, log);
+      const to = session.user.email;
+      if (!to) return json({ error: "Your account has no email address to send to" }, 400, origin, log);
+      try {
+        const { html, text } = testEmail();
+        const res = await sendEmail(env, env.DB, { to, subject: "Osler test email", text, html });
+        return json({ ok: res.ok, providerStatus: res.status }, 200, origin, log);
+      } catch (error: any) {
+        return json({ error: String(error?.message ?? error).slice(0, 200) }, 502, origin, log);
+      }
+    }
+
+    // GET /v1/admin/email — provider status, relay health, delivery stats,
+    // and the recent delivery log (no bodies/links are stored).
+    if (request.method === "GET" && path === "/v1/admin/email") {
+      const todayMs = Date.parse(utcDateString(now()));
+      const [statsRow, logRows, relayHealth] = await Promise.all([
+        env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, MAX(created_at) AS last_at FROM email_log")
+          .bind(todayMs).first<{ total: number; today: number | null; failed: number | null; last_at: number | null }>().catch(() => null),
+        env.DB.prepare("SELECT to_address, subject, provider, status, error, created_at FROM email_log ORDER BY created_at DESC LIMIT 50").all().catch(() => ({ results: [] })),
+        (async () => {
+          try {
+            if (env.EMAIL) {
+              const r = await env.EMAIL.fetch("https://osler-email/health");
+              return { ok: r.ok, status: r.status };
+            }
+            if (env.EMAIL_WORKER_URL) {
+              const r = await fetch(`${env.EMAIL_WORKER_URL.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(5000) });
+              return { ok: r.ok, status: r.status };
+            }
+          } catch {
+            return { ok: false, status: 0 };
+          }
+          return null;
+        })(),
+      ]);
+      return json({
+        provider: {
+          mode: emailProviderName(env),
+          binding: !!env.EMAIL,
+          relayUrl: env.EMAIL_WORKER_URL ?? null,
+          resendConfigured: !!(env.RESEND_API_KEY && env.EMAIL_FROM),
+          ready: emailProviderReady(env),
+        },
+        relayHealth,
+        stats: {
+          total: Number(statsRow?.total) || 0,
+          today: Number(statsRow?.today) || 0,
+          failed: Number(statsRow?.failed) || 0,
+          lastSentAt: statsRow?.last_at ? Number(statsRow.last_at) : null,
+        },
+        log: (logRows.results || []).map((r: any) => ({
+          to: r.to_address,
+          subject: r.subject,
+          provider: r.provider,
+          status: r.status,
+          error: r.error ?? null,
+          createdAt: Number(r.created_at),
+        })),
+      }, 200, origin, log);
+    }
+  }
+
   /* ── Stats ── */
   if (request.method === "GET" && path === "/v1/admin/stats") {
     if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
@@ -5463,7 +5540,7 @@ export default {
             const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?reset=${encodeURIComponent(token)}`;
             try {
               const { html, text } = passwordResetEmail(link);
-              await sendEmail(env, { to: user.email, subject: "Reset your Osler password", text, html });
+              await sendEmail(env, env.DB, { to: user.email, subject: "Reset your Osler password", text, html });
             } catch (error) {
               // A Resend outage must not surface as a 500 — that would flip the
               // always-{ok:true} no-enumeration contract into an account-existence
@@ -5513,7 +5590,7 @@ export default {
             const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?verify=${encodeURIComponent(token)}`;
             try {
               const { html, text } = verifyEmail(link);
-              await sendEmail(env, { to: user.email, subject: "Verify your Osler email address", text, html });
+              await sendEmail(env, env.DB, { to: user.email, subject: "Verify your Osler email address", text, html });
             } catch (error) {
               console.error("verify-email send failed:", error);
             }

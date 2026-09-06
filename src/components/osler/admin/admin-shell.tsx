@@ -22,6 +22,7 @@ import {
   PanelLeft,
   Home,
   BarChart3,
+  Mail,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -277,6 +278,9 @@ function AdminShellInner({ children }: AdminShellProps) {
       : []),
     ...(isAdmin
       ? [{ href: "/admin/audit", icon: ScrollText, labelKey: "admin.nav.audit" }]
+      : []),
+    ...(isAdmin
+      ? [{ href: "/admin/email", icon: Mail, labelKey: "admin.nav.email" }]
       : []),
     ...(isAdmin
       ? [{ href: "/admin/config", icon: SlidersHorizontal, labelKey: "admin.nav.config" }]

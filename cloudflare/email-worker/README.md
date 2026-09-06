@@ -54,7 +54,27 @@ curl https://osler-email.<account>.workers.dev/health
 
 ## 3. Wire the main Osler Worker to it
 
-On the **main** `osler-cloud` Worker, set the two matching values (the URL of this worker and the same `EMAIL_TOKEN`):
+**Preferred — service binding (same account).** When both workers deploy on the
+same Cloudflare account, bind them privately instead of exposing this worker
+over HTTPS: add to the main worker's `wrangler.toml`
+
+```toml
+[[services]]
+binding = "EMAIL"
+service = "osler-email"
+```
+
+plus the shared-token secret (`npx wrangler secret put EMAIL_WORKER_TOKEN`,
+same value as `EMAIL_TOKEN` below), and redeploy. Requests then ride
+Cloudflare's private network — the relay needs no public URL, and a Worker on
+another account cannot even address it. This is the strongest isolation
+available: bearer token (authenticates the caller) + binding (only your
+account *can* call) + the in-isolate rate limits below (bound the blast
+radius if the token ever leaks).
+
+**Alternative — worker URL (cross-account).** On the **main** `osler-cloud`
+Worker, set the two matching values (the URL of this worker and the same
+`EMAIL_TOKEN`):
 
 ```bash
 cd cloudflare/worker
@@ -63,7 +83,15 @@ npx wrangler secret put EMAIL_WORKER_TOKEN   # same value as EMAIL_TOKEN above
 npx wrangler deploy
 ```
 
-Precedence in the main Worker: `EMAIL_WORKER_URL` + `EMAIL_WORKER_TOKEN` (Gmail relay) → `RESEND_API_KEY` + `EMAIL_FROM` (Resend) → email disabled. Set one or the other, not both. Osler's own `EMAIL_FROM` is not used on the Gmail path — mail is sent from the Gmail address (optionally with a display name via this worker's `FROM_NAME` secret).
+Precedence in the main Worker: `EMAIL` service binding → `EMAIL_WORKER_URL` + `EMAIL_WORKER_TOKEN` (Gmail relay over HTTPS) → `RESEND_API_KEY` + `EMAIL_FROM` (Resend) → email disabled. Set one, not all. Osler's own `EMAIL_FROM` is not used on the Gmail path — mail is sent from the Gmail address (optionally with a display name via this worker's `FROM_NAME` secret).
+
+**Abuse guards.** The relay enforces in-isolate rate limits — 30 sends/minute
+globally, 3 sends/10-minutes per recipient — so a leaked token cannot burn
+through Gmail's ~500/day budget in one burst. Every send attempt is also
+recorded by the main Worker in its `email_log` D1 table (recipient, subject,
+provider, outcome — never bodies or links) and visible in the admin panel at
+**Admin → Email**, alongside provider status, relay health, delivery stats,
+and a "Send test email" action.
 
 Optional — give the mail a friendly sender name:
 

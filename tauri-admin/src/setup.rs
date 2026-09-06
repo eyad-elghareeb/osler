@@ -23,23 +23,29 @@ fn worker_dir(root: &Path) -> PathBuf {
     root.join("cloudflare").join("worker")
 }
 
-/// `npx wrangler …` Command — npx is a .cmd shim on Windows, so go through
-/// cmd /C there (same convention as deploy.rs).
-fn npx_command(args: &[&str], cwd: &Path) -> Command {
+/// Generic platform command — npm/npx are .cmd shims on Windows, so those go
+/// through cmd /C there (same convention as deploy.rs).
+fn platform_command(program: &str, args: &[&str], cwd: &Path) -> Command {
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = Command::new("cmd");
-        c.args(["/C", "npx"]);
+        c.args(["/C", program]);
         for a in args {
             c.arg(a);
         }
         c
     } else {
-        let mut c = Command::new("npx");
+        let mut c = Command::new(program);
         c.args(args);
         c
     };
     cmd.current_dir(cwd);
     cmd
+}
+
+/// `npx wrangler …` Command — npx is a .cmd shim on Windows, so go through
+/// cmd /C there (same convention as deploy.rs).
+fn npx_command(args: &[&str], cwd: &Path) -> Command {
+    platform_command("npx", args, cwd)
 }
 
 /// Spawn with piped stdio (optionally feeding stdin), wait up to `secs`,
@@ -233,4 +239,120 @@ pub async fn setup_check_health(worker_url: String) -> Result<Value, String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Deserialize)]
+pub struct EmailWorkerSetup {
+    pub gmail_user: String,
+    pub gmail_app_password: String,
+    /// Optional — generated internally when omitted, so the frontend never
+    /// handles the token.
+    pub email_token: Option<String>,
+    pub from_name: Option<String>,
+}
+
+/// Deploy the standalone Gmail relay worker (cloudflare/email-worker) inside
+/// a generated instance and wire it to that instance's main Worker:
+///   1. writes GMAIL_USER / GMAIL_APP_PASSWORD / EMAIL_TOKEN (+ FROM_NAME)
+///      as relay secrets
+///   2. runs `npx wrangler deploy` in cloudflare/email-worker and parses the
+///      workers.dev URL from the output
+///   3. writes EMAIL_WORKER_URL + EMAIL_WORKER_TOKEN as main-Worker secrets
+/// Secret values are piped over stdin and never logged.
+#[tauri::command]
+pub async fn deploy_email_worker(
+    target_dir: Option<String>,
+    setup: EmailWorkerSetup,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = if let Some(td) = target_dir {
+        PathBuf::from(td)
+    } else {
+        root_or_err_pub(&state)?
+    };
+    let email_dir = root.join("cloudflare").join("email-worker");
+    let main_dir = root.join("cloudflare").join("worker");
+    if !email_dir.is_dir() {
+        return Err("cloudflare/email-worker not found in this instance — update the instance to pull in the email relay worker".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        // 0. Dependencies for the relay worker (skipped when already present).
+        if !email_dir.join("node_modules").is_dir() {
+            let (code, out) = run_captured(platform_command("npm", &["install"], &email_dir), None, 600)?;
+            if code != 0 {
+                return Err(format!("npm install failed in email-worker: {}", last_line(&out)));
+            }
+        }
+
+        // Shared token: generated here when the frontend doesn't pass one,
+        // so the token never transits the UI.
+        let email_token = match setup.email_token.as_deref() {
+            Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+            _ => {
+                let (code, out) = run_captured(
+                    platform_command("node", &["-e", "console.log(require('crypto').randomBytes(32).toString('hex'))"], &root),
+                    None,
+                    30,
+                )?;
+                if code != 0 {
+                    return Err("Could not generate the EMAIL_TOKEN — is Node.js installed?".to_string());
+                }
+                out.lines().last().unwrap_or("").trim().to_string()
+            }
+        };
+
+        // 1. Relay secrets.
+        let mut secrets: Vec<(String, String)> = vec![
+            ("GMAIL_USER".into(), setup.gmail_user.clone()),
+            ("GMAIL_APP_PASSWORD".into(), setup.gmail_app_password.clone()),
+            ("EMAIL_TOKEN".into(), email_token.clone()),
+        ];
+        if let Some(name) = setup.from_name.as_deref() {
+            if !name.trim().is_empty() {
+                secrets.push(("FROM_NAME".into(), name.trim().to_string()));
+            }
+        }
+        for (name, value) in &secrets {
+            let (code, out) = run_captured(
+                npx_command(&["wrangler", "secret", "put", name], &email_dir),
+                Some(value),
+                120,
+            )?;
+            if code != 0 {
+                return Err(format!("Failed to set {name}: {}", last_line(&out)));
+            }
+        }
+
+        // 2. Deploy the relay worker and read its public URL.
+        let (code, out) = run_captured(npx_command(&["wrangler", "deploy"], &email_dir), None, 300)?;
+        if code != 0 {
+            return Err(format!("Relay worker deploy failed: {}", last_line(&out)));
+        }
+        let url = out
+            .split_whitespace()
+            .find(|token| token.starts_with("https://") && token.contains(".workers.dev"))
+            .map(|token| token.trim_matches(|c: char| ",;\"".contains(c)).to_string())
+            .ok_or_else(|| "Deploy succeeded but no workers.dev URL was found in the output".to_string())?;
+
+        // 3. Wire the main Worker to the relay.
+        for (name, value) in [("EMAIL_WORKER_URL", url.clone()), ("EMAIL_WORKER_TOKEN", email_token)] {
+            let (code, out) = run_captured(
+                npx_command(&["wrangler", "secret", "put", &name], &main_dir),
+                Some(&value),
+                120,
+            )?;
+            if code != 0 {
+                return Err(format!("Failed to set {name} on the main Worker: {}", last_line(&out)));
+            }
+        }
+
+        Ok(json!({ "url": url, "secrets": secrets.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>() }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn last_line(out: &str) -> String {
+    out.lines().rev().map(str::trim).find(|l| !l.is_empty()).unwrap_or("unknown error").to_string()
 }

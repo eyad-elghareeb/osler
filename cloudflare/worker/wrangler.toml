@@ -104,14 +104,23 @@ TURNSTILE_ENABLED = "false"
 WORKER_URL = "http://localhost:8787"
 
 # ── Optional: transactional email delivery ──
-# Two interchangeable providers (sendEmail picks the first fully configured):
-#   1. Gmail SMTP relay worker (cloudflare/email-worker) — mail from a plain
-#      Gmail account, no custom domain or DNS records. Set EMAIL_WORKER_URL
-#      here and EMAIL_WORKER_TOKEN as a SECRET (must match the relay
+# Three interchangeable providers (sendEmail picks the first fully configured):
+#   0. Service binding (same-account, PREFERRED) — requests ride Cloudflare's
+#      private network and can only originate from a Worker on the SAME
+#      account, so the relay needs no public URL at all. Deploy both workers
+#      on one account, then uncomment:
+# [[services]]
+# binding = "EMAIL"
+# service = "osler-email"
+#      plus the shared-token secret (must match the relay's EMAIL_TOKEN):
+#        npx wrangler secret put EMAIL_WORKER_TOKEN
+#   1. Gmail SMTP relay worker (cloudflare/email-worker) over HTTPS —
+#      cross-account / URL mode. Set EMAIL_WORKER_URL here and
+#      EMAIL_WORKER_TOKEN as a SECRET (must match the relay
 #      worker's EMAIL_TOKEN secret):
 #        npx wrangler secret put EMAIL_WORKER_TOKEN
 #   2. Resend — branded domain sending (RESEND_API_KEY + EMAIL_FROM secrets).
-# With neither configured, password-reset/verification endpoints report
+# With none configured, password-reset/verification endpoints report
 # "Email is disabled" instead of failing.
 
 # ── Optional: live Cloudflare quota data (admin analytics panel) ──

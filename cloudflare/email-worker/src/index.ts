@@ -41,6 +41,41 @@ const SMTP_HOST = "smtp.gmail.com";
 const SMTP_PORT = 587;
 const MAX_BODY_BYTES = 1_000_000;
 
+// In-isolate rate limits: a leaked token must not burn through Gmail's
+// ~500/day sending budget in one burst. Isolate-scoped (best-effort — a
+// fresh isolate resets the counters), but combined with the bearer token
+// and the recommended service-binding/private-network setup they bound
+// the blast radius of every failure mode.
+const GLOBAL_LIMIT_PER_MIN = 30;
+const PER_RECIPIENT_LIMIT_PER_10MIN = 3;
+const rateState = {
+  windowStart: 0,
+  globalCount: 0,
+  perTo: new Map<string, number[]>(),
+};
+
+function rateLimited(to: string): boolean {
+  const nowMs = Date.now();
+  if (nowMs - rateState.windowStart >= 60_000) {
+    rateState.windowStart = nowMs;
+    rateState.globalCount = 0;
+  }
+  if (rateState.globalCount >= GLOBAL_LIMIT_PER_MIN) return true;
+
+  const list = (rateState.perTo.get(to) ?? []).filter((t) => nowMs - t < 600_000);
+  if (list.length >= PER_RECIPIENT_LIMIT_PER_10MIN) return true;
+
+  rateState.globalCount += 1;
+  list.push(nowMs);
+  rateState.perTo.set(to, list);
+  if (rateState.perTo.size > 1000) {
+    for (const [addr, ts] of rateState.perTo) {
+      if (ts.every((t) => nowMs - t >= 600_000)) rateState.perTo.delete(addr);
+    }
+  }
+  return false;
+}
+
 interface SmtpConn {
   reader: ReadableStreamDefaultReader<Uint8Array>;
   writer: WritableStreamDefaultWriter<Uint8Array>;
@@ -179,6 +214,9 @@ async function handleSend(request: Request, env: Env): Promise<Response> {
   const html = typeof payload.html === "string" ? payload.html.slice(0, MAX_BODY_BYTES) : undefined;
   if (!to || !subject || (!text && !html)) {
     return Response.json({ error: "Missing or invalid fields: to, subject, text/html" }, { status: 400 });
+  }
+  if (rateLimited(to)) {
+    return Response.json({ error: "Rate limit exceeded — retry later" }, { status: 429 });
   }
 
   const message = buildMessage(env, to, subject, text || html!.replace(/<[^>]+>/g, " "), html);

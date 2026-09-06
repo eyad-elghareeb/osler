@@ -87,6 +87,7 @@ fn main() {
             setup::setup_write_secrets,
             setup::setup_promote_admin,
             setup::setup_check_health,
+            setup::deploy_email_worker,
             // Instance updater & patches
             instance_updater::check_instance_update,
             instance_updater::apply_instance_patch,

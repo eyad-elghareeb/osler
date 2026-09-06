@@ -73,6 +73,7 @@
         googleClientSecret: "",
         googleConfigured: false,
       },
+      email: { provider: "none", gmailUser: "", gmailAppPassword: "", fromName: "", url: "" },
       adminUsername: "",
       health: null,
       prereqReport: null,
@@ -421,6 +422,48 @@
           el("div", { style: { fontSize: "0.6875rem", color: "var(--text-muted)", marginTop: "0.5rem" } }, t("instance.google.postDeployNote"))
         );
         card.appendChild(googleCard);
+
+        // ── Email delivery (transactional mail) ──
+        const emailCard = el("div", {
+          style: {
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-sm)",
+            padding: "1rem",
+            marginBottom: "1.25rem",
+          },
+        });
+        emailCard.appendChild(
+          el("div", { style: { fontWeight: "600", fontSize: "0.875rem", marginBottom: "0.35rem" } }, "📧 " + t("instance.email.title"))
+        );
+        emailCard.appendChild(
+          el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: "0.75rem" } }, t("instance.email.hint"))
+        );
+        const radioRow = el("div", { style: { display: "flex", gap: "1.5rem", marginBottom: "0.75rem" } });
+        for (const option of [
+          { id: "none", label: t("instance.email.none") },
+          { id: "gmail", label: t("instance.email.gmail") },
+        ]) {
+          const radioLabel = el("label", { style: { display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.8125rem" } });
+          const radio = el("input", { type: "radio", name: "email-provider", checked: state.email.provider === option.id });
+          radio.addEventListener("change", () => { state.email.provider = option.id; renderStep3Cloud(); });
+          radioLabel.append(radio, el("span", {}, option.label));
+          radioRow.appendChild(radioLabel);
+        }
+        emailCard.appendChild(radioRow);
+        if (state.email.provider === "gmail") {
+          const eGrid = el("div", { class: "grid grid-2" });
+          eGrid.appendChild(field(t("instance.email.gmailAddress"), state.email.gmailUser, (v) => state.email.gmailUser = v, "you@gmail.com"));
+          eGrid.appendChild(field(t("instance.email.appPassword"), state.email.gmailAppPassword, (v) => state.email.gmailAppPassword = v, "abcd efgh ijkl mnop"));
+          const eName = el("div", { style: { marginTop: "0.75rem" } });
+          eName.appendChild(field(t("instance.email.fromName"), state.email.fromName, (v) => state.email.fromName = v, t("instance.email.fromNamePh")));
+          eGrid.appendChild(eName);
+          emailCard.appendChild(eGrid);
+          emailCard.appendChild(
+            el("div", { style: { fontSize: "0.6875rem", color: "var(--text-muted)", marginTop: "0.5rem", lineHeight: 1.6 } }, t("instance.email.appPasswordHint"))
+          );
+        }
+        card.appendChild(emailCard);
       }
 
       // Nav
@@ -574,6 +617,29 @@
               } catch (e) {
                 addLog(`⚠️ ${t("instance.google.saveFailed")}: ${String(e)}`, "#d29922");
               }
+              // Email delivery: deploy the Gmail relay worker and wire it to
+              // the main Worker (EMAIL_WORKER_URL/TOKEN secrets).
+              if (state.email.provider === "gmail") {
+                if (!state.email.gmailUser.trim() || !state.email.gmailAppPassword.trim()) {
+                  addLog(`⚠️ ${t("instance.email.missing")}`, "#d29922");
+                } else {
+                  try {
+                    addLog("📧 Deploying the Gmail relay worker (email-worker)...", "#58a6ff");
+                    const res = await invoke("deploy_email_worker", {
+                      targetDir: state.targetDir,
+                      setup: {
+                        gmailUser: state.email.gmailUser.trim(),
+                        gmailAppPassword: state.email.gmailAppPassword.trim(),
+                        fromName: state.email.fromName.trim() || null,
+                      },
+                    });
+                    state.email.url = res.url;
+                    addLog(`✅ Relay worker live at ${res.url} - password-reset email is now delivered via Gmail`, "#3fb950");
+                  } catch (e) {
+                    addLog(`⚠️ ${t("instance.email.deployFailed")}: ${String(e)}`, "#d29922");
+                  }
+                }
+              }
             } else if (st.error) {
               addLog(`⚠️ Deploy notice: ${st.error}`, "#d29922");
             }
@@ -599,6 +665,9 @@
         workerUrl = state.cloud.workerUrl || workerUrl;
         summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem", marginBottom: "0.4rem" } }, `🌐 Pages Project: https://${state.cloud.projectName}.pages.dev`));
         summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem" } }, `⚡ Worker: ${workerUrl}`));
+        if (state.email.provider === "gmail" && state.email.url) {
+          summaryGrid.appendChild(el("div", { style: { fontSize: "0.8125rem" } }, `📧 Email relay: ${state.email.url}`));
+        }
       }
       card.appendChild(summaryGrid);
 

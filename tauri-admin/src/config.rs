@@ -178,11 +178,22 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
 
     // ── 1. Copy core framework code from source if available ───────────
     if let Some(src_root) = resolve_source_root() {
-        for folder in ["src", "scripts"] {
+        // "cloudflare" is included so generated instances carry BOTH workers
+        // (main + email relay) and the cloudflare-init deploy pipeline works
+        // out of the box. Dependency folders are excluded from the walk.
+        for folder in ["src", "scripts", "cloudflare"] {
             let src_folder = src_root.join(folder);
             if src_folder.is_dir() {
                 for entry in WalkDir::new(&src_folder).into_iter().filter_map(|e| e.ok()) {
                     let path = entry.path();
+                    // Skip dependency/build directories — copying node_modules
+                    // would balloon instances with tens of thousands of files.
+                    if path
+                        .components()
+                        .any(|c| matches!(c.as_os_str().to_string_lossy().as_ref(), "node_modules" | ".wrangler" | "target"))
+                    {
+                        continue;
+                    }
                     if let Ok(rel) = path.strip_prefix(&src_root) {
                         let rel_str = rel.to_string_lossy().replace('\\', "/");
                         let tgt_file = target.join(rel);

@@ -17,14 +17,25 @@ export interface EmailEnv {
   EMAIL_WORKER_URL?: string;
   /** Shared bearer token the relay worker validates (its EMAIL_TOKEN). */
   EMAIL_WORKER_TOKEN?: string;
+  /** Optional service binding to the relay worker (same-account deploys).
+   *  Requests travel over Cloudflare's private network — never the public
+   *  internet — and the binding cannot be created by another account. */
+  EMAIL?: Fetcher;
 }
 
 /** True when at least one delivery provider is fully configured. The auth
  *  endpoints gate their email branches on this instead of poking at
  *  individual provider vars. */
 export function emailProviderReady(env: EmailEnv): boolean {
+  if (env.EMAIL) return true;
   if (env.EMAIL_WORKER_URL && env.EMAIL_WORKER_TOKEN) return true;
   return !!(env.RESEND_API_KEY && env.EMAIL_FROM);
+}
+
+export function emailProviderName(env: EmailEnv): "binding" | "relay" | "resend" {
+  if (env.EMAIL) return "binding";
+  if (env.EMAIL_WORKER_URL && env.EMAIL_WORKER_TOKEN) return "relay";
+  return "resend";
 }
 
 export interface RenderedEmail {
@@ -140,23 +151,92 @@ export function verifyEmail(link: string, expiresInLabel = "30 minutes"): Render
   return { html, text };
 }
 
-export function sendEmail(
+/** Branded test email for the admin Email page ("Send test email"). */
+export function testEmail(): RenderedEmail {
+  const html = renderShell({
+    preheader: "This is a test email from your Osler instance.",
+    heading: "Email is working",
+    bodyHtml: `<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:${MUTED};">This is a test email sent from your Osler instance's admin panel. If you are reading this in your inbox, transactional email (password resets, address verification) is delivered correctly.</p>`,
+    buttonLabel: "Open Osler",
+    buttonUrl: "https://osler",
+    noteHtml: `<p style="margin:0;font-size:13px;line-height:1.6;color:${FAINT};">You received this because an administrator used the "Send test email" action.</p>`,
+  });
+  const text = [
+    "Osler test email",
+    "",
+    "This is a test email sent from your Osler instance's admin panel. Transactional email is delivered correctly.",
+    "",
+    "- Osler",
+  ].join("\n");
+  return { html, text };
+}
+
+export async function sendEmail(
   env: EmailEnv,
+  db: D1Database | null,
   opts: { to: string; subject: string; text: string; html: string },
 ): Promise<Response> {
-  // Gmail SMTP relay worker (server-to-server, bearer-protected).
+  try {
+    const res = await deliver(env, opts);
+    await logDelivery(db, env, opts, res.ok ? "sent" : "failed", res.ok ? null : `HTTP ${res.status}`);
+    return res;
+  } catch (error) {
+    await logDelivery(db, env, opts, "failed", String(error).slice(0, 300));
+    throw error;
+  }
+}
+
+async function deliver(env: EmailEnv, opts: { to: string; subject: string; text: string; html: string }): Promise<Response> {
+  const body = JSON.stringify({ to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
+  const headers = { "content-type": "application/json" };
+
+  // 1. Service binding (preferred): traffic rides Cloudflare's private
+  //    network and can only originate from a Worker on the SAME account —
+  //    no public internet hop, and the relay's URL never needs to exist.
+  if (env.EMAIL) {
+    return env.EMAIL.fetch("https://osler-email/send", {
+      method: "POST",
+      headers: { ...headers, authorization: `Bearer ${env.EMAIL_WORKER_TOKEN ?? ""}` },
+      body,
+    });
+  }
+
+  // 2. Relay worker over the public internet (cross-account / URL mode).
   if (env.EMAIL_WORKER_URL && env.EMAIL_WORKER_TOKEN) {
     const base = env.EMAIL_WORKER_URL.replace(/\/$/, "");
     return fetch(`${base}/send`, {
       method: "POST",
-      headers: { authorization: `Bearer ${env.EMAIL_WORKER_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ to: opts.to, subject: opts.subject, text: opts.text, html: opts.html }),
+      headers: { ...headers, authorization: `Bearer ${env.EMAIL_WORKER_TOKEN}` },
+      body,
     });
   }
-  // Resend (branded domain sending).
+
+  // 3. Resend (branded domain sending).
   return fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, ...headers },
     body: JSON.stringify({ from: env.EMAIL_FROM, to: [opts.to], subject: opts.subject, text: opts.text, html: opts.html }),
   });
+}
+
+/** Best-effort delivery log for the admin Email page. Never throws — a
+ *  logging failure must not break (or duplicate-fail) the send itself.
+ *  Bodies and links are deliberately NOT stored: reset links are
+ *  bearer-equivalent secrets, and the log only needs accountability. */
+async function logDelivery(
+  db: D1Database | null,
+  env: EmailEnv,
+  opts: { to: string; subject: string },
+  status: "sent" | "failed",
+  error: string | null,
+): Promise<void> {
+  if (!db) return;
+  try {
+    await db
+      .prepare("INSERT INTO email_log (id, to_address, subject, provider, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), opts.to, opts.subject, emailProviderName(env), status, error, Date.now())
+      .run();
+  } catch {
+    /* ignore */
+  }
 }
