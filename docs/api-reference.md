@@ -1517,7 +1517,8 @@ curl -s https://osler-cloud.example.workers.dev/v1/admin/stats \
   "contentCount": 1245,
   "pendingCount": 8,
   "publishedCount": 1187,
-  "draftCount": 32
+  "draftCount": 32,
+  "guestCount": 41
 }
 ```
 
@@ -1529,6 +1530,7 @@ curl -s https://osler-cloud.example.workers.dev/v1/admin/stats \
 | `pendingCount` | Content objects in `pending` review state |
 | `publishedCount` | Content objects in `published` state |
 | `draftCount` | Content objects in `draft` state (does not include `rejected`) |
+| `guestCount` | Local-only guests reporting via `POST /v1/guest/presence` (migration `0005`; `0` when the table is absent) |
 
 #### Example error responses
 
@@ -1645,7 +1647,10 @@ Missing or invalid token — `401`:
 
 ### GET /v1/admin/users
 
-List users with optional search.
+List users with optional search. Local-only guests (reported via
+`POST /v1/guest/presence`) ride along as `guests` so the admin sees every
+learner by name; each guest carries its answered-question count (joined
+from choice respondents on `aid`).
 
 - **Auth**: `admin` only
 - **Body**: none
@@ -1682,11 +1687,25 @@ curl -s "https://osler-cloud.example.workers.dev/v1/admin/users?page=1&q=alice" 
   ],
   "total": 1,
   "page": 1,
-  "limit": 25
+  "limit": 25,
+  "guests": [
+    {
+      "aid": "7f3a…",
+      "displayName": "Omar (guest)",
+      "firstSeenAt": 1734000000000,
+      "lastSeenAt": 1734100000000,
+      "answers": 37
+    }
+  ],
+  "guestTotal": 1
 }
 ```
 
-Results are ordered by `created_at DESC` (newest users first).
+Results are ordered by `created_at DESC` (newest users first); guests are
+ordered by `last_seen_at DESC` (up to 100) and `guestTotal` counts all
+matches. The `q` term also filters guests by display name. `guests` /
+`guestTotal` are absent-equivalent (`[]` / `0`) when migration `0005`
+hasn't been applied.
 
 #### Example error responses
 

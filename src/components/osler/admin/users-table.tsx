@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical, ShieldCheck, Trash2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,9 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
-import { adminApi, type AdminUser } from "@/components/osler/admin/admin-api";
+import { adminApi, type AdminUser, type AdminGuest } from "@/components/osler/admin/admin-api";
 import { Label } from "@/components/ui/label";
-import { EmptyState } from "@/components/osler/ui-primitives";
+import { EmptyState, SectionHeading } from "@/components/osler/ui-primitives";
 import { useToast } from "@/hooks/use-toast";
 
 type Role = "student" | "content_admin" | "admin";
@@ -67,6 +67,8 @@ export function UsersTable() {
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
+  const [guests, setGuests] = useState<AdminGuest[]>([]);
+  const [guestTotal, setGuestTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -85,7 +87,7 @@ export function UsersTable() {
   const load = useCallback(() => {
     setLoading(true);
     adminApi.users(page, debouncedQ)
-      .then((r) => { setUsers(r.users); setTotal(r.total); })
+      .then((r) => { setUsers(r.users); setTotal(r.total); setGuests(r.guests ?? []); setGuestTotal(r.guestTotal ?? 0); })
       .catch(() => toast({ title: t("admin.toast.failedLoadUsers"), variant: "destructive" }))
       .finally(() => setLoading(false));
   }, [page, debouncedQ]);
@@ -155,6 +157,9 @@ export function UsersTable() {
         </div>
         <span className="text-sm text-muted-foreground tabular-nums">
           {t("admin.users.total", { n: String(total) })}
+          {guestTotal > 0 && (
+            <span className="ms-2">· {t("admin.users.guestsCount", { n: String(guestTotal) })}</span>
+          )}
         </span>
       </div>
 
@@ -278,6 +283,44 @@ export function UsersTable() {
           <Button variant="outline" size="iconSm" onClick={() => { haptic("selection"); setPage((p) => Math.min(totalPages, p + 1)); }} disabled={page === totalPages} aria-label={t("common.next")}>
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </Button>
+        </div>
+      )}
+
+      {/* Guests — local-only sessions reported by name (no account, no
+          actions). Shown whenever any guest has reported presence. */}
+      {guests.length > 0 && (
+        <div className="mt-6">
+          <SectionHeading icon={UserRound}>
+            {t("admin.users.guestsCount", { n: String(guestTotal) })}
+          </SectionHeading>
+          <div className="space-y-2">
+            {guests.map((guest, i) => (
+              <motion.div
+                key={guest.aid}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(i * 0.03, 0.3) }}
+                className="rounded-xl border border-border bg-card"
+              >
+                <div className="flex items-center gap-3 p-3">
+                  <AvatarInitials name={guest.displayName} role="student" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm truncate">
+                      {guest.displayName}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {t("admin.users.lastSeen", { date: new Date(guest.lastSeenAt).toLocaleDateString() })}
+                      {" · "}
+                      {t("admin.users.answeredCount", { n: String(guest.answers) })}
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium bg-info/15 text-info border-info/30 shrink-0">
+                    {t("admin.users.guestBadge")}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       )}
 

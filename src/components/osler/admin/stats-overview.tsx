@@ -72,8 +72,19 @@ export function StatsOverview() {
     value: number;
     icon: LucideIcon;
     color: "primary" | "success" | "warning" | "destructive" | "info";
+    footerNote?: string;
   }> = [
-    { label: t("admin.stats.users"), value: stats.userCount, icon: Users, color: "primary" },
+    {
+      label: t("admin.stats.users"),
+      value: stats.userCount,
+      icon: Users,
+      color: "primary",
+      // Local-only guests have no account row — surface their count under
+      // the users tile so the KPI row counts every learner.
+      footerNote: (stats.guestCount ?? 0) > 0
+        ? t("admin.users.guestsCount", { n: String(stats.guestCount) })
+        : undefined,
+    },
     { label: t("admin.stats.sessions"), value: stats.sessionCount, icon: Activity, color: "info" },
     { label: t("admin.stats.content"), value: stats.contentCount, icon: FileText, color: "success" },
     {
@@ -94,13 +105,20 @@ export function StatsOverview() {
           icon={tile.icon}
           color={tile.color}
           footer={
-            <MetricBar
-              value={tile.value}
-              max={max}
-              color={tile.color}
-              label={tile.label}
-              className="mt-3"
-            />
+            <>
+              <MetricBar
+                value={tile.value}
+                max={max}
+                color={tile.color}
+                label={tile.label}
+                className="mt-3"
+              />
+              {tile.footerNote && (
+                <p className="text-[11px] text-muted-foreground mt-1.5 tabular-nums">
+                  {tile.footerNote}
+                </p>
+              )}
+            </>
           }
         />
       ))}

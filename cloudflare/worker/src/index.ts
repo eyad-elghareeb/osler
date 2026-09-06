@@ -3993,7 +3993,10 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       env.DB.prepare("SELECT COUNT(*) as n FROM content_objects WHERE status = 'published'").first(),
       env.DB.prepare("SELECT COUNT(*) as n FROM content_objects WHERE status = 'draft'").first(),
     ]);
-    return json({ userCount: (userCount as any)?.n ?? 0, sessionCount: (sessionCount as any)?.n ?? 0, contentCount: (contentCount as any)?.n ?? 0, pendingCount: (pendingCount as any)?.n ?? 0, publishedCount: (publishedCount as any)?.n ?? 0, draftCount: (draftCount as any)?.n ?? 0 }, 200, origin, log);
+    // Guests (local-only sessions reporting via /v1/guest/presence). Missing
+    // table (migration 0005 pending) reads as zero, never a 500.
+    const guestCount = ((await env.DB.prepare("SELECT COUNT(*) as n FROM guest_presence").first<{ n: number }>().catch(() => ({ n: 0 }))) as { n: number } | null)?.n ?? 0;
+    return json({ userCount: (userCount as any)?.n ?? 0, sessionCount: (sessionCount as any)?.n ?? 0, contentCount: (contentCount as any)?.n ?? 0, pendingCount: (pendingCount as any)?.n ?? 0, publishedCount: (publishedCount as any)?.n ?? 0, draftCount: (draftCount as any)?.n ?? 0, guestCount }, 200, origin, log);
   }
 
   /* ── Audit log ── */
@@ -4105,7 +4108,41 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           env.DB.prepare("SELECT COUNT(*) as n FROM users").first(),
         ]);
       }
-      return json({ users: (rows.results || []).map(adminPublicUser), total: (total as any)?.n ?? 0, page, limit }, 200, origin, log);
+      // Guests (local-only sessions, reported via /v1/guest/presence) ride
+      // along so the admin Users section shows every learner by name.
+      // guest_presence lives in core; each guest's answered-question count
+      // joins respondents on aid in the telemetry shard (core when
+      // unsharded) — two queries because D1 can't join across databases.
+      // Missing table (migration 0005 pending) yields an empty list, never
+      // a 500.
+      let guests: Array<{ aid: string; displayName: string; firstSeenAt: number; lastSeenAt: number; answers: number }> = [];
+      let guestTotal = 0;
+      try {
+        const like = q ? `%${escapeLike(q)}%` : null;
+        const where = like ? "WHERE display_name LIKE ? ESCAPE '\\' " : "";
+        const binds: unknown[] = like ? [like] : [];
+        const [grows, gtotal] = await Promise.all([
+          env.DB.prepare(`SELECT aid, display_name, first_seen_at, last_seen_at FROM guest_presence ${where}ORDER BY last_seen_at DESC LIMIT 100`).bind(...binds).all(),
+          env.DB.prepare(`SELECT COUNT(*) as n FROM guest_presence ${where}`).bind(...binds).first<{ n: number }>(),
+        ]);
+        const growsResults = ((grows as any).results || []) as Array<{ aid: string; display_name: string; first_seen_at: number; last_seen_at: number }>;
+        guestTotal = (gtotal as { n: number } | null)?.n ?? 0;
+        const answerCounts = new Map<string, number>();
+        if (growsResults.length > 0) {
+          const placeholders = growsResults.map(() => "?").join(",");
+          const aidBinds = growsResults.map((g) => g.aid);
+          const answered = await telemetryDb(env).prepare(
+            `SELECT aid, COUNT(*) as c FROM question_choice_respondents WHERE aid IN (${placeholders}) GROUP BY aid`
+          ).bind(...aidBinds).all().catch(() => ({ results: [] as Array<{ aid: string; c: number }> }));
+          for (const row of ((answered as any).results || []) as Array<{ aid: string; c: number }>) {
+            answerCounts.set(row.aid, row.c ?? 0);
+          }
+        }
+        guests = growsResults.map((g) => ({ aid: g.aid, displayName: g.display_name, firstSeenAt: g.first_seen_at, lastSeenAt: g.last_seen_at, answers: answerCounts.get(g.aid) ?? 0 }));
+      } catch {
+        // migration 0005 not applied yet — guests stay empty
+      }
+      return json({ users: (rows.results || []).map(adminPublicUser), total: (total as any)?.n ?? 0, page, limit, guests, guestTotal }, 200, origin, log);
     }
     const sessionsMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/sessions$/);
     if (sessionsMatch && request.method === "GET") {
@@ -5692,6 +5729,29 @@ export default {
         const body = await readJson(request).catch(() => null);
         if (!body || typeof body.turnstileToken !== "string") return json({ error: "Invalid request" }, 400, origin, log);
         if (!await verifyTurnstile(body.turnstileToken, env)) return json({ error: "Verification failed" }, 400, origin, log);
+        return json({ ok: true }, 200, origin, log);
+      }
+
+      // ── Guest presence (pre-auth) ──
+      // POST /v1/guest/presence — local-only guests report {aid, displayName}
+      // (client-throttled to ~once/day per device) so the admin panel can
+      // count guests by name. Stats-only: a missing table (migration 0005
+      // not yet applied) or any other failure still returns ok — reporting
+      // must never break the login flow.
+      if (request.method === "POST" && url.pathname === "/v1/guest/presence") {
+        if (!rateLimit(ip, "guest")) return json({ error: "Too many requests" }, 429, origin, log);
+        const body = await readJson(request).catch(() => null);
+        const aid = typeof body?.aid === "string" ? body.aid.trim().slice(0, QBANK_STATS_AID_MAX_LEN) : "";
+        const displayName = typeof body?.displayName === "string" ? body.displayName.trim().slice(0, 40) : "";
+        if (!aid || !displayName) return json({ error: "Invalid request" }, 400, origin, log);
+        try {
+          const t = now();
+          await env.DB.prepare(
+            "INSERT INTO guest_presence (aid, display_name, first_seen_at, last_seen_at, report_count) VALUES (?, ?, ?, ?, 1) ON CONFLICT(aid) DO UPDATE SET display_name = excluded.display_name, last_seen_at = excluded.last_seen_at, report_count = report_count + 1"
+          ).bind(aid, displayName, t, t).run();
+        } catch (e) {
+          log.warn("guest_presence upsert failed", { error: String(e) });
+        }
         return json({ ok: true }, 200, origin, log);
       }
 

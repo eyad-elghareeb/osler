@@ -151,7 +151,7 @@ All API routes are prefixed with `/v1`. Authenticated requests carry `Authorizat
 | Method | Route | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/v1/admin/me` | Session (`admin`/`content_admin`) | Get admin profile with capabilities bitmask (includes `viewAudit`, `manageSessions`). |
-| `GET` | `/v1/admin/stats` | Session (`admin`) | Aggregate counts: users, active sessions, content, pending, published, drafts. |
+| `GET` | `/v1/admin/stats` | Session (`admin`) | Aggregate counts: users, guests, active sessions, content, pending, published, drafts. |
 | `GET` | `/v1/admin/audit?page=&action=` | Session (`admin`) | Paginated audit log (50 entries/page) with optional action filter. |
 
 ### Analytics — Performance & Usage Telemetry
@@ -184,7 +184,7 @@ via `localStorage.osler_analytics_force = "1"`.
 
 | Method | Route | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/v1/admin/users?page=&q=` | Session (`admin`) | List users (25/page) with optional `q` search across username / display_name / email. LIKE wildcards (`%`, `_`) are escaped. |
+| `GET` | `/v1/admin/users?page=&q=` | Session (`admin`) | List users (25/page) with optional `q` search across username / display_name / email, plus matching `guests` (local-only, by display name, with answered counts). LIKE wildcards (`%`, `_`) are escaped. |
 | `GET` | `/v1/admin/users/:id` | Session (`admin`) | Get single user profile, active session count, and recent content (up to 25 items). |
 | `PATCH` | `/v1/admin/users/:id` | Session (`admin`) | Update user role or display name. **Cannot demote self** — returns 400. |
 | `DELETE` | `/v1/admin/users/:id` | Session (`admin`) | Delete user account and all associated data. **Cannot delete self** — returns 400. Content objects are **reassigned to the acting admin** so published content stays live. |

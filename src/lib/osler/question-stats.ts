@@ -60,6 +60,16 @@ function ensureContributorId(): string {
   }
 }
 
+/**
+ * Stable random contributor id for this device — also the guest's aid in
+ * guest_presence (see guest-presence.ts). Signed-in users are keyed
+ * server-side instead; this is only the guest identity. Random UUID, not
+ * tied to any account or PII.
+ */
+export function getContributorId(): string {
+  return ensureContributorId();
+}
+
 function bindLifecycleFlush(): void {
   if (listenersBound || typeof window === "undefined") return;
   listenersBound = true;

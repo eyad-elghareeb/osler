@@ -52,11 +52,36 @@ export interface AdminIdentity {
 
 export interface AdminStats {
   userCount: number;
+  /** Local-only guests reporting via /v1/guest/presence (migration 0005).
+   *  Absent (older Workers) — treat as 0. */
+  guestCount?: number;
   sessionCount: number;
   contentCount: number;
   pendingCount: number;
   publishedCount: number;
   draftCount: number;
+}
+
+/** A local-only guest session reported via /v1/guest/presence — no account,
+ *  counted by device (aid) with the display name the guest picked. */
+export interface AdminGuest {
+  aid: string;
+  displayName: string;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  /** Distinct questions answered (joined from choice respondents on aid). */
+  answers: number;
+}
+
+export interface AdminUsersPage {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+  /** Guests matching the filter (absent on older Workers — treat as []). */
+  guests?: AdminGuest[];
+  /** Total matching guests across all pages (absent on older Workers). */
+  guestTotal?: number;
 }
 
 export interface AdminAuditEntry {
@@ -275,7 +300,7 @@ export const adminApi = {
                                                   req<AdminAuditPage>(`/v1/admin/audit?page=${page}${action ? `&action=${encodeURIComponent(action)}` : ""}`),
 
   // User management (admin only)
-  users:           (page: number, q: string)     => req<{ users: AdminUser[]; total: number; page: number; limit: number }>(`/v1/admin/users?page=${page}&q=${encodeURIComponent(q)}`),
+  users:           (page: number, q: string)     => req<AdminUsersPage>(`/v1/admin/users?page=${page}&q=${encodeURIComponent(q)}`),
   getUser:         (id: string)                  => req<AdminUserDetail>(`/v1/admin/users/${id}`),
   updateUser:      (id: string, patch: { role?: string; displayName?: string }) => req<AdminUser>(`/v1/admin/users/${id}`, "PATCH", patch),
   resetUserPassword: (id: string, password: string) => req<{ ok: boolean }>(`/v1/admin/users/${id}/reset-password`, "POST", { password }),

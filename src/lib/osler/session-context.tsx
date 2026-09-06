@@ -20,6 +20,7 @@ import {
   type CloudSession,
 } from "@/lib/osler/cloud";
 import { loadPdfFonts } from "@/lib/osler/pdf-fonts";
+import { maybeReportGuestPresence } from "@/lib/osler/guest-presence";
 
 interface SessionContextType {
   username: string | null;
@@ -138,6 +139,9 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
         if (!cancelled && storedLocal) {
           setUsername(storedLocal);
           setLoading(false);
+          // Count the guest by name for admin statistics (throttled,
+          // best-effort — never blocks the restore).
+          void maybeReportGuestPresence(storedLocal);
           return;
         }
 
@@ -304,6 +308,8 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
       } else {
         persistLocalUsername(name);
         setUsername(name);
+        // Fresh guest login — report the display name for admin statistics.
+        void maybeReportGuestPresence(name);
       }
     },
     [persistLocalUsername]

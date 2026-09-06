@@ -593,6 +593,17 @@ export async function fetchQuestionStats(uid: string): Promise<Record<string, Qu
   return result.stats;
 }
 
+/* ── Guest presence ──
+ * Local-only guests have no account row, so the admin panel can't count
+ * them from the users table. Guests report {aid, displayName} (throttled
+ * client-side to ~once/day) through this pre-auth endpoint; the worker
+ * stores it in guest_presence for the admin stats + users endpoints.
+ * Throws on failure — callers treat it as best-effort.
+ */
+export async function reportGuestPresence(aid: string, displayName: string): Promise<void> {
+  await request("/v1/guest/presence", { method: "POST", body: JSON.stringify({ aid, displayName }) });
+}
+
 /* ── Support tickets ──
  * Filed from Settings / QBank question reports / Library article reports.
  * The client generates the id so its local receipt merges cleanly with the

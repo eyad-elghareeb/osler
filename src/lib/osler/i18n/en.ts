@@ -1795,6 +1795,10 @@ export const en = {
     "admin.users.resetPassword": "Reset password",
     "admin.users.resetSubtitle": "Enter a new password for {name}. They will be signed out of all devices.",
     "admin.users.resetSuccess": "Password reset successfully",
+    "admin.users.guestsCount": "{n} guests",
+    "admin.users.guestBadge": "Guest",
+    "admin.users.lastSeen": "Last seen {date}",
+    "admin.users.answeredCount": "{n} answered",
 
     "admin.content.title": "Content",
     "admin.content.subtitle": "Create and manage R2-backed content objects.",

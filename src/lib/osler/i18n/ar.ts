@@ -1790,6 +1790,10 @@ export const ar = {
     "admin.users.resetPassword": "إعادة تعيين كلمة المرور",
     "admin.users.resetSubtitle": "أدخل كلمة مرور جديدة للحساب {name}. سيتم تسجيل خروجهم من جميع الأجهزة.",
     "admin.users.resetSuccess": "تم إعادة تعيين كلمة المرور",
+    "admin.users.guestsCount": "{n} ضيوف",
+    "admin.users.guestBadge": "ضيف",
+    "admin.users.lastSeen": "آخر ظهور {date}",
+    "admin.users.answeredCount": "أجاب {n}",
 
     "admin.content.title": "المحتوى",
     "admin.content.subtitle": "إنشاء وإدارة محتوى مخزن في R2.",
