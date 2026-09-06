@@ -792,6 +792,13 @@ Library, Flashcards, OSCE, and Videos are sub-views under the **Learn** hub. The
 - `userScalable: false`, `maximumScale: 1`, `viewportFit: "cover"` in layout metadata
 - Desktop nav hidden at `<768px`, replaced by `MobileTabBar`
 - Touch targets must meet 44px minimum
+- **Tablet band (768–1023px)**: the desktop top nav stays, but multi-pane
+  studio layouts go compact — use `useIsTablet()` (`@/hooks/use-mobile`) and
+  the shared `isMobile = isPhone || isTablet` alias so split panes stack
+  (`.osler-qbank-split` stacks below 1024px), overlays replace sidebars
+  (OSCE station sidebar, quiz sticky tabs), and coarse-pointer devices grow
+  28px icon buttons to 36px (globals.css `pointer: coarse` block). Tablet
+  landscape (≥1024px) gets the full desktop layout.
 
 ### Sync system
 

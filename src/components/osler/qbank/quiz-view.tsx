@@ -17,7 +17,7 @@ import { HighlightedContent } from "@/components/osler/highlighted-content";
 import { HighlighterToolbar } from "@/components/osler/highlighter-toolbar";
 import { useShortcutBindings } from "@/hooks/use-shortcuts";
 import { isTextInput, describeBinding } from "@/lib/osler/shortcuts";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useIsTablet } from "@/hooks/use-mobile";
 import { VerticalSnapGallery } from "@/components/osler/vertical-snap-gallery";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
@@ -303,7 +303,12 @@ export function QuizView({
       return () => clearTimeout(timer);
     }
   }, []); // mount-only: check the completed flag once per session mount
-  const isMobile = useIsMobile();
+  // Compact layout: phones + tablet portrait — the split panes stack below
+  // 1024px (see the .osler-qbank-split media query), so the sticky tab
+  // switcher and mobile navigation apply there too.
+  const isPhone = useIsMobile();
+  const isTablet = useIsTablet();
+  const isMobile = isPhone || isTablet;
   const [mobileTutorTab, setMobileTutorTab] = React.useState<"question" | "answer">("question");
   const [showShortcuts, setShowShortcuts] = React.useState(false);
   const bindings = useShortcutBindings();
@@ -1680,7 +1685,7 @@ export function QuizView({
                   <ToolButton onClick={onToggleCalculator} icon={CalcIcon} active={calculatorOpen} title={t("qbank.session.calculator")} />
                   <ToolButton onClick={onToggleLabValues} icon={FlaskConical} active={labValuesOpen} title={t("qbank.session.labValues")} />
                   <ToolButton onClick={onToggleAiAssistant} icon={Sparkles} active={aiAssistantOpen} title={t("qbank.session.aiAssistant")} />
-                  {!isMobile && (
+                  {!isPhone && (
                     <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
                       <PopoverTrigger asChild>
                         <ToolButton onClick={() => setArticleSearchOpen(true)} icon={BookOpen} title={t("qbank.session.openArticle")} />

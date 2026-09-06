@@ -8,7 +8,7 @@ import { loadCategoryTree, loadContentByUid, flattenTree, collectPackUrls, getCa
 import { NavigationStack } from "@/components/osler/navigation-stack";
 import type { ContentTreeNode, OsceContent, OsceStation } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, useIsTablet } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "@/components/osler/immersive-mode";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { dirForContent } from "@/lib/osler/i18n";
@@ -85,7 +85,11 @@ function OsceStudioInner({
   const onExit = propOnExit || (() => navigate("osce"));
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("osce", { uid: item.uid }));
   const onNavigateBack = propOnNavigateBack || (() => navigate("learn"));
-  const isMobile = useIsMobile();
+  // Compact layout: phones + tablet portrait — the station sidebar folds
+  // away and the touch-sized controls replace the desktop ones below 1024px.
+  const isPhone = useIsMobile();
+  const isTablet = useIsTablet();
+  const isMobile = isPhone || isTablet;
   const { t, rtl, contentFilter } = useI18n();
 
   /* ── State ── */

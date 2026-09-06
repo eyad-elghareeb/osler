@@ -1114,6 +1114,17 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   }
 }
 
+/* Tablet+ touch: the 28px compact icon buttons in the in-session top bars
+ * (quiz header, OSCE header, reader toolbar) are finger-hostile. On touch
+ * devices with room to spare, grow them toward the 44px guideline — phones
+ * keep the tight chrome, desktop pointers are unaffected. */
+@media (pointer: coarse) and (min-width: 768px) {
+  button.size-7 {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+}
+
 /* ── Mobile bottom tab bar ────────────────────────────────────────────────
  * Renders below the home indicator on phones. The bar is fully opaque so
  * scrolled content never shows through it; the hairline top border separates
@@ -1221,12 +1232,13 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 
 /* Article body padding for readability on narrow viewports. */
 
-/* ── QBank mobile quiz view ───────────────────────────────────────────────
+/* ── QBank compact quiz view ──────────────────────────────────────────────
  * In tutor mode the desktop shows question (left 55%) and explanation
- * (right 45%) side-by-side. On phones we stack them vertically with a
- * sticky in-page tab switcher.
+ * (right 45%) side-by-side. On phones AND tablets (portrait) we stack them
+ * vertically with a sticky in-page tab switcher — two ~350px panes side by
+ * side are too cramped to read. Landscape tablets (≥1024px) get the split.
  */
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .osler-qbank-split {
     flex-direction: column !important;
   }
