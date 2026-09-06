@@ -5,12 +5,14 @@ import { motion } from "framer-motion";
 import {
   Activity,
   ArrowRight,
+  Check,
   Loader2,
   MailWarning,
   ShieldCheck,
   ShieldAlert,
   Eye,
   EyeOff,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,14 @@ interface LoginScreenProps {
   googleReturnTo?: string;
 }
 
+/** Per-mode form heading — the screen re-describes itself as it switches. */
+const MODE_COPY = {
+  login: { title: "login.modeLoginTitle", desc: "login.modeLoginDesc" },
+  register: { title: "login.modeRegisterTitle", desc: "login.modeRegisterDesc" },
+  reset: { title: "login.modeResetTitle", desc: "login.modeResetDesc" },
+  verify: { title: "login.modeVerifyTitle", desc: "login.modeVerifyDesc" },
+} as const;
+
 export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo }: LoginScreenProps) {
   const { t, rtl } = useI18n();
   const [username, setUsername] = React.useState("");
@@ -88,6 +98,11 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudError, setCloudError] = React.useState("");
   const [unverified, setUnverified] = React.useState(false);
+  // Resend cooldown: after a reset/verification mail goes out, the submit
+  // button shows a 60s countdown instead of firing again. The server reuses
+  // outstanding tokens anyway — this stops accidental double-taps.
+  const [cooldownUntil, setCooldownUntil] = React.useState(0);
+  const [nowTick, setNowTick] = React.useState(0);
   const [resetSent, setResetSent] = React.useState(false);
   const [resetToken, setResetToken] = React.useState("");
   const [verifyState, setVerifyState] = React.useState<"idle" | "verifying" | "success" | "error">("idle");
@@ -306,8 +321,51 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
     };
   }, [cloudActive]);
 
+  // Cooldown ticker — alive only while a cooldown runs. nowTick is
+  // intentionally out of the dep array: the interval drives re-renders, and
+  // listing it would recreate the timer every second.
+  React.useEffect(() => {
+    if (Date.now() >= cooldownUntil) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [cooldownUntil]);
+
+  const startCooldown = () => {
+    setCooldownUntil(Date.now() + 60_000);
+    setNowTick(Date.now());
+  };
+  const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - nowTick) / 1000));
+  // Link-sending modes only — typing a new password with a token in hand is
+  // never throttled.
+  const coolingLink = cooldownLeft > 0 && ((cloudMode === "reset" && !resetToken) || cloudMode === "verify");
+
+  // Map failures to guidance. Unknown-account and wrong-password stay one
+  // message on purpose (telling them apart would let anyone probe which
+  // usernames and emails have accounts).
+  const friendlyError = (error: unknown): string => {
+    if (error instanceof TypeError) return t("login.errOffline");
+    if (!(error instanceof CloudApiError)) return t("login.cloud.error");
+    if (error.status === 401) return t("login.errNoMatch");
+    if (error.status === 409) return t("login.errTaken");
+    if (error.status === 429) return t("login.errRateLimited");
+    if (error.status === 400) return /verif/i.test(error.message) ? t("login.errChallenge") : t("login.errInvalid");
+    if (error.status >= 500) return t("login.errServer");
+    return error.message || t("login.cloud.error");
+  };
+
+  // Live password rules (mirrors the server: 8+ chars, 2 of 4 classes).
+  const pwClasses = [
+    { met: password.length >= 8, label: t("login.passwordSecurePlaceholder") },
+    { met: /[a-z]/.test(password), label: t("login.pwLower") },
+    { met: /[A-Z]/.test(password), label: t("login.pwUpper") },
+    { met: /[0-9]/.test(password), label: t("login.pwDigit") },
+    { met: /[^A-Za-z0-9]/.test(password), label: t("login.pwSymbol") },
+  ];
+  const pwClassCount = pwClasses.slice(1).filter((r) => r.met).length;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (coolingLink) return;
     if (cloudActive) {
       setCloudBusy(true);
       setCloudError("");
@@ -333,6 +391,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
             if (email.trim()) setEmail(email.trim());
             setVerifySent(true);
             setCloudMode("verify");
+            startCooldown();
             haptic("success");
             return;
           }
@@ -350,6 +409,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
           } else {
             await requestPasswordReset(email, turnstileToken || undefined);
             setResetSent(true);
+            startCooldown();
             haptic("success");
           }
           return;
@@ -357,6 +417,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
         if (cloudMode === "verify") {
           await requestEmailVerify(email, turnstileToken || undefined);
           setVerifySent(true);
+          startCooldown();
           haptic("success");
           return;
         }
@@ -372,7 +433,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
           setUnverified(true);
           haptic("warning");
         } else {
-          setCloudError(error instanceof CloudApiError ? error.message : t("login.cloud.error"));
+          setCloudError(friendlyError(error));
           haptic("error");
         }
       } finally {
@@ -474,6 +535,18 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
           onSubmit={submit}
           className="bg-card border border-border rounded-xl p-6 space-y-4 shadow-e1"
         >
+          {/* Mode heading — re-announces itself on every mode switch. */}
+          <motion.div
+            key={cloudMode + (resetToken ? "-token" : "")}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={MOTION_TRANSITION.quick}
+          >
+            <h2 className="text-base font-semibold">{t(MODE_COPY[cloudMode].title)}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {cloudMode === "reset" && resetToken ? t("login.modeResetTokenDesc") : t(MODE_COPY[cloudMode].desc)}
+            </p>
+          </motion.div>
           {cloudMode === "register" && (
             <div>
               <label htmlFor="display-name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -570,6 +643,21 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
           ) : null}
 
           {cloudActive && cloudMode === "register" && (
+            <ul className="space-y-1" aria-live="polite">
+              {pwClasses.map((rule) => (
+                <li key={rule.label} className={cn("flex items-center gap-1.5 text-xs", rule.met ? "text-success" : "text-muted-foreground")}>
+                  {rule.met ? <Check className="size-3.5 shrink-0" /> : <X className="size-3.5 shrink-0" />}
+                  {rule.label}
+                </li>
+              ))}
+              <li className={cn("flex items-center gap-1.5 text-xs", pwClassCount >= 2 ? "text-success" : "text-muted-foreground")}>
+                {pwClassCount >= 2 ? <Check className="size-3.5 shrink-0" /> : <X className="size-3.5 shrink-0" />}
+                {t("login.pwTwoOfFour")}
+              </li>
+            </ul>
+          )}
+
+          {cloudActive && cloudMode === "register" && (
             <div>
               <label htmlFor="password-confirm" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t("login.confirmPassword")}
@@ -628,9 +716,11 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
           )}
           {cloudActive && getConfig().cloud.turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center" />}
 
-          <Button type="submit" size="lg" disabled={cloudBusy} className="w-full gap-2">
+          <Button type="submit" size="lg" disabled={cloudBusy || coolingLink} className="w-full gap-2">
             {cloudBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {cloudMode === "register" ? t("login.createAccount") : cloudMode === "reset" ? (resetToken ? t("login.resetPassword") : t("login.sendReset")) : cloudMode === "verify" ? t("login.sendVerify") : t("login.signIn")}
+            {coolingLink
+              ? t("login.resendIn", { s: cooldownLeft })
+              : cloudMode === "register" ? t("login.createAccount") : cloudMode === "reset" ? (resetToken ? t("login.resetPassword") : t("login.sendReset")) : cloudMode === "verify" ? t("login.sendVerify") : t("login.signIn")}
             {!cloudBusy && <ArrowRight className={cn("size-4", rtl && "rtl-flip-x")} />}
           </Button>
 
