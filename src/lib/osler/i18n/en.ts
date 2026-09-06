@@ -1194,6 +1194,8 @@ export const en = {
     "settings.theme.active": "Active",
     "settings.theme.darkVariant": "Dark",
     "settings.theme.lightVariant": "Light",
+    "settings.theme.followSystem": "Follow system",
+    "settings.theme.followSystemDesc": "Automatically match your device's light / dark setting.",
 
     "qbank.settings.alignmentHint": "Alignment applies only in Continuous mode. In 2-page (split) mode the question column is always left-aligned.",
 

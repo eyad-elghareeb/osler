@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Cairo, Newsreader, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import { OslerThemeProvider } from "@/components/osler/theme-provider";
+import { OslerThemeProvider, THEME_INIT_SCRIPT } from "@/components/osler/theme-provider";
 import { OslerI18nProvider } from "@/components/osler/i18n-provider";
 import { AnimationsProvider } from "@/components/osler/animations-provider";
 import { SerwistProvider } from "@/components/osler/serwist-provider";
@@ -185,6 +185,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-title" content={siteShortName} />
         <meta name="format-detection" content="telephone=no" />
         <script dangerouslySetInnerHTML={{ __html: LANG_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} ${playfair.variable} ${jetbrainsMono.variable} ${cairo.variable} antialiased bg-background text-foreground`}

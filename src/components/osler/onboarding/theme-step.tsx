@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, SunMoon } from "lucide-react";
 
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useOslerTheme } from "@/components/osler/theme-provider";
@@ -14,7 +14,7 @@ const VISIBLE_FAMILIES = 3;
 
 export function ThemeStep() {
   const { t } = useI18n();
-  const { theme, setThemeId, availableThemes } = useOslerTheme();
+  const { theme, setThemeId, setFollowSystem, followSystem, availableThemes } = useOslerTheme();
   const families = groupThemeFamilies(availableThemes, t("app.name"));
   const variantLabel = (variant: "dark" | "light") =>
     variant === "dark" ? t("settings.theme.darkVariant") : t("settings.theme.lightVariant");
@@ -77,7 +77,31 @@ export function ThemeStep() {
   return (
     <div>
       <h2 className="text-lg font-bold tracking-tight">{t("onboarding.theme.title")}</h2>
-      <p className="text-sm text-muted-foreground mt-1 mb-5">{t("onboarding.theme.subtitle")}</p>
+      <p className="text-sm text-muted-foreground mt-1 mb-4">{t("onboarding.theme.subtitle")}</p>
+      {/* Follow the OS — keeps the system default unless the user taps a theme */}
+      <button
+        type="button"
+        onClick={() => {
+          haptic("light");
+          setFollowSystem();
+        }}
+        aria-pressed={followSystem}
+        className={cn(
+          "w-full rounded-lg border p-2.5 mb-2 flex items-center gap-2.5 text-start transition-all",
+          followSystem
+            ? "border-primary ring-2 ring-primary/20"
+            : "border-border hover:border-primary/40",
+        )}
+      >
+        <span className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+          <SunMoon className="size-4" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-semibold">{t("settings.theme.followSystem")}</span>
+          <span className="block text-xs text-muted-foreground">{t("settings.theme.followSystemDesc")}</span>
+        </span>
+        {followSystem && <Check className="size-4 shrink-0 text-primary" />}
+      </button>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {visibleFamilies.map(renderFamily)}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Palette } from "lucide-react";
+import { Check, Palette, SunMoon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -109,7 +109,7 @@ export function ThemePreview({ themeScope, className }: { themeScope: string; cl
 
 export function ThemeSettingsSection() {
   const { t } = useI18n();
-  const { theme, setThemeId, availableThemes } = useOslerTheme();
+  const { theme, setThemeId, setFollowSystem, followSystem, isDark, availableThemes } = useOslerTheme();
 
   const themeFamilies = React.useMemo<ThemeFamily[]>(
     () => groupThemeFamilies(availableThemes, t("app.name")),
@@ -171,9 +171,34 @@ export function ThemeSettingsSection() {
         <p className="text-xs text-muted-foreground mb-5">
           {t("settings.theme.currentTheme")}:{" "}
           <span className="font-medium text-foreground">
-            {activeFamily && activeOption ? `${activeFamily.name} · ${variantLabel(activeOption.variant)}` : theme}
+            {followSystem
+              ? `${t("settings.theme.followSystem")} · ${variantLabel(isDark ? "dark" : "light")}`
+              : activeFamily && activeOption ? `${activeFamily.name} · ${variantLabel(activeOption.variant)}` : theme}
           </span>
         </p>
+
+        {/* Follow the OS color scheme — the default until a theme is picked */}
+        <button
+          type="button"
+          onClick={() => { haptic("light"); setFollowSystem(); }}
+          aria-pressed={followSystem}
+          aria-label={t("settings.theme.followSystem")}
+          className={cn(
+            "w-full rounded-xl border p-3 flex items-center gap-3 text-start transition-all mb-5",
+            followSystem
+              ? "border-primary ring-2 ring-primary/20 bg-card"
+              : "border-border bg-card hover:border-primary/40",
+          )}
+        >
+          <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+            <SunMoon className="size-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">{t("settings.theme.followSystem")}</div>
+            <div className="text-xs text-muted-foreground">{t("settings.theme.followSystemDesc")}</div>
+          </div>
+          {followSystem && <Check className="size-4 text-primary shrink-0" />}
+        </button>
 
         {/* Built-in themes */}
         <div className="space-y-3">

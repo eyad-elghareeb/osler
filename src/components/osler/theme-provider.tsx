@@ -12,15 +12,69 @@ import { withViewTransition } from "@/lib/osler/native";
 
 type Theme = "dark" | "light";
 
+/** localStorage key for the user's theme choice. Absent (or "system") means
+ *  "no explicit choice" — the app follows the OS color scheme. */
+export const THEME_STORAGE_KEY = "osler-theme";
+/** Stored choice value meaning "follow the OS color scheme". */
+export const SYSTEM_THEME_CHOICE = "system";
+
+/** Resolve the OS color scheme. Falls back to dark (the legacy default)
+ *  when matchMedia is unavailable (SSR, old browsers). */
+export function systemTheme(): Theme {
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    try {
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } catch {
+      // ignore — fall through to dark
+    }
+  }
+  return "dark";
+}
+
+function readStoredThemeChoice(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Blocking <head> script — runs before first paint so a returning visitor
+ * (or an OS-light user with no stored choice) never flashes the wrong
+ * theme. Mirrors the provider's resolution for the cases it can decide
+ * without the config: explicit dark/light, or follow-system. A stored
+ * custom theme id is left alone (server default) — the provider validates
+ * and applies it right after the config loads.
+ */
+export const THEME_INIT_SCRIPT = `
+(function(){try{
+var s=null;try{s=localStorage.getItem('${THEME_STORAGE_KEY}');}catch(e){}
+var h=document.documentElement;
+function sys(){try{return window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}catch(e){return 'dark';}}
+var t=null;
+if(s==='dark'||s==='light'){t=s;}
+else if(!s||s==='${SYSTEM_THEME_CHOICE}'){t=sys();}
+if(t){h.classList.remove('dark','light');h.classList.add(t);}
+}catch(e){}})();
+`.trim();
+
 interface OslerThemeContextValue {
-  /** Currently active theme id. May be a built-in ("dark"/"light") or a custom id. */
+  /** Currently applied theme id. May be a built-in ("dark"/"light") or a custom id. */
   theme: string;
-  /** Convenience: is the active theme a dark variant? */
+  /** The stored choice: a theme id, or "system" when following the OS. */
+  themeChoice: string;
+  /** True while no explicit theme is chosen (OS is driving). */
+  followSystem: boolean;
+  /** Convenience: is the applied theme a dark variant? */
   isDark: boolean;
   /** Switch to a built-in theme. */
   setTheme: (t: Theme) => void;
   /** Switch to any theme id (built-in or custom). */
   setThemeId: (id: string) => void;
+  /** Forget the explicit choice and follow the OS color scheme. */
+  setFollowSystem: () => void;
   /** Toggle between dark and light (the legacy behaviour). Custom themes are
    *  not toggled — use `setThemeId` from the theme switcher. */
   toggleTheme: () => void;
@@ -148,43 +202,92 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
 }
 
 export function OslerThemeProvider({ children }: { children: React.ReactNode }) {
-  // Default to "dark" until the config loads — this matches the legacy behaviour.
-  const [theme, setThemeState] = React.useState<string>("dark");
+  // Applied theme id. Lazy-init to match THEME_INIT_SCRIPT so first paint
+  // agrees with the pre-paint class (explicit dark/light, else the OS).
+  const [theme, setThemeState] = React.useState<string>(() => {
+    const stored = readStoredThemeChoice();
+    if (stored === "dark" || stored === "light") return stored;
+    if (stored && stored !== SYSTEM_THEME_CHOICE) return "dark";
+    return systemTheme();
+  });
+  // Stored choice: a theme id, or "system" while following the OS. Null
+  // until the config load resolves it (treated as following).
+  const [themeChoice, setThemeChoice] = React.useState<string>(() => readStoredThemeChoice() ?? SYSTEM_THEME_CHOICE);
   const [customThemes, setCustomThemes] = React.useState<CustomThemeConfig[]>([]);
+  // Mirror of customThemes for the matchMedia listener (avoids re-binding).
+  const customThemesRef = React.useRef<CustomThemeConfig[]>([]);
+  customThemesRef.current = customThemes;
 
   React.useEffect(() => {
     // 1. Read the user's persisted choice (if any).
-    const stored =
-      (typeof window !== "undefined" &&
-        (localStorage.getItem("osler-theme") as string | null)) ||
-      null;
+    const stored = readStoredThemeChoice();
     // 2. Load the config to discover the default theme + custom palettes.
     loadConfig().then((cfg) => {
       setCustomThemes(cfg.themes.custom);
+      customThemesRef.current = cfg.themes.custom;
       injectCustomThemeStyles(cfg.themes.custom);
+      // No explicit choice (first run, or "follow system" picked in
+      // settings) — the OS drives. The init script already applied it
+      // pre-paint; re-apply here in case it drifted before hydration.
+      if (!stored || stored === SYSTEM_THEME_CHOICE) {
+        setThemeChoice(SYSTEM_THEME_CHOICE);
+        const sys = systemTheme();
+        setThemeState(sys);
+        applyThemeClass(sys, cfg.themes.custom);
+        return;
+      }
       // Validate the stored theme id against the available themes. If the
       // user had previously selected a theme that was since removed from
       // the config (e.g. "navy-clinic" after the theme cleanup), fall
       // back to the configured default instead of leaving them on a
       // theme class with no matching CSS.
       const availableIds = new Set<string>(["dark", "light", ...cfg.themes.custom.map((t) => t.id)]);
-      const valid = stored && availableIds.has(stored);
+      const valid = availableIds.has(stored);
       const resolved = (valid ? stored : null) ?? cfg.themes.default ?? "dark";
       // If we fell back, persist the resolved id so we don't re-evaluate
       // the stale stored value on every mount.
-      if (stored && !valid && typeof window !== "undefined") {
-        localStorage.setItem("osler-theme", resolved);
+      if (!valid && typeof window !== "undefined") {
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, resolved);
+        } catch {
+          // ignore storage failures (private mode)
+        }
       }
+      setThemeChoice(resolved);
       setThemeState(resolved);
       applyThemeClass(resolved, cfg.themes.custom);
     });
   }, []);
 
+  // While following the OS, live-apply OS changes (Control Center /
+  // Settings toggles) without a reload.
+  React.useEffect(() => {
+    if (themeChoice !== SYSTEM_THEME_CHOICE || typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    let mq: MediaQueryList | null = null;
+    try {
+      mq = window.matchMedia("(prefers-color-scheme: light)");
+    } catch {
+      return;
+    }
+    const onChange = (e: MediaQueryListEvent) => {
+      const sys = e.matches ? "light" : "dark";
+      setThemeState(sys);
+      withViewTransition(() => applyThemeClass(sys, customThemesRef.current), "none");
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq?.removeEventListener("change", onChange);
+  }, [themeChoice]);
+
   const setThemeId = React.useCallback(
     (id: string) => {
+      setThemeChoice(id);
       setThemeState(id);
       if (typeof window !== "undefined") {
-        localStorage.setItem("osler-theme", id);
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, id);
+        } catch {
+          // ignore storage failures (private mode)
+        }
       }
       // Ease the dark↔light jump: browsers with the View Transitions API
       // crossfade the old and new snapshots (direction "none" = plain fade);
@@ -194,12 +297,33 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
     [customThemes],
   );
 
+  const setFollowSystem = React.useCallback(() => {
+    setThemeChoice(SYSTEM_THEME_CHOICE);
+    const sys = systemTheme();
+    setThemeState(sys);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, SYSTEM_THEME_CHOICE);
+      } catch {
+        // ignore storage failures (private mode)
+      }
+    }
+    withViewTransition(() => applyThemeClass(sys, customThemesRef.current), "none");
+  }, []);
+
   const setTheme = React.useCallback(
     (t: Theme) => setThemeId(t),
     [setThemeId],
   );
 
   const toggleTheme = React.useCallback(() => {
+    // While following the OS, toggling pins the opposite of the currently
+    // applied theme as an explicit choice.
+    if (themeChoice === SYSTEM_THEME_CHOICE) {
+      const isDarkNow = theme === "dark";
+      setThemeId(isDarkNow ? "light" : "dark");
+      return;
+    }
     const custom = customThemes.find((t) => t.id === theme);
     if (custom) {
       const oppositeVariant = custom.variant === "dark" ? "light" : "dark";
@@ -224,7 +348,7 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
     // Built-in theme or no custom counterpart: flip dark ↔ light.
     const isDark = custom ? custom.variant === "dark" : theme === "dark";
     setThemeId(isDark ? "light" : "dark");
-  }, [theme, customThemes, setThemeId]);
+  }, [theme, themeChoice, customThemes, setThemeId]);
 
   const isDark = React.useMemo(() => {
     const custom = customThemes.find((t) => t.id === theme);
@@ -242,9 +366,11 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
     [customThemes],
   );
 
+  const followSystem = themeChoice === SYSTEM_THEME_CHOICE;
+
   const value = React.useMemo<OslerThemeContextValue>(
-    () => ({ theme, isDark, setTheme, setThemeId, toggleTheme, availableThemes }),
-    [theme, isDark, setTheme, setThemeId, toggleTheme, availableThemes],
+    () => ({ theme, themeChoice, followSystem, isDark, setTheme, setThemeId, setFollowSystem, toggleTheme, availableThemes }),
+    [theme, themeChoice, followSystem, isDark, setTheme, setThemeId, setFollowSystem, toggleTheme, availableThemes],
   );
 
   return (
@@ -256,9 +382,12 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
 
 const DEFAULT_THEME_VALUE: OslerThemeContextValue = {
   theme: "dark",
+  themeChoice: SYSTEM_THEME_CHOICE,
+  followSystem: true,
   isDark: true,
   setTheme: () => {},
   setThemeId: () => {},
+  setFollowSystem: () => {},
   toggleTheme: () => {},
   availableThemes: [
     { id: "dark", name: "Dark", variant: "dark" },

@@ -1190,6 +1190,8 @@ export const ar = {
     "settings.theme.active": "الحالية",
     "settings.theme.darkVariant": "داكن",
     "settings.theme.lightVariant": "فاتح",
+    "settings.theme.followSystem": "اتباع النظام",
+    "settings.theme.followSystemDesc": "مطابقة إعداد الفاتح / الداكن في جهازك تلقائيًا.",
 
     "qbank.settings.alignmentHint": "تنطبق المحاذاة فقط في الوضع المتصل. في الوضع المقسوم (صفحتان) يكون عمود السؤال دائمًا محاذيًا لليسار.",
 
