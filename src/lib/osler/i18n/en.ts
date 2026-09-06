@@ -112,6 +112,7 @@ export const en = {
     "login.resetSent": "If this email has an account, a reset link is on its way.",
     "login.sendVerify": "Send verification email",
     "login.verifySent": "If your email needs verification, a link is on its way.",
+    "login.checkSpam": "Can't find it? Check your spam or junk folder — automated emails often land there.",
     "login.verifyChecking": "Verifying your email…",
     "login.verifyConfirmed": "Email confirmed. You can now sign in.",
     "login.verifyFailed": "This verification link is invalid or has expired.",

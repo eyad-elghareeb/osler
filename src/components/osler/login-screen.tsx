@@ -580,6 +580,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
           {resetSent && <p className="text-xs text-success">{t("login.resetSent")}</p>}
           {verifySent && <p className="text-xs text-success">{t("login.verifySent")}</p>}
+          {(resetSent || verifySent) && <p className="text-xs text-muted-foreground">{t("login.checkSpam")}</p>}
           {verifyState !== "idle" && (
             <div className={cn("flex items-start gap-1.5 text-xs", verifyState === "success" ? "text-success" : "text-destructive")}>
               {verifyState === "verifying" ? (
