@@ -287,10 +287,22 @@ export async function loginCloudAccount(input: {
   return session;
 }
 
-export function startGoogleLogin(): void {
+export function startGoogleLogin(returnTo?: string): void {
   if (typeof window === "undefined") return;
   const config = getConfig();
-  const returnUrl = `${window.location.origin}/login`;
+  // Same-origin absolute URLs only — the Worker also pins returnTo to
+  // ALLOWED_ORIGIN, so a foreign URL could never complete anyway. Lets the
+  // admin panel round-trip back after Google sign-in (/login?next=/admin/…).
+  let dest = `${window.location.origin}/login`;
+  if (returnTo) {
+    try {
+      const u = new URL(returnTo);
+      if (u.origin === window.location.origin) dest = `${u.origin}${u.pathname}${u.search}`;
+    } catch {
+      /* keep default */
+    }
+  }
+  const returnUrl = dest;
   // Cross-origin hop to the Worker (which 302s to Google) — router.push can't leave the app origin.
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign(`${config.cloud.apiUrl.replace(/\/$/, "")}/v1/auth/google/start?returnTo=${encodeURIComponent(returnUrl)}`);

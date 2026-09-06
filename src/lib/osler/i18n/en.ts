@@ -99,7 +99,7 @@ export const en = {
     "login.identifierPlaceholder": "Username or email address",
     "login.email": "Email address",
     "login.emailPlaceholder": "you@example.com",
-    "login.emailOptional": "Optional, but required for password recovery.",
+    "login.emailOptional": "Optional, but required for password recovery. We'll send a verification link.",
     "login.displayName": "Display name",
     "login.displayNamePlaceholder": "Your name",
     "login.passwordSecurePlaceholder": "At least 8 characters",
@@ -1717,13 +1717,6 @@ export const en = {
     "admin.access.deniedDesc": "Your account does not have admin privileges.",
     "admin.access.protected": "Protected by Cloudflare Access",
     "admin.access.protectedDesc": "This panel is accessible only through the production URL protected by Cloudflare Zero Trust.",
-
-    "admin.login.title": "Admin Sign In",
-    "admin.login.subtitle": "Sign in with your Osler admin account.",
-    "admin.login.identifier": "Username or email",
-    "admin.login.password": "Password",
-    "admin.login.submit": "Sign in",
-    "admin.login.error": "Invalid credentials or insufficient role.",
 
     "admin.nav.dashboard": "Dashboard",
     "admin.nav.users": "Users",

@@ -100,7 +100,7 @@ export const ar = {
     "login.identifierPlaceholder": "اسم المستخدم أو البريد الإلكتروني",
     "login.email": "البريد الإلكتروني",
     "login.emailPlaceholder": "you@example.com",
-    "login.emailOptional": "اختياري، لكنه مطلوب لاستعادة كلمة المرور.",
+    "login.emailOptional": "اختياري، لكنه مطلوب لاستعادة كلمة المرور. سنرسل رابط تحقق.",
     "login.displayName": "الاسم الظاهر",
     "login.displayNamePlaceholder": "اسمك",
     "login.passwordSecurePlaceholder": "8 أحرف على الأقل",
@@ -1712,13 +1712,6 @@ export const ar = {
     "admin.access.deniedDesc": "حسابك لا يمتلك صلاحيات إدارية.",
     "admin.access.protected": "محمي بواسطة Cloudflare Access",
     "admin.access.protectedDesc": "هذه اللوحة متاحة فقط من خلال الرابط الإنتاجي المحمي بـ Cloudflare Zero Trust.",
-
-    "admin.login.title": "تسجيل دخول المشرفين",
-    "admin.login.subtitle": "سجّل الدخول بحسابك الإداري في أوسلر.",
-    "admin.login.identifier": "اسم المستخدم أو البريد الإلكتروني",
-    "admin.login.password": "كلمة المرور",
-    "admin.login.submit": "دخول",
-    "admin.login.error": "بيانات اعتماد غير صحيحة أو صلاحيات غير كافية.",
 
     "admin.nav.dashboard": "لوحة التحكم",
     "admin.nav.users": "المستخدمون",

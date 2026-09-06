@@ -40,7 +40,7 @@ import { readCloudSession, clearCloudSession } from "@/lib/osler/cloud";
 import { haptic, pushWithViewTransition, isViewTransitionsSupported } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
-import { AdminLoginPrompt } from "@/components/osler/admin/admin-login-prompt";
+import { LoginScreen } from "@/components/osler/login-screen";
 import { AdminProvider } from "@/components/osler/admin/admin-context";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import {
@@ -95,51 +95,73 @@ function AdminShellInner({ children }: AdminShellProps) {
     setVtActive(isViewTransitionsSupported());
   }, []);
 
+  // Load (or reload) the admin identity from the saved cloud session. Sets
+  // the identity whenever /v1/admin/me succeeds — even for roles without
+  // access, so those users reach the access-denied screen (with sign-out)
+  // instead of looping on the login form.
+  const refreshIdentity = React.useCallback(async () => {
+    const session = readCloudSession();
+    if (!session) {
+      setIdentity(null);
+      return;
+    }
+    try {
+      setIdentity(await adminApi.me());
+    } catch (err) {
+      // Dev preview fallback when the cloud API is completely unreachable
+      // (network error, server not started, etc.) — not for auth failures.
+      if (process.env.NODE_ENV !== "production" && err instanceof TypeError) {
+        setIdentity({
+          user: {
+            id: "dev-admin",
+            username: "admin",
+            displayName: "Admin",
+            role: "admin",
+            email: "admin@local.test",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          capabilities: {
+            manageUsers: true,
+            manageContent: true,
+            approveContent: true,
+            publishDirect: true,
+            viewStats: true,
+            viewAudit: true,
+            manageSessions: true,
+          },
+        });
+      } else {
+        setIdentity(null);
+      }
+    }
+  }, []);
+
   // Try to restore session on mount.
   // In dev mode (NODE_ENV !== production), if no cloud session and no cloud
   // backend is configured, we fall back to a mock admin identity so the
   // revamped admin UI can be previewed without a Cloudflare Workers backend.
   React.useEffect(() => {
-    const session = readCloudSession();
-    if (!session) {
-      setLoading(false);
-      return;
-    }
-    adminApi
-      .me()
-      .then((id) => {
-        if (id.capabilities.manageContent) setIdentity(id);
-      })
-      .catch((err) => {
-        // Dev preview fallback when the cloud API is completely unreachable
-        // (network error, server not started, etc.) — not for auth failures.
-        if (process.env.NODE_ENV !== "production" && err instanceof TypeError) {
-          setIdentity({
-            user: {
-              id: "dev-admin",
-              username: "admin",
-              displayName: "Admin",
-              role: "admin",
-              email: "admin@local.test",
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            },
-            capabilities: {
-              manageUsers: true,
-              manageContent: true,
-              approveContent: true,
-              publishDirect: true,
-              viewStats: true,
-              viewAudit: true,
-              manageSessions: true,
-            },
-          });
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
+    let cancelled = false;
+    void refreshIdentity().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshIdentity]);
+
+  // The full site login page (password + Turnstile + Google + forgot/reset)
+  // with guest entry hidden — guests have no role to check. Google
+  // round-trips through /login?next=<this admin page> and lands back here.
+  const handleAdminLogin = React.useCallback(() => {
+    void refreshIdentity();
+  }, [refreshIdentity]);
+
+  const googleReturnTo =
+    typeof window === "undefined"
+      ? undefined
+      : `${window.location.origin}/login?next=${encodeURIComponent(pathname ?? "/admin")}`;
 
   // Fetch pending count for admin badge.
   React.useEffect(() => {
@@ -193,34 +215,12 @@ function AdminShellInner({ children }: AdminShellProps) {
     );
   }
 
-  // ── Render: not logged in
+  // ── Render: not logged in — the full site login page (password +
+  // Turnstile + Google + forgot/reset), so admin sign-in never drifts from
+  // the main auth flow again.
   if (!identity) {
-    if (isAuthorizeRoute) {
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 safe-pt safe-pb">
-          <div className="w-full max-w-md">
-            <AdminLoginPrompt onSuccess={setIdentity} />
-          </div>
-        </div>
-      );
-    }
     return (
-      <div className="flex h-screen flex-col bg-background">
-        <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/80 backdrop-blur-md px-4 safe-pt">
-          <div className="flex items-center gap-2.5">
-            <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
-              <Activity className="size-4 text-primary" />
-            </div>
-            <div className="leading-tight">
-              <div className="text-sm font-semibold">{t("app.name")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("admin.shell.brandAdmin")} · {t("admin.shell.tagline")}
-              </div>
-            </div>
-          </div>
-        </header>
-        <AdminLoginPrompt onSuccess={setIdentity} />
-      </div>
+      <LoginScreen hideGuest googleReturnTo={googleReturnTo} onLogin={handleAdminLogin} />
     );
   }
 

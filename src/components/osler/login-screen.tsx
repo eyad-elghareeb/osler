@@ -66,9 +66,13 @@ interface LoginScreenProps {
   onLogin: (username: string) => void;
   /** When set, show the corresponding error banner (e.g. Google OAuth failure). */
   cloudAuthError?: "google" | "email_claimed";
+  /** Hide the guest entry (used by the admin panel — guests have no role). */
+  hideGuest?: boolean;
+  /** Same-origin absolute URL Google returns to (lets /admin round-trip). */
+  googleReturnTo?: string;
 }
 
-export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
+export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo }: LoginScreenProps) {
   const { t, rtl } = useI18n();
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -610,7 +614,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
               size="lg"
               onClick={() => {
                 haptic("selection");
-                startGoogleLogin();
+                startGoogleLogin(googleReturnTo);
               }}
               className="w-full gap-2 text-[13px] font-medium"
             >
@@ -657,6 +661,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             </div>
           )}
 
+          {!hideGuest && (
           <Button
             type="button"
             variant="link"
@@ -670,9 +675,11 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
           >
             {t("login.guest")}
           </Button>
+          )}
         </form>
 
         {/* Guest display-name dialog */}
+        {!hideGuest && (
         <Dialog open={guestDialogOpen} onOpenChange={setGuestDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -724,6 +731,7 @@ export function LoginScreen({ onLogin, cloudAuthError }: LoginScreenProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        )}
 
         <p className="text-center text-[11px] text-muted-foreground mt-6">
           {t("login.footer")}
