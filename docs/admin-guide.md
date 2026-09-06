@@ -445,7 +445,7 @@ The user is not notified by email - that's a deliberate choice (we don't want to
 
 ### Email verification (manual flip)
 
-The user's detail view shows an **Email verified** badge next to the profile fields, with a *Mark verified / Mark unverified* button. This exists for instances **without** a transactional email provider: an unverified email blocks Google sign-in from linking onto the password account ("This email is already linked to a password account that has not been verified"), and without email delivery there is no self-serve verification path.
+The user's detail view shows an **Email verified** badge next to the profile fields, with a *Mark verified / Mark unverified* button. This exists for instances **without** a transactional email provider: an unverified email blocks password sign-in (a fresh link can't go out, so there is no self-serve path) and blocks Google sign-in from linking onto the password account ("This email is already linked to a password account that has not been verified"). Note that *Mark unverified* now locks the user out of password sign-in until they verify — use it deliberately.
 
 When you mark an address verified:
 

@@ -46,7 +46,7 @@ export interface CloudSession {
 }
 
 export class CloudApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
   }
 }
@@ -93,8 +93,8 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
       ...init.headers,
     },
   });
-  const bodyJson = await response.json().catch(() => ({})) as T & { error?: string };
-  if (!response.ok) throw new CloudApiError(response.status, bodyJson.error || "Cloud request failed");
+  const bodyJson = await response.json().catch(() => ({})) as T & { error?: string; code?: string };
+  if (!response.ok) throw new CloudApiError(response.status, bodyJson.error || "Cloud request failed", bodyJson.code);
   return bodyJson;
 }
 

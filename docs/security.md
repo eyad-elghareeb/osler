@@ -469,7 +469,7 @@ These are conscious trade-offs or items on the roadmap:
 
 - **No IP-based geo-blocking**: Workers don't expose geo data without a paid plan. Use Cloudflare's IP Access Rules in the dashboard if you need to block specific regions.
 - **No 2FA / TOTP**: The admin role relies on a single password. To add a second factor, put the admin panel behind Cloudflare Access (which supports TOTP, WebAuthn, etc.).
-- **No email verification on signup**: Email is optional and not verified. To require verification, you'd need to add an email-verification flow using Resend (not currently implemented).
+- **Email verification gate**: password sign-in is blocked until the email address is verified (a fresh link goes out with the rejection and on registration). This keeps mass-registered bot accounts inert. Username-only accounts have nothing to verify and are unaffected; Google-provisioned accounts are stamped at link time. Unverified addresses also still block Google sign-in linking (anti-account-jacking guard).
 - **No per-content ACLs**: All `content_admin` users see all published content. For per-content ACLs, you'd need to extend the schema with a `content_acl` table.
 - **In-memory rate limiting**: Best-effort, not durable across isolate restarts. Front with Cloudflare Rate Limiting Rules for hard guarantees.
 - **No field-level encryption**: D1 columns are stored in plaintext (except password hashes). For sensitive data (e.g., student PII beyond email), encrypt at the application layer.

@@ -6,6 +6,7 @@ import {
   Activity,
   ArrowRight,
   Loader2,
+  MailWarning,
   ShieldCheck,
   ShieldAlert,
   Eye,
@@ -86,6 +87,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
   const [displayName, setDisplayName] = React.useState("");
   const [cloudBusy, setCloudBusy] = React.useState(false);
   const [cloudError, setCloudError] = React.useState("");
+  const [unverified, setUnverified] = React.useState(false);
   const [resetSent, setResetSent] = React.useState(false);
   const [resetToken, setResetToken] = React.useState("");
   const [verifyState, setVerifyState] = React.useState<"idle" | "verifying" | "success" | "error">("idle");
@@ -309,6 +311,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
     if (cloudActive) {
       setCloudBusy(true);
       setCloudError("");
+      setUnverified(false);
       try {
         if (cloudMode === "register") {
           if (password !== passwordConfirm) {
@@ -352,8 +355,16 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
         onLogin(session.user.displayName);
         return;
       } catch (error) {
-        setCloudError(error instanceof CloudApiError ? error.message : t("login.cloud.error"));
-        haptic("error");
+        if (error instanceof CloudApiError && error.code === "email_unverified") {
+          // Correct password, unverified address: the server already sent a
+          // fresh link — point at the inbox and the manual resend form.
+          setCloudError("");
+          setUnverified(true);
+          haptic("warning");
+        } else {
+          setCloudError(error instanceof CloudApiError ? error.message : t("login.cloud.error"));
+          haptic("error");
+        }
       } finally {
         setCloudBusy(false);
         // The Turnstile token for this attempt was consumed by the request
@@ -582,6 +593,29 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
 
 
           {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
+          {unverified && cloudMode === "login" && (
+            <div className="flex items-start gap-1.5 text-xs text-warning">
+              <MailWarning className="size-3.5 shrink-0 mt-0.5" />
+              <span>
+                {t("login.unverified")}{" "}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => {
+                    haptic("selection");
+                    if (username.includes("@")) setEmail(username);
+                    setCloudMode("verify");
+                    setUnverified(false);
+                    setCloudError("");
+                  }}
+                >
+                  {t("login.unverifiedResend")}
+                </Button>
+              </span>
+            </div>
+          )}
           {resetSent && <p className="text-xs text-success">{t("login.resetSent")}</p>}
           {verifySent && <p className="text-xs text-success">{t("login.verifySent")}</p>}
           {(resetSent || verifySent) && <p className="text-xs text-muted-foreground">{t("login.checkSpam")}</p>}
@@ -642,20 +676,20 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
 
           {cloudActive && (
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs">
-              <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode(cloudMode === "register" ? "login" : "register"); setCloudError(""); }}>
+              <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode(cloudMode === "register" ? "login" : "register"); setCloudError(""); setUnverified(false); }}>
                 {cloudMode === "register" ? t("login.haveAccount") : t("login.createAccount")}
               </Button>
               {cloudMode === "login" && emailEnabled && (
                 <>
-                  <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("reset"); setCloudError(""); setVerifyState("idle"); setVerifySent(false); }}>
+                  <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("reset"); setCloudError(""); setUnverified(false); setVerifyState("idle"); setVerifySent(false); }}>
                     {t("login.forgotPassword")}
                   </Button>
-                  <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("verify"); setCloudError(""); setVerifyState("idle"); setVerifySent(false); }}>
+                  <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("verify"); setCloudError(""); setUnverified(false); setVerifyState("idle"); setVerifySent(false); }}>
                     {t("login.resendVerification")}
                   </Button>
                 </>
               )}
-              {(cloudMode === "reset" || cloudMode === "verify") && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("login"); setResetToken(""); setVerifyState("idle"); }}>
+              {(cloudMode === "reset" || cloudMode === "verify") && <Button type="button" variant="link" size="sm" onClick={() => { setCloudMode("login"); setResetToken(""); setUnverified(false); setVerifyState("idle"); }}>
                 {t("login.backToSignIn")}
               </Button>}
             </div>
