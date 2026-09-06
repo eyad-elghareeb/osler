@@ -99,6 +99,12 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
   }
 
   const { metrics, caps, resetAt, d1Tables, safetyThrottles } = data;
+  // Physical database table: core first, then the sync pool (numeric order),
+  // then telemetry. Only present when the token carries D1 Read.
+  const d1Databases = [...(data.d1Databases ?? [])].sort((a, b) => {
+    const order = (role: string) => (role === "core" ? 0 : role === "sync" ? 1 : role === "telemetry" ? 2 : 3);
+    return order(a.role) - order(b.role) || a.name.localeCompare(b.name, undefined, { numeric: true });
+  });
   // Older Workers omit `connected`/`sources` — treat everything as estimated.
   const connected = data.connected === true;
   const cpuLive = data.sources?.workerCpuTime === "live";
@@ -362,6 +368,53 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
               </tbody>
             </table>
           </div>
+          {d1Databases.length > 0 ? (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("admin.analytics.cf.d1Databases")}
+                </h4>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {t("admin.analytics.cf.d1StorageDesc")}
+                </span>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                  <tr>
+                    <th className="py-1.5 px-3 text-left font-medium">{t("admin.analytics.cf.col.database")}</th>
+                    <th className="py-1.5 px-3 text-left font-medium">{t("admin.analytics.cf.col.role")}</th>
+                    <th className="py-1.5 px-3 text-right font-medium">{t("admin.analytics.cf.col.size")}</th>
+                    <th className="py-1.5 px-3 text-right font-medium w-[32%]">{t("admin.analytics.cf.col.usage")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {d1Databases.map((db) => {
+                    const limit = data.d1DatabaseLimitBytes ?? 500 * 1024 * 1024;
+                    const share = db.bytes / limit;
+                    const pct = Math.min(100, Math.round(share * 1000) / 10);
+                    return (
+                      <tr key={db.name} className="hover:bg-muted/30">
+                        <td className="py-1.5 px-3 font-mono text-[11px] text-foreground">{db.name}</td>
+                        <td className="py-1.5 px-3 font-mono text-[11px] text-muted-foreground">{db.role}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums text-muted-foreground">{formatBytes(db.bytes)}</td>
+                        <td className="py-1.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${share >= 1 ? "bg-destructive" : share >= 0.85 ? "bg-warning" : "bg-primary"}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[11px] tabular-nums text-muted-foreground w-10 text-end">{pct}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
 
         {/* Safety Defenses & Throttles */}

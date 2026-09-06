@@ -36,7 +36,8 @@
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-import { SYNC_KINDS, RETIRED_SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes } from "./sync-docs";
+import { SYNC_KINDS, RETIRED_SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes, MAX_DOCUMENT_BYTES, MAX_STORED_PAYLOAD_BYTES } from "./sync-docs";
+import { SEGMENTED_KINDS, splitSegmentKind, baseKindOfRow, packKindSegments } from "./sync-orchestrator";
 import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
@@ -54,14 +55,9 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // stolen token that expires must not remain a live credential for weeks.
 const SESSION_REFRESH_GRACE_MS = 48 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
-// Hard ceiling for a single merged sync document's raw JSON. D1 caps each
-// string/BLOB/row at 2MB, so a doc can never exceed that. Payload is stored
-// gzip-compressed (~5-8x smaller for progress data), so a 2MB raw doc only
-// occupies ~300-500KB on disk.
-const MAX_DOCUMENT_BYTES = 2_000_000;
-// Stored payload (base64 gzip) budget for a single doc — leaves headroom under
-// D1's 2MB row limit for the other columns (user_id, kind, timestamps).
-const MAX_STORED_PAYLOAD_BYTES = 1_800_000;
+// MAX_DOCUMENT_BYTES / MAX_STORED_PAYLOAD_BYTES live in ./sync-docs (shared
+// with the segment orchestrator): a segmented kind spreads its merged doc
+// across multiple rows, each packing to 85% of the raw ceiling.
 // Per-user total raw storage budget across all sync kinds (15MB). The kinds
 // each capped at 2MB sum to more than that, so 15MB is the budget the UI
 // advertises and the per-kind caps are the practical ceiling.
@@ -366,6 +362,16 @@ const SHARD_SCHEMA_SQL: Record<"sync" | "telemetry", string[]> = {
   day  TEXT NOT NULL,
   n    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (name, day)
+)`,
+    // Permanent daily rollup of the raw event stream: the cron recomputes the
+    // last two days into it hourly, and analytics_events rows older than 30
+    // days are pruned — the rollup is what keeps all-time aggregate
+    // statistics alive after the raw rows are gone.
+    `CREATE TABLE IF NOT EXISTS analytics_daily (
+  day        TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  events     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, event_type)
 )`,
   ],
 };
@@ -939,7 +945,28 @@ type SyncUser = Pick<UserRow, "id" | "sync_shard">;
 async function getDocument(env: Env, user: SyncUser, kind: string): Promise<{ records: Record<string, any>; updatedAt: number }> {
   const shard = userSyncShard(user);
   await ensureShardSchema(env, "sync", shard);
-  const row = await syncDb(env, shard).prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(user.id, kind).first<{ payload: string; compressed: number; updated_at: number }>();
+  const db = syncDb(env, shard);
+  if (SEGMENTED_KINDS.has(kind)) {
+    // Orchestrator read path: assemble every segment row of the kind (plus
+    // any pre-segmentation plain row) — records are disjoint across segments,
+    // so assembly is a concat and updatedAt is the newest segment. A corrupt
+    // segment is skipped rather than voiding the user's whole kind.
+    const rows = await db.prepare("SELECT kind, payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND (kind = ? OR kind LIKE ?)").bind(user.id, kind, `${kind}${":"}%`).all<{ kind: string; payload: string; compressed: number; updated_at: number }>();
+    const parts = (rows.results || [])
+      .map((row) => ({ row, seg: splitSegmentKind(row.kind)?.index ?? 0 }))
+      .sort((a, b) => a.seg - b.seg);
+    let records: Record<string, any> = {};
+    let updatedAt = 0;
+    for (const { row } of parts) {
+      try {
+        const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
+        Object.assign(records, JSON.parse(json));
+      } catch { /* skip corrupt segment — contained data loss, not a 500 */ }
+      updatedAt = Math.max(updatedAt, Number(row.updated_at) || 0);
+    }
+    return { records, updatedAt };
+  }
+  const row = await db.prepare("SELECT payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND kind = ?").bind(user.id, kind).first<{ payload: string; compressed: number; updated_at: number }>();
   if (!row || !row.payload) return { records: {}, updatedAt: 0 };
   try {
     const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
@@ -971,10 +998,12 @@ async function getSyncHead(env: Env, user: SyncUser): Promise<{ timestamps: Reco
   for (const k of SYNC_KINDS) timestamps[k] = 0;
   let usedBytes = 0;
   for (const row of rows.results || []) {
-    if (row.kind && typeof row.updated_at === "number") {
-      timestamps[row.kind] = row.updated_at;
-    }
     usedBytes += Number(row.raw_bytes || 0);
+    // Segment rows fold into their logical kind (its timestamp is the newest
+    // segment), so clients see the same per-kind view as before.
+    if (typeof row.updated_at !== "number") continue;
+    const base = baseKindOfRow(row.kind ?? "");
+    timestamps[base] = Math.max(timestamps[base] ?? 0, row.updated_at);
   }
   return { timestamps, usedBytes };
 }
@@ -1242,11 +1271,19 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
     // D1 batch cannot span two databases.
     await ensureShardSchema(env, "telemetry");
     await telemetryDb(env).batch([
+      // Permanent aggregate: recompute the last two days into analytics_daily
+      // BEFORE the raw-event prune, so all-time statistics survive the 30-day
+      // retention window (a missed cron run self-heals on the next one).
+      telemetryDb(env).prepare(`INSERT INTO analytics_daily (day, event_type, events)
+        SELECT strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') AS day, event_type, COUNT(*) AS events
+        FROM analytics_events WHERE created_at >= ? GROUP BY day, event_type
+        ON CONFLICT(day, event_type) DO UPDATE SET events = excluded.events`).bind(now() - 2 * 86_400_000),
       telemetryDb(env).prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
       // Daily write-cap counters: keep ~90 days for trend debugging, then drop.
       telemetryDb(env).prepare("DELETE FROM daily_counters WHERE day < ?").bind(utcDateString(now() - 90 * 24 * 60 * 60 * 1000)),
       // Choice-stats respondent rows: only needed to dedup contributors;
-      // past this window a contributor may legitimately count again.
+      // past this window a contributor may legitimately count again. The
+      // choice AGGREGATES in question_choice_stats are never pruned.
       telemetryDb(env).prepare("DELETE FROM question_choice_respondents WHERE created_at < ?").bind(now() - QBANK_STATS_RESPONDENT_RETENTION_MS),
     ]);
     log.info("cleanupStale completed");
@@ -2726,7 +2763,10 @@ async function contentAnalytics(env: Env, url: URL): Promise<unknown> {
   await Promise.all(syncPool.map((_db, i) => ensureShardSchema(env, "sync", i + 1)));
   const [userRows, docRows] = await Promise.all([
     env.DB.prepare("SELECT id, username, display_name FROM users").all<{ id: string; username: string | null; display_name: string | null }>(),
-    Promise.all(syncPool.map((db) => db.prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind IN ('qbank','flashcards')").all<{ user_id: string; kind: string; payload: string; compressed: number }>()))
+    // Segmented kinds store their records across "qbank:N" rows — records
+    // are disjoint across segments, so scanning every segment row covers the
+    // whole logical kind.
+    Promise.all(syncPool.map((db) => db.prepare("SELECT user_id, kind, payload, compressed FROM progress_documents WHERE kind = 'flashcards' OR kind = 'qbank' OR kind LIKE 'qbank:%'").all<{ user_id: string; kind: string; payload: string; compressed: number }>()))
       .then((parts) => ({ results: parts.flatMap((part) => part.results || []) })),
   ]);
 
@@ -2980,9 +3020,19 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
          SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors_24h
        FROM analytics_events WHERE created_at >= ?`
     ).bind(since24h).first<any>();
+    // All-time aggregate: analytics_daily keeps every rolled-up day forever
+    // (raw events prune at 30 days; the cron rolls up before pruning), and
+    // today's raw events are counted live on top — no overlap, no double count.
+    const todayIso = utcDateString(now());
+    const [rollupRow, todayCountRow] = await Promise.all([
+      telemetryDb(env).prepare("SELECT COALESCE(SUM(events), 0) AS n FROM analytics_daily WHERE day < ?").bind(todayIso).first<{ n: number }>().catch(() => ({ n: 0 })),
+      telemetryDb(env).prepare("SELECT COUNT(*) AS n FROM analytics_events WHERE created_at >= ?").bind(Date.parse(todayIso)).first<{ n: number }>().catch(() => ({ n: 0 })),
+    ]);
+    const allTimeEvents = (Number(rollupRow?.n) || 0) + (Number(todayCountRow?.n) || 0);
     return json({
       range: analyticsRangeLabel(url),
       totalEvents:          row?.total_events ?? 0,
+      allTimeEvents,
       totalSessions:        row?.total_sessions ?? 0,
       pageViews:            row?.page_views ?? 0,
       jsErrors:             row?.js_errors ?? 0,
@@ -3208,16 +3258,16 @@ interface CfLiveUsage {
   r2ClassAOpsMonth: number | null;
   r2ClassBOpsMonth: number | null;
   r2Bytes: number | null;
-  /** Summed file_size of every D1 database on the account (REST
-   *  /d1/database list — needs the token to also carry D1 Read). Null when
-   *  the query failed or the token lacks the permission. */
-  d1FileBytesTotal: number | null;
+  /** Real per-database file sizes (REST /d1/database list — needs the token
+   *  to also carry D1 Read). Null when the query failed or the token lacks
+   *  the permission. */
+  d1Databases: D1DbUsage[] | null;
 }
 
 const CF_LIVE_NONE: CfLiveUsage = {
   connected: false, at: null, workersRequestsToday: null, cpuP50Ms: null,
   r2ClassAOpsMonth: null, r2ClassBOpsMonth: null, r2Bytes: null,
-  d1FileBytesTotal: null,
+  d1Databases: null,
 };
 let cfLiveCache: { at: number; data: CfLiveUsage } | null = null;
 
@@ -3243,11 +3293,21 @@ async function cfGraphql(token: string, query: string, variables: Record<string,
   }
 }
 
-/** Sum the file_size of every D1 database on the account via the REST API —
- *  the same real numbers `wrangler d1 list` shows and the quantity the
- *  free-tier per-database storage ceiling bills. Account-level (every
- *  database, bound or not); null when the token lacks D1 Read. */
-async function cfD1FileBytes(token: string, account: string): Promise<number | null> {
+/** Per-database usage as the quota panel displays it. */
+interface D1DbUsage { name: string; role: string; bytes: number }
+
+/** Role of a D1 database from its name (this instance's naming scheme:
+ *  osler-cloud core, osler-sync-N pool shards, osler-telemetry). */
+function d1DbRole(name: string): string {
+  if (/-sync-\d+$/.test(name)) return "sync";
+  if (/telemetry/.test(name)) return "telemetry";
+  return "core";
+}
+
+/** Real per-database sizes via the REST API — the same file_size numbers
+ *  `wrangler d1 list` shows and the quantity the free-tier per-database
+ *  storage ceiling bills. Null when the token lacks D1 Read. */
+async function cfD1Databases(token: string, account: string): Promise<D1DbUsage[] | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), CF_GRAPHQL_TIMEOUT_MS);
   try {
@@ -3258,15 +3318,16 @@ async function cfD1FileBytes(token: string, account: string): Promise<number | n
       signal: ctrl.signal,
     });
     if (!res.ok) return null;
-    const body = await res.json() as { success?: boolean; result?: Array<{ file_size?: unknown }> };
+    const body = await res.json() as { success?: boolean; result?: Array<{ name?: unknown; file_size?: unknown }> };
     if (!body?.success || !Array.isArray(body.result)) return null;
-    // `seen` guards against a shape change reporting a silent 0 bytes.
-    let bytes = 0, seen = false;
+    const databases: D1DbUsage[] = [];
     for (const db of body.result) {
       const size = Number(db?.file_size);
-      if (Number.isFinite(size) && size >= 0) { bytes += size; seen = true; }
+      if (typeof db?.name === "string" && Number.isFinite(size) && size >= 0) {
+        databases.push({ name: db.name, role: d1DbRole(db.name), bytes: size });
+      }
     }
-    return seen ? bytes : null;
+    return databases.length ? databases : null;
   } catch {
     return null;
   } finally {
@@ -3297,7 +3358,7 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
   if (cfLiveCache && t - cfLiveCache.at < CF_LIVE_TTL_MS) return cfLiveCache.data;
   const bucket = (env.CF_R2_BUCKET ?? "").trim() || "osler-content";
   const weekAgoIso = new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const [inv, cpu, ops, stor, d1Bytes] = await Promise.all([
+  const [inv, cpu, ops, stor, d1Dbs] = await Promise.all([
     cfGraphql(token,
       `query W($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
       { a: account, s: dayStartIso, e: nowIso }),
@@ -3310,7 +3371,7 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
     cfGraphql(token,
       `query S($a: string!, $w: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:100,filter:{datetime_geq:$w,datetime_leq:$e,bucketName:$b}){max{payloadSize}}}}}`,
       { a: account, w: weekAgoIso, e: nowIso, b: bucket }),
-    cfD1FileBytes(token, account),
+    cfD1Databases(token, account),
   ]);
   const out: CfLiveUsage = { ...CF_LIVE_NONE };
   try {
@@ -3355,7 +3416,7 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
   } catch { /* estimated fallback */ }
   // D1 storage is a REST fetch, not GraphQL — the helper never throws, so a
   // plain null check degrades the section like every other live query.
-  if (d1Bytes !== null) { out.d1FileBytesTotal = Math.round(d1Bytes); out.connected = true; }
+  if (d1Dbs !== null) { out.d1Databases = d1Dbs; out.connected = true; }
   out.at = t;
   cfLiveCache = { at: t, data: out };
   return out;
@@ -3442,11 +3503,14 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
     // chain: GraphQL gauge → list() sum → size estimate.
     const live = await fetchCfLiveUsage(env, new Date(startOfToday).toISOString(), new Date(startOfMonth).toISOString(), new Date(t).toISOString());
     const listedR2Bytes = live.r2Bytes !== null ? null : await r2BucketBytes(env);
-    // Real D1 storage from the REST API (account-wide file_size sum). Falls
-    // back to the per-table estimates when no token is configured or it
-    // lacks the D1 Read permission — the same per-section degradation as
-    // every other live query.
-    const measuredD1Bytes = live.d1FileBytesTotal;
+    // Real D1 storage from the REST API: per-database file sizes for the
+    // panel's database table, summed for the storage gauge. Falls back to
+    // the per-table estimates when no token is configured or it lacks the
+    // D1 Read permission — the same per-section degradation as every other
+    // live query.
+    const measuredD1Bytes = live.d1Databases
+      ? live.d1Databases.reduce((sum, db) => sum + db.bytes, 0)
+      : null;
 
     // Estimate total D1 writes today across all features: the two measured
     // telemetry counters, audit/session activity, plus 15% headroom for
@@ -3636,7 +3700,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
         workerRequests: live.workersRequestsToday !== null ? "live" : "estimated",
         d1Writes: "estimated",
         d1Reads: "estimated",
-        d1Storage: live.d1FileBytesTotal !== null ? "live" : "estimated",
+        d1Storage: live.d1Databases !== null ? "live" : "estimated",
         r2Storage: live.r2Bytes !== null || listedR2Bytes !== null ? "live" : "estimated",
         r2ClassAOps: live.r2ClassAOpsMonth !== null ? "live" : "estimated",
         r2ClassBOps: live.r2ClassBOpsMonth !== null ? "live" : "estimated",
@@ -3664,6 +3728,8 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       totalD1Rows,
       totalD1EstimatedBytes,
       d1MeasuredBytes: measuredD1Bytes,
+      d1Databases: live.d1Databases ?? undefined,
+      d1DatabaseLimitBytes: D1_FREE_TIER_DB_BYTES,
       d1Shards: d1ShardCount(env),
       safetyThrottles: [
         { name: "Analytics Daily Write Cap", threshold: `${ANALYTICS_DAILY_WRITE_CAP.toLocaleString("en-US")} / day`, status: "active", protectedQuota: "D1 Database Writes (100k/day)" },
@@ -5947,12 +6013,14 @@ export default {
         const retiredCleanup = (sizeRows.results || []).some((row) => retiredSet.has(row?.kind ?? ""))
           ? [syncDb(env, syncShard).prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind IN ('highlights', 'writtenDrafts')").bind(session.user.id)]
           : [];
-        // Per-user storage budget: start from the raw bytes of stored docs NOT
+        // Per-user storage budget: start from the raw bytes of stored rows NOT
         // being rewritten in this request, then add each merged doc's size.
+        // Segment rows fold into their logical kind, so a pushed kind drops
+        // ALL of its segment rows from the baseline.
         let projectedBytes = (sizeRows.results || []).reduce((sum, row) => {
           const kind = row?.kind ?? "";
           // Retired rows are deleted by this same request — don't count them.
-          return sum + (bodyKinds.has(kind) || retiredSet.has(kind) ? 0 : (Number(row?.raw_bytes) || 0));
+          return sum + (bodyKinds.has(baseKindOfRow(kind)) || retiredSet.has(kind) ? 0 : (Number(row?.raw_bytes) || 0));
         }, 0);
         for (const kind of kindsToSync) {
           const local = body[kind].records;
@@ -5970,23 +6038,47 @@ export default {
           // Skip the write entirely when nothing changed — avoids burning a D1
           // write (and bumping updated_at) on every no-op push.
           if (!merged.changed) { response[kind] = { records: current.records, updatedAt: current.updatedAt }; continue; }
-          const mergedBytes = encoder.encode(merged.json).length;
-          if (mergedBytes > MAX_DOCUMENT_BYTES) return json({ error: "Progress document is too large after merge" }, 400, origin, log);
-          // Guard the STORED size too: base64 gzip of a 2MB raw doc stays far
-          // under D1's 2MB row limit for compressible progress data, but this
-          // check guarantees it even for incompressible (e.g. already-encoded)
-          // content that gzip can't shrink.
-          const compressedB64 = await gzipString(merged.json);
-          const storedBytes = encoder.encode(compressedB64).length;
-          if (storedBytes > MAX_STORED_PAYLOAD_BYTES) return json({ error: "Progress document is too large to store" }, 400, origin, log);
-          projectedBytes += mergedBytes;
-          if (projectedBytes > MAX_USER_STORAGE_BYTES) return json({ error: "Sync storage limit exceeded (15MB per user). Remove old progress to free space.", limit: MAX_USER_STORAGE_BYTES }, 413, origin, log);
-          const updatedAt = now(); response[kind] = { records: merged.records, updatedAt };
-          // Store gzip-compressed to save D1 space (~5-8x) and support far more
-          // progress per user; raw_bytes tracks the uncompressed JSON so the
-          // per-user budget is enforced on real content, not compressed size.
-          statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
+          const updatedAt = now();
+          response[kind] = { records: merged.records, updatedAt };
+          // One poke per LOGICAL kind — segmentation is invisible to the
+          // realtime hub, so a multi-segment push never multiplies pokes.
           changedKinds.push(kind);
+          if (SEGMENTED_KINDS.has(kind)) {
+            // Orchestrator write path: repack the merged kind into sequential
+            // segments (a new one starts at 85% occupancy), rewrite them all
+            // in this batch, and drop the previous layout — stale segment
+            // rows plus the pre-segmentation plain row would otherwise keep
+            // serving (and being double-counted) forever.
+            const existingSegmentCount = (sizeRows.results || []).filter((row) => splitSegmentKind(row?.kind ?? "")?.base === kind).length;
+            const { segments, deleteKinds } = packKindSegments(kind, merged.records, existingSegmentCount);
+            for (const stale of [kind, ...deleteKinds]) {
+              statements.push(syncDb(env, syncShard).prepare("DELETE FROM progress_documents WHERE user_id = ? AND kind = ?").bind(session.user.id, stale));
+            }
+            for (const segment of segments) {
+              // Store gzip-compressed to save D1 space (~5-8x); raw_bytes
+              // tracks the uncompressed JSON so the per-user budget is
+              // enforced on real content, not compressed size.
+              const compressedB64 = await gzipString(segment.json);
+              const storedBytes = encoder.encode(compressedB64).length;
+              if (storedBytes > MAX_STORED_PAYLOAD_BYTES) return json({ error: "Progress document is too large to store" }, 400, origin, log);
+              const segmentBytes = encoder.encode(segment.json).length;
+              projectedBytes += segmentBytes;
+              statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, segment.kind, compressedB64, segmentBytes, updatedAt));
+            }
+          } else {
+            const mergedBytes = encoder.encode(merged.json).length;
+            if (mergedBytes > MAX_DOCUMENT_BYTES) return json({ error: "Progress document is too large after merge" }, 400, origin, log);
+            // Guard the STORED size too: base64 gzip of a 2MB raw doc stays far
+            // under D1's 2MB row limit for compressible progress data, but this
+            // check guarantees it even for incompressible (e.g. already-encoded)
+            // content that gzip can't shrink.
+            const compressedB64 = await gzipString(merged.json);
+            const storedBytes = encoder.encode(compressedB64).length;
+            if (storedBytes > MAX_STORED_PAYLOAD_BYTES) return json({ error: "Progress document is too large to store" }, 400, origin, log);
+            projectedBytes += mergedBytes;
+            statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
+          }
+          if (projectedBytes > MAX_USER_STORAGE_BYTES) return json({ error: "Sync storage limit exceeded (15MB per user). Remove old progress to free space.", limit: MAX_USER_STORAGE_BYTES }, 413, origin, log);
         }
         if (statements.length || retiredCleanup.length) {
           await syncDb(env, syncShard).batch([...statements, ...retiredCleanup]);

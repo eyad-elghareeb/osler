@@ -2872,6 +2872,10 @@ export const en = {
     "admin.analytics.cf.d1StorageDesc": "500 MB per-database free limit",
     "admin.analytics.cf.d1ShardCount": "{count} D1 databases",
     "admin.analytics.cf.d1Measured": "measured",
+    "admin.analytics.cf.d1Databases": "D1 Databases",
+    "admin.analytics.cf.col.database": "Database",
+    "admin.analytics.cf.col.role": "Role",
+    "admin.analytics.cf.col.usage": "Usage",
     "admin.analytics.cf.r2Storage": "R2 Object Storage",
     "admin.analytics.cf.r2StorageDesc": "10 GB-month free storage",
     "admin.analytics.cf.r2ClassA": "R2 Class A Ops",
@@ -2911,6 +2915,7 @@ export const en = {
     "admin.analytics.cf.p95badge": "p95 {ms} ms",
 
     "admin.analytics.kpi.events": "Total Events",
+    "admin.analytics.kpi.allTimeEvents": "All-Time Events",
     "admin.analytics.kpi.sessions": "Sessions",
     "admin.analytics.kpi.pageViews": "Page Views",
     "admin.analytics.kpi.webVitals": "Web Vitals",

@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Users, AlertTriangle, Gauge, Server, Route } from "lucide-react";
+import { Eye, Users, AlertTriangle, Gauge, Server, Route, History } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { StatTile } from "@/components/osler/ui-primitives";
 import type { AnalyticsOverview } from "@/components/osler/admin/admin-api";
@@ -25,12 +25,18 @@ export function AnalyticsOverviewTiles({ data }: AnalyticsOverviewTilesProps) {
   };
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
       <StatTile
         label={t("admin.analytics.kpi.events")}
         value={fmt(data?.totalEvents)}
         icon={Server}
         color="primary"
+      />
+      <StatTile
+        label={t("admin.analytics.kpi.allTimeEvents")}
+        value={fmt(data?.allTimeEvents)}
+        icon={History}
+        color="info"
       />
       <StatTile
         label={t("admin.analytics.kpi.sessions")}

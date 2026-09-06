@@ -76,6 +76,8 @@ The D1 free tier allows **500 MB of storage per database**, while the read/write
 
 The sync pool is **partitioned by user**: every kind of a user's sync data lives in exactly one shard, recorded on the user row (`users.sync_shard`, core DB — read straight off the row every authenticated request already loads, so partitioning costs zero extra queries). New users are assigned deterministically by hash of their id, so a per-user sync request touches exactly one database. Six shards × 500 MB ≈ **2.5 GB of usable sync storage**, isolated from telemetry churn and from the auth/content tables.
 
+Within a user's shard, the quiz kind (`qbank`) is **segmented** by the sync orchestrator (`src/sync-orchestrator.ts`): the merged quiz progress is packed into sequential rows (`qbank:1`, `qbank:2`, …), starting a new row at 85% occupancy, so the kind outgrows D1's 2MB per-row limit up to the 15MB per-user budget. The split is server-side only — clients keep pushing and pulling one logical `qbank` kind, and the realtime hub keeps sending one poke per push, never one per segment.
+
 Shard bindings are optional: without them the worker keeps every table in the primary database and behaves exactly as before. To enable them:
 
 ```sh

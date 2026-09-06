@@ -2867,6 +2867,10 @@ export const ar = {
     "admin.analytics.cf.d1StorageDesc": "حد 500 ميغابايت لكل قاعدة بيانات",
     "admin.analytics.cf.d1ShardCount": "{count} قواعد بيانات D1",
     "admin.analytics.cf.d1Measured": "مُقاس",
+    "admin.analytics.cf.d1Databases": "قواعد بيانات D1",
+    "admin.analytics.cf.col.database": "قاعدة البيانات",
+    "admin.analytics.cf.col.role": "الدور",
+    "admin.analytics.cf.col.usage": "الاستخدام",
     "admin.analytics.cf.r2Storage": "تخزين الملفات R2",
     "admin.analytics.cf.r2StorageDesc": "حد 10 غيغابايت/شهر تخزين مجاني",
     "admin.analytics.cf.r2ClassA": "عمليات R2 فئة A",
@@ -2906,6 +2910,7 @@ export const ar = {
     "admin.analytics.cf.p95badge": "p95 {ms} م.ث",
 
     "admin.analytics.kpi.events": "إجمالي الأحداث",
+    "admin.analytics.kpi.allTimeEvents": "الأحداث عبر التاريخ",
     "admin.analytics.kpi.sessions": "الجلسات",
     "admin.analytics.kpi.pageViews": "مشاهدات الصفحات",
     "admin.analytics.kpi.webVitals": "مؤشرات الأداء",

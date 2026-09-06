@@ -4,6 +4,16 @@
 const _encoder = new TextEncoder();
 const _decoder = new TextDecoder();
 
+/* ── Size budget ────────────────────────────────────────────────────── */
+
+/** Raw serialization ceiling per stored document (pre-segmentation this was
+ *  also the whole-kind limit; segmented kinds now pack MULTIPLE documents
+ *  under it — see sync-orchestrator.ts). */
+export const MAX_DOCUMENT_BYTES = 2_000_000;
+/** Stored (base64 gzip) ceiling per row — D1 rows die at 2MB, and this guard
+ *  holds even for incompressible payloads that gzip can't shrink. */
+export const MAX_STORED_PAYLOAD_BYTES = 1_800_000;
+
 /* ── Kinds ──────────────────────────────────────────────────────────── */
 
 export const SYNC_KINDS = [

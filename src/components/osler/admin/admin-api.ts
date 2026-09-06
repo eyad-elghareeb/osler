@@ -450,6 +450,9 @@ export type AnalyticsRange = "24h" | "7d" | "30d";
 export interface AnalyticsOverview {
   range: AnalyticsRange;
   totalEvents: number;
+  /** Lifetime event count: analytics_daily rollup (survives the 30-day raw
+   *  event prune) + today's live events. Absent on older Workers. */
+  allTimeEvents?: number;
   totalSessions: number;
   pageViews: number;
   jsErrors: number;
@@ -670,11 +673,16 @@ export interface CloudflareLimitsData {
   d1Tables: CloudflareTableStat[];
   totalD1Rows: number;
   totalD1EstimatedBytes: number;
-  /** Real summed file size across every bound D1 database (pragma
-   *  page_count × page_size), or null when any database rejected the query
-   *  and the gauge fell back to the per-table estimates. Absent on older
-   *  Workers. */
+  /** Real summed file size across every D1 database on the account (REST
+   *  file_size sum), or null when the token lacks D1 Read and the gauge fell
+   *  back to the per-table estimates. Absent on older Workers. */
   d1MeasuredBytes?: number | null;
+  /** Measured per-database file sizes with their role in the shard layout
+   *  (core / sync / telemetry). Needs D1 Read on the analytics token —
+   *  absent on older Workers or without the permission. */
+  d1Databases?: Array<{ name: string; role: string; bytes: number }>;
+  /** Free-tier storage ceiling per D1 database. */
+  d1DatabaseLimitBytes?: number;
   /** Number of bound D1 databases (1 unsharded, 3 fully sharded).
    *  Absent on older Workers — treat as 1. */
   d1Shards?: number;
