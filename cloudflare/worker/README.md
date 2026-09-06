@@ -59,7 +59,7 @@ The worker is sized so ~1000 monthly-active users stay comfortably inside every 
 | Worker requests | 100K/day | ~10–20K/day | Client sync is opt-in and event-driven: pushes are 1 direct PUT (no HEAD), poke pulls GET only the changed kinds, foreground pulls are throttled to one per 60s, hidden tabs make zero requests. Telemetry batches up to 50 events per POST and samples successful `api_call` events. |
 | D1 rows written | 100K/day (account-wide) | ~15–35K/day | Analytics ≤ 10K (daily cap enforces it), choice stats ≤ 25K (daily cap), sync writes ride inside `progress_documents` upserts (~1 row per changed kind per push). |
 | D1 rows read | 5M/day | < 200K/day | Daily-cap guards are 1-row point reads on `daily_counters` (never a table scan); sync reads are per-user doc lookups; realtime heartbeats are answered at the edge and never wake the D1. |
-| D1 storage | 500 MB/database | < 1GB | Sync docs are gzip-compressed with a 15MB/user budget; analytics events are pruned after 30 days. The optional 3-database shard (see "D1 sharding") triples the ceiling. |
+| D1 storage | 500 MB/database | < 1GB | Sync docs are gzip-compressed with a 25MB/user budget; analytics events are pruned after 30 days. The optional 3-database shard (see "D1 sharding") triples the ceiling. |
 | Durable Objects (sync hub) | SQLite-backed free tier | 1 DO per active user, socket open only while the tab is visible | Heartbeats use `setWebSocketAutoResponse` at the edge — they don't wake or bill the DO. |
 
 The two telemetry daily caps (`ANALYTICS_DAILY_WRITE_CAP`, `QBANK_STATS_DAILY_WRITE_CAP`) act as the safety valve: under an abnormal flood they return 429 to telemetry only — auth, sync, and content keep working.
@@ -76,7 +76,7 @@ The D1 free tier allows **500 MB of storage per database**, while the read/write
 
 The sync pool is **partitioned by user**: every kind of a user's sync data lives in exactly one shard, recorded on the user row (`users.sync_shard`, core DB — read straight off the row every authenticated request already loads, so partitioning costs zero extra queries). New users are assigned deterministically by hash of their id, so a per-user sync request touches exactly one database. Six shards × 500 MB ≈ **2.5 GB of usable sync storage**, isolated from telemetry churn and from the auth/content tables.
 
-Within a user's shard, the quiz kind (`qbank`) is **segmented** by the sync orchestrator (`src/sync-orchestrator.ts`): the merged quiz progress is packed into sequential rows (`qbank:1`, `qbank:2`, …), starting a new row at 85% occupancy, so the kind outgrows D1's 2MB per-row limit up to the 15MB per-user budget. The split is server-side only — clients keep pushing and pulling one logical `qbank` kind, and the realtime hub keeps sending one poke per push, never one per segment.
+Within a user's shard, the quiz kind (`qbank`) is **segmented** by the sync orchestrator (`src/sync-orchestrator.ts`): the merged quiz progress is packed into sequential rows (`qbank:1`, `qbank:2`, …), starting a new row at 85% occupancy, so the kind outgrows D1's 2MB per-row limit up to the 25MB per-user budget. The split is server-side only — clients keep pushing and pulling one logical `qbank` kind, and the realtime hub keeps sending one poke per push, never one per segment.
 
 Shard bindings are optional: without them the worker keeps every table in the primary database and behaves exactly as before. To enable them:
 

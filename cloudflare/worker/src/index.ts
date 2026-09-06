@@ -58,12 +58,12 @@ const RESET_TTL_MS = 30 * 60 * 1000;
 // MAX_DOCUMENT_BYTES / MAX_STORED_PAYLOAD_BYTES live in ./sync-docs (shared
 // with the segment orchestrator): a segmented kind spreads its merged doc
 // across multiple rows, each packing to 85% of the raw ceiling.
-// Per-user total raw storage budget across all sync kinds (15MB). The kinds
-// each capped at 2MB sum to more than that, so 15MB is the budget the UI
+// Per-user total raw storage budget across all sync kinds (25MB). The kinds
+// each capped at 2MB sum to more than that, so 25MB is the budget the UI
 // advertises and the per-kind caps are the practical ceiling.
-const MAX_USER_STORAGE_BYTES = 15_360_000;
+const MAX_USER_STORAGE_BYTES = 25_600_000;
 // Cap on the decompressed size of an incoming gzip request body (sync PUTs).
-const MAX_GZIP_BODY_BYTES = 16_000_000;
+const MAX_GZIP_BODY_BYTES = 27_000_000;
 const OAUTH_TTL_MS = 10 * 60 * 1000;
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
 
@@ -6210,7 +6210,7 @@ export default {
             projectedBytes += mergedBytes;
             statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
           }
-          if (projectedBytes > MAX_USER_STORAGE_BYTES) return json({ error: "Sync storage limit exceeded (15MB per user). Remove old progress to free space.", limit: MAX_USER_STORAGE_BYTES }, 413, origin, log);
+          if (projectedBytes > MAX_USER_STORAGE_BYTES) return json({ error: "Sync storage limit exceeded (25MB per user). Remove old progress to free space.", limit: MAX_USER_STORAGE_BYTES }, 413, origin, log);
         }
         if (statements.length || retiredCleanup.length) {
           await syncDb(env, syncShard).batch([...statements, ...retiredCleanup]);
