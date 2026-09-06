@@ -126,6 +126,7 @@ export const en = {
     "login.pwDigit": "A number (0–9)",
     "login.pwSymbol": "A symbol (!@#…)",
     "login.pwTwoOfFour": "Any 2 of the 4 types above",
+    "login.pwStrong": "Strong password — looks good.",
     "login.errNoMatch": "No account matches that username/email and password. Check for typos — or create an account below.",
     "login.errTaken": "That username or email is already registered. Try signing in — or reset your password if it's yours.",
     "login.errRateLimited": "Too many attempts — wait a minute and try again.",

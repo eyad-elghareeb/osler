@@ -362,6 +362,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
     { met: /[^A-Za-z0-9]/.test(password), label: t("login.pwSymbol") },
   ];
   const pwClassCount = pwClasses.slice(1).filter((r) => r.met).length;
+  const pwAllMet = pwClasses[0].met && pwClassCount >= 2;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -646,7 +647,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
             </div>
           ) : null}
 
-          {cloudActive && cloudMode === "register" && (
+          {cloudActive && cloudMode === "register" && password.length > 0 && !pwAllMet && (
             <ul className="space-y-1" aria-live="polite">
               {pwClasses.map((rule) => (
                 <li key={rule.label} className={cn("flex items-center gap-1.5 text-xs", rule.met ? "text-success" : "text-muted-foreground")}>
@@ -659,6 +660,12 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                 {t("login.pwTwoOfFour")}
               </li>
             </ul>
+          )}
+          {cloudActive && cloudMode === "register" && password.length > 0 && pwAllMet && (
+            <p className="flex items-center gap-1.5 text-xs text-success">
+              <Check className="size-3.5 shrink-0" />
+              {t("login.pwStrong")}
+            </p>
           )}
 
           {cloudActive && cloudMode === "register" && (
