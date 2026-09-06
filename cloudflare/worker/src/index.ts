@@ -5501,10 +5501,16 @@ export default {
           await env.DB.prepare("INSERT INTO users (id, username, email, display_name, password_hash, password_salt, has_password, sync_shard, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(userId, username, email, displayName, password.hash, password.salt, syncShardForUserId(userId), now(), now()).run();
         } catch { return json({ error: "That username or email is already in use" }, 409, origin, log); }
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<any>();
-        // New accounts with an email address get a verification mail right
-        // away — password login stays blocked until they verify (anti-spam
-        // gate). Best-effort: a mail outage must never fail registration.
-        if (email) await issueVerifyEmail(env, userId, email);
+        // Email signups verify before their first session: the account is
+        // created and the link goes out, but no session is issued — a wallet
+        // of unverified bot accounts stays inert. (Signup is username-only;
+        // this path covers direct API use.) Username-only signups have
+        // nothing to verify and sign straight in. Best-effort mail: an
+        // outage must never fail the registration itself.
+        if (email) {
+          const mailed = await issueVerifyEmail(env, userId, email);
+          return json({ ok: true, verifySent: mailed }, 201, origin, log);
+        }
         return json(await issueSession(user, env, request.headers.get("user-agent")), 201, origin, log);
       }
 
