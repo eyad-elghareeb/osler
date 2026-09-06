@@ -103,6 +103,17 @@ TURNSTILE_ENABLED = "false"
 # The Worker callback base URL. Replace after first deployment.
 WORKER_URL = "http://localhost:8787"
 
+# ── Optional: transactional email delivery ──
+# Two interchangeable providers (sendEmail picks the first fully configured):
+#   1. Gmail SMTP relay worker (cloudflare/email-worker) — mail from a plain
+#      Gmail account, no custom domain or DNS records. Set EMAIL_WORKER_URL
+#      here and EMAIL_WORKER_TOKEN as a SECRET (must match the relay
+#      worker's EMAIL_TOKEN secret):
+#        npx wrangler secret put EMAIL_WORKER_TOKEN
+#   2. Resend — branded domain sending (RESEND_API_KEY + EMAIL_FROM secrets).
+# With neither configured, password-reset/verification endpoints report
+# "Email is disabled" instead of failing.
+
 # ── Optional: live Cloudflare quota data (admin analytics panel) ──
 # Without these, GET /v1/admin/analytics/cloudflare-limits serves D1-derived
 # estimates and the panel shows "Estimated" + connect steps. To go live:

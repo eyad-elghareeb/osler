@@ -153,17 +153,40 @@ Common pitfalls:
 
 You must **also** publish the corresponding site key in `osler.config.json` → `cloud.turnstileSiteKey` so the frontend can render the widget. See [§4.5](#45-cloud).
 
+#### 2.2.2a Email delivery providers (overview)
+
+Transactional email (password reset, address verification) is delivered through one of two interchangeable providers — `sendEmail()` picks whichever is fully configured, with the Gmail relay taking precedence:
+
+| Provider | Required vars/secrets | Sender | Needs custom domain |
+| --- | --- | --- | --- |
+| **Gmail SMTP relay worker** (`cloudflare/email-worker`) | `EMAIL_WORKER_URL` + `EMAIL_WORKER_TOKEN` (2.2.3a) | your `@gmail.com` address | **No** |
+| **Resend** | `RESEND_API_KEY` + `EMAIL_FROM` (2.2.3, 2.2.4) | your verified domain | Yes (for your own domain) |
+
+With **neither** configured, the reset/verification endpoints still return `{ok:true}` (to prevent email enumeration) but no email is actually sent.
+
 #### 2.2.3 `RESEND_API_KEY`
 
 | | |
 | --- | --- |
-| **Required** | Only to enable password-reset emails |
+| **Required** | Only if using the Resend provider |
 | **Default** | _(none)_ |
-| **Description** | Resend.com API key (starts with `re_`). Used to send transactional password-reset emails via Resend's REST API. When unset, the `/v1/auth/reset/request` endpoint still returns `{ok:true}` (to prevent email enumeration) but no email is actually sent. |
+| **Description** | Resend.com API key (starts with `re_`). Used to send transactional password-reset emails via Resend's REST API. |
 | **Example** | `RESEND_API_KEY=re_abc123...` |
 | **Where to set** | **Secret**: `npx wrangler secret put RESEND_API_KEY`, or `.dev.vars` for local dev. |
 
-> **Resend free tier:** 100 emails/day, 3000/month. Adequate for password resets at a small school. For higher volume, upgrade or swap in a different provider (you'll need to fork the Worker — see `sendResetEmail()` in `src/index.ts`).
+> **Resend free tier:** 100 emails/day, 3000/month. Adequate for password resets at a small school.
+
+#### 2.2.3a `EMAIL_WORKER_URL` / `EMAIL_WORKER_TOKEN` (Gmail relay)
+
+| | |
+| --- | --- |
+| **Required** | Only if using the Gmail SMTP relay provider |
+| **Default** | _(none)_ |
+| **Description** | Points the Worker at the standalone Gmail relay worker in `cloudflare/email-worker/`, which sends via SMTP from a plain Gmail account using an App Password. `EMAIL_WORKER_URL` is the relay worker's base URL; `EMAIL_WORKER_TOKEN` is a shared secret that **must equal** the relay worker's own `EMAIL_TOKEN` secret — it is presented as a Bearer token on every `/send` call, so without it the relay would be an open relay for anyone who finds the URL. Takes precedence over Resend. |
+| **Example** | `EMAIL_WORKER_URL=https://osler-email.<account>.workers.dev` + `EMAIL_WORKER_TOKEN=<random 32+ chars>` |
+| **Where to set** | `EMAIL_WORKER_URL` as a `[vars]` entry in `wrangler.toml`; `EMAIL_WORKER_TOKEN` as a **Secret**: `npx wrangler secret put EMAIL_WORKER_TOKEN`. |
+
+> **Gmail free tier:** ~500 recipients/day. Setup (App Password, deployment, end-to-end test): [`cloudflare/email-worker/README.md`](../cloudflare/email-worker/README.md).
 
 #### 2.2.4 `EMAIL_FROM`
 
@@ -221,7 +244,9 @@ In Google Cloud Console, configure:
 | `WORKER_URL` | Yes (for Google OAuth) | `[vars]` | `http://localhost:8787` |
 | `TURNSTILE_ENABLED` | No | `[vars]` | `"false"` |
 | `TURNSTILE_SECRET_KEY` | If Turnstile on | Secret | _(none)_ |
-| `RESEND_API_KEY` | For password reset | Secret | _(none)_ |
+| `RESEND_API_KEY` | For password reset (Resend provider) | Secret | _(none)_ |
+| `EMAIL_WORKER_URL` | For password reset (Gmail relay provider) | Var | _(none)_ |
+| `EMAIL_WORKER_TOKEN` | Bearer token for the Gmail relay | Secret | _(none)_ |
 | `EMAIL_FROM` | For password reset | `[vars]` | `Osler <noreply@example.com>` |
 | `APP_ORIGIN` | For password reset | `[vars]` | `http://localhost:3000` |
 | `GOOGLE_CLIENT_ID` | For Google Sign-In | Secret | _(none)_ |

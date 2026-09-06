@@ -1,0 +1,17 @@
+name = "osler-email"
+main = "src/index.ts"
+compatibility_date = "2026-07-23"
+
+# No [vars] needed. All configuration is secret — set once, never committed:
+#
+#   npx wrangler secret put GMAIL_USER           # you@gmail.com
+#   npx wrangler secret put GMAIL_APP_PASSWORD   # Gmail App Password (16 chars)
+#   npx wrangler secret put EMAIL_TOKEN          # shared secret — MUST match
+#                                                # EMAIL_WORKER_TOKEN on the
+#                                                # main osler-cloud Worker
+#
+# Optional display name on outgoing mail:
+#   npx wrangler secret put FROM_NAME            # e.g. "Osler — Your School"
+#
+# Deploy:  npx wrangler deploy
+# Verify:  curl https://osler-email.<account>.workers.dev/health

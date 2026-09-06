@@ -38,7 +38,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 import { SYNC_KINDS, RETIRED_SYNC_KINDS, mergeKind, gzipString, gunzipBytes, gunzipBytesBounded, base64ToBytes, MAX_DOCUMENT_BYTES, MAX_STORED_PAYLOAD_BYTES } from "./sync-docs";
 import { SEGMENTED_KINDS, splitSegmentKind, baseKindOfRow, packKindSegments } from "./sync-orchestrator";
-import { sendEmail, passwordResetEmail, verifyEmail } from "./email";
+import { sendEmail, passwordResetEmail, verifyEmail, emailProviderReady } from "./email";
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
@@ -204,6 +204,11 @@ interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /** Gmail SMTP relay worker (cloudflare/email-worker) base URL. Takes
+   *  precedence over Resend when both are configured. */
+  EMAIL_WORKER_URL?: string;
+  /** Shared bearer token the relay worker validates (its EMAIL_TOKEN secret). */
+  EMAIL_WORKER_TOKEN?: string;
   APP_ORIGIN?: string;
   GEMINI_ENCRYPTION_KEY?: string;
   CONTENT_ONLY_MANAGED?: string | boolean;
@@ -5446,7 +5451,7 @@ export default {
         if (!(await emailEnabled(env))) return json({ error: "Email is disabled" }, 400, origin, log);
         if (validEmail(email)) {
           const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").bind(email).first<any>();
-          if (user && env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN) {
+          if (user && emailProviderReady(env) && env.APP_ORIGIN) {
             const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
             // Revoke any earlier outstanding reset links before issuing a fresh
             // one, so a compromised old link dies the moment a new reset is
@@ -5500,7 +5505,7 @@ export default {
         const email = String(body.email || "").trim().toLowerCase();
         if (!validEmail(email)) return json({ error: "Invalid email" }, 400, origin, log);
         const user = await env.DB.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND email_verified_at IS NULL").bind(email).first<any>();
-        if (user && env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN) {
+        if (user && emailProviderReady(env) && env.APP_ORIGIN) {
           const existing = await env.DB.prepare("SELECT id FROM email_verify_tokens WHERE user_id = ? AND used_at IS NULL AND expires_at > ?").bind(user.id, now()).first<any>();
           if (!existing) {
             const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;

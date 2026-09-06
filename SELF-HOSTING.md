@@ -106,7 +106,14 @@ WORKER_URL      = "https://osler-cloud.<account-subdomain>.workers.dev"
 npx wrangler secret put JWT_SECRET        # REQUIRED — openssl rand -base64 32
 ```
 
-Optional secrets (set later, each documented in [`docs/environment.md`](docs/environment.md)): `AUDIT_HMAC_KEY` (tamper-evident audit chain), `TURNSTILE_SECRET_KEY` (bot protection — then set `TURNSTILE_ENABLED = "true"` in `[vars]`), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (Google Sign-In), `RESEND_API_KEY` + `EMAIL_FROM` (transactional email), `GEMINI_ENCRYPTION_KEY` (encrypts users' stored Gemini keys), `CF_ANALYTICS_TOKEN` (live quota panel; add **D1 → Read** to that token for measured storage numbers).
+Optional secrets (set later, each documented in [`docs/environment.md`](docs/environment.md)): `AUDIT_HMAC_KEY` (tamper-evident audit chain), `TURNSTILE_SECRET_KEY` (bot protection — then set `TURNSTILE_ENABLED = "true"` in `[vars]`), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (Google Sign-In — the Tauri wizard can configure these for you), `GEMINI_ENCRYPTION_KEY` (encrypts users' stored Gemini keys), `CF_ANALYTICS_TOKEN` (live quota panel; add **D1 → Read** to that token for measured storage numbers).
+
+**Transaction email (password-reset / verification)** needs one of two providers:
+
+- **Gmail relay (no domain needed)** — deploy the standalone worker in `cloudflare/email-worker/` with a Gmail App Password, then set `EMAIL_WORKER_URL` + `EMAIL_WORKER_TOKEN` on this Worker. Full walkthrough: [`cloudflare/email-worker/README.md`](cloudflare/email-worker/README.md).
+- **Resend** (branded domain) — `RESEND_API_KEY` + `EMAIL_FROM` secrets.
+
+With neither configured, the app works but reset/verification emails are not sent.
 
 ### Step 5 — Apply migrations and deploy the Worker
 

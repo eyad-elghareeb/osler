@@ -1,11 +1,30 @@
 // Designed, email-client-safe HTML templates for Osler's transactional emails.
 // Rendered as table-based layouts with inline CSS only (Outlook/Gmail safe),
-// sent through the Resend API. No images, no tracking pixels — text + brand
-// colors only, so every template renders offline and unblocks nothing.
+// delivered through one of two interchangeable providers. No images, no
+// tracking pixels — text + brand colors only, so every template renders
+// offline and unblocks nothing.
+//
+// Provider precedence (sendEmail):
+//   1. EMAIL_WORKER_URL + EMAIL_WORKER_TOKEN — the Gmail SMTP relay worker
+//      (cloudflare/email-worker): mail goes out from a plain Gmail account
+//      via SMTP, no custom domain or DNS records needed.
+//   2. RESEND_API_KEY + EMAIL_FROM — the Resend API (branded domain sending).
 
 export interface EmailEnv {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /** Gmail relay worker (cloudflare/email-worker) base URL. */
+  EMAIL_WORKER_URL?: string;
+  /** Shared bearer token the relay worker validates (its EMAIL_TOKEN). */
+  EMAIL_WORKER_TOKEN?: string;
+}
+
+/** True when at least one delivery provider is fully configured. The auth
+ *  endpoints gate their email branches on this instead of poking at
+ *  individual provider vars. */
+export function emailProviderReady(env: EmailEnv): boolean {
+  if (env.EMAIL_WORKER_URL && env.EMAIL_WORKER_TOKEN) return true;
+  return !!(env.RESEND_API_KEY && env.EMAIL_FROM);
 }
 
 export interface RenderedEmail {
@@ -125,6 +144,16 @@ export function sendEmail(
   env: EmailEnv,
   opts: { to: string; subject: string; text: string; html: string },
 ): Promise<Response> {
+  // Gmail SMTP relay worker (server-to-server, bearer-protected).
+  if (env.EMAIL_WORKER_URL && env.EMAIL_WORKER_TOKEN) {
+    const base = env.EMAIL_WORKER_URL.replace(/\/$/, "");
+    return fetch(`${base}/send`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.EMAIL_WORKER_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ to: opts.to, subject: opts.subject, text: opts.text, html: opts.html }),
+    });
+  }
+  // Resend (branded domain sending).
   return fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },

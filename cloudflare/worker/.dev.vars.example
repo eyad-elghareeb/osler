@@ -26,8 +26,15 @@ WORKER_URL=http://localhost:8787
 # Set TURNSTILE_ENABLED=true in wrangler.toml [vars] to enable verification.
 TURNSTILE_SECRET_KEY=
 
-# ─── Optional: Resend (transactional email for password reset) ────────────
-
+# ─── Optional: transactional email (Gmail relay worker OR Resend) ─────────
+#
+# Option A — Gmail SMTP relay worker (cloudflare/email-worker). Sends from a
+# plain Gmail account via SMTP; no custom domain or DNS records needed. Set
+# both values; EMAIL_WORKER_TOKEN must match the relay worker's EMAIL_TOKEN.
+# EMAIL_WORKER_URL=https://osler-email.<account>.workers.dev
+# EMAIL_WORKER_TOKEN=generate-with-openssl-rand-base64-32
+#
+# Option B — Resend (branded domain sending).
 RESEND_API_KEY=
 EMAIL_FROM=Osler <noreply@example.com>
 # Public URL of the web app used in password-reset links.
