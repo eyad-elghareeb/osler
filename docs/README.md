@@ -8,7 +8,8 @@ This folder contains the complete documentation for the Osler medical study plat
 
 | If you want to… | Read this first |
 | --- | --- |
-| Deploy Osler for the first time | [`hosting.md`](./hosting.md) |
+| Start a full instance from zero, step by step | [`../SELF-HOSTING.md`](../SELF-HOSTING.md) |
+| Compare hosting targets before deciding | [`hosting.md`](./hosting.md) |
 | Fork & customise Osler for your school | [`forking.md`](./forking.md) |
 | Understand the security model | [`security.md`](./security.md) |
 | Use the admin panel | [`admin-guide.md`](./admin-guide.md) |
@@ -39,7 +40,7 @@ This folder contains the complete documentation for the Osler medical study plat
 | File | Purpose |
 | --- | --- |
 | [`../README.md`](../README.md) | Project overview, features, tech stack, project structure. |
-| [`../SELF-HOSTING.md`](../SELF-HOSTING.md) | Quick self-hosting guide (older, see `hosting.md` for the comprehensive version). |
+| [`../SELF-HOSTING.md`](../SELF-HOSTING.md) | Canonical A-to-Z guide: start a full instance from zero (Cloudflare, step by step), white-labelling, sharding, updates. |
 | [`../AGENTS.md`](../AGENTS.md) | Architecture & conventions for AI agents and contributors. |
 | [`../SECURITY.md`](../SECURITY.md) | Vulnerability disclosure policy. |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release notes. |

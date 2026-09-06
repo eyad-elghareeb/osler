@@ -324,7 +324,7 @@ Follow [§3 Steps 1–5](#3-cloudflare-pages--worker-runbook) exactly. The Worke
 1. Push your fork to GitHub.
 2. Vercel dashboard → New Project → import the repo.
 3. Framework preset: **Next.js**
-4. Build command: `npm run build` (leave output default — Vercel auto-detects Next.js standalone)
+4. Build command: `npm run build`. The build is a **static export** (`output: "export"` → `out/`) — set the project's Output Directory to `out` (Vercel pre-fills this when it detects the export config); no server functions are deployed.
 5. Environment variables (Project Settings → Environment Variables):
    - `NEXT_PUBLIC_CLOUD_API_URL` = `https://osler-cloud.<your-subdomain>.workers.dev` (Production + Preview + Development)
    - `NEXT_PUBLIC_INVIDIOUS_HOST` (optional)

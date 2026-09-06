@@ -1,361 +1,256 @@
 # Self-Hosting Osler
 
-Osler is fully open-source and designed to be self-hosted by anyone — a medical school, a residency program, a study group, or an individual educator. This guide walks you through forking the repo, white-labelling the platform, choosing which engines to include, deploying, and managing your instance with the Tauri admin app.
+Osler is fully open-source and designed to be self-hosted by anyone — a medical school, a residency program, a study group, or an individual educator. This guide walks you through starting a **complete instance from zero** (frontend + cloud backend + database), then white-labelling it, scaling it out, and keeping it up to date.
 
-> **Source repository:** <https://github.com/eyad-elghareeb/osler>
+> **Source repository:** <https://github.com/eyad-elghareeb/osler> · **License:** MIT — see [LICENSE](./LICENSE)
 >
-> **License:** MIT — see [LICENSE](./LICENSE).
+> The deployment walkthrough in **§4** is the canonical step sequence — the Tauri admin app's Setup Wizard automates exactly these steps, and future automation builds on the same contract.
 
 ---
 
-## 1. Fork & clone
+## 1. What you'll build
+
+| Piece | Service | Free tier |
+|---|---|---|
+| **Frontend** — installable PWA | Cloudflare Pages | Unlimited requests |
+| **Backend** — accounts, sync, admin API | Cloudflare Worker | 100k requests/day |
+| **Database** — users, sessions, sync, telemetry | Cloudflare D1 | 500 MB/database |
+| **Content storage** — managed content objects | Cloudflare R2 (optional) | 10 GB-month |
+
+Everything runs comfortably on the free tier. The instance is local-first: students can use the app without an account, and the cloud backend only adds accounts + cross-device sync.
+
+**Prerequisites:** Node.js 22 (`.nvmrc`), npm, Git, a [Cloudflare](https://dash.cloudflare.com/) account, and `npx wrangler login` once to authenticate the CLI.
+
+---
+
+## 2. Get the code
 
 ```bash
 # Fork the repo on GitHub, then:
 git clone https://github.com/<your-username>/osler.git
 cd osler
 git remote add upstream https://github.com/eyad-elghareeb/osler.git
+npm install
 ```
 
-Keeping the `upstream` remote lets you pull in feature updates and bug fixes from the canonical repo while keeping your customisations in your fork.
+The `upstream` remote lets you pull updates from the canonical repo while keeping your customisations in your fork (see §8).
 
 ---
 
-## 2. The single source of truth: `osler.config.json`
+## 3. Configure your instance
 
-Every white-label decision lives in **`public/osler.config.json`**. The schema is in [`src/lib/osler/config.ts`](src/lib/osler/config.ts); the loader merges your file over sensible defaults so the app always boots.
-
-```jsonc
-{
-  "schemaVersion": 1,
-  "site": {
-    "name": "My Medical School",          // shown in header, login, <title>, PWA manifest
-    "shortName": "MMS",                   // mobile home-screen label
-    "tagline": "Personalised study platform",
-    "githubRepo": "https://github.com/your-org/your-osler",
-    "organisation": "Your Organisation",
-    "supportEmail": "admin@yourschool.edu",
-    "url": "https://your-osler.pages.dev"  // canonical origin — used for social link previews
-  },
-  "engines": {
-    "quiz":      { "enabled": true  },
-    "bank":      { "enabled": true  },
-    "written":   { "enabled": false },   // ← disabled engines disappear entirely
-    "flashcard": { "enabled": true  },
-    "osce":      { "enabled": true  },
-    "library":   { "enabled": true  },
-    "video":     { "enabled": false }
-  },
-  "themes": {
-    "default": "dark",
-    "custom": [
-      {
-        "id": "school-navy",
-        "name": "School Navy",
-        "variant": "dark",
-        "primary":      "oklch(0.45 0.18 260)",
-        "background":   "oklch(0.13 0.02 260)",
-        "foreground":   "oklch(0.96 0.01 260)"
-      }
-    ]
-  },
-  "defaults": {
-    "view": "dashboard",
-    "language": { "ui": "en", "content": "all" },
-    "quiz":     { "questionCount": 20, "secondsPerQuestion": 90, "tutorMode": false, "shuffle": true },
-    "ai":       { "model": "gemini-3.5-flash-lite", "enabled": true, "temperature": 0.4 },
-    "sync":     { "method": "network", "defaultRoom": "mms-2026" }
-  },
-  "cloud": {
-    "enabled": false,
-    "apiUrl": "",
-    "syncQbank": true,
-    "syncFlashcards": true
-  },
-  "wizard": { "completed": true, "version": 1 }
-}
-```
-
-### What each section drives
+Every white-label decision lives in **`public/osler.config.json`** (schema: [`src/lib/osler/config.ts`](src/lib/osler/config.ts); the loader merges your file over defaults, so a partial config always boots):
 
 | Section | Drives |
-|---|---|---|
-| `site.{name,shortName,tagline,githubRepo,organisation,supportEmail}` | `<title>`, OG/Twitter metadata, PWA manifest name, in-app brand mark, in-app About section, admin sidebar link, support link |
-| `site.url` | Canonical origin baked into og:image / twitter:image at build time (`metadataBase`). Set it to your deployed https URL, or social platforms render link previews without an image (Next's default base is `http://localhost:3000`). On Cloudflare Pages CI builds the `CF_PAGES_URL` env var is picked up automatically when this is empty. |
-| `engines.<id>.{enabled,label,singular,color,icon}` | **Plugin system** — toggle each of the 7 engines on/off; optional per-engine label/singular/color/icon overrides |
-| `themes.{default,custom[]}` | Default theme + custom oklch palettes with full token support (primary, primaryForeground, background, foreground, card, cardForeground, popover, popoverForeground, secondary, secondaryForeground, muted, mutedForeground, accent, destructive, border, input, ring, plus 9 sidebar* tokens); CSS variable overrides injected at runtime |
-| `cloud.{enabled,apiUrl,turnstileSiteKey,syncQbank,syncFlashcards}` | Optional Cloudflare Worker accounts + cross-device progress sync |
-| `defaults.{view,language,quiz,ai,sync}` | Default options applied on first use |
-| `wizard.{completed,completedAt}` | First-time wizard state |
+|---|---|
+| `site.{name,shortName,tagline,githubRepo,organisation,supportEmail,url}` | `<title>`, PWA manifest, brand mark, About section, social previews (`site.url` = your final https origin) |
+| `engines.<id>.{enabled,label,singular,color,icon}` | **Plugin system** — toggle each of the 7 engines; per-engine overrides |
+| `themes.{default,custom[]}` | Default theme + custom oklch palettes (all design tokens) |
+| `cloud.{enabled,apiUrl,turnstileSiteKey,syncQbank,syncFlashcards}` | Cloud backend + cross-device sync — `cloud.apiUrl` is your Worker URL (set it in step 7 below) |
+| `defaults.{view,language,quiz,ai,sync}` | Defaults applied on first use |
 
-### Editing the config
+**Engine plugins are admin-controlled**: the instance admin decides which of `quiz | bank | written | flashcard | osce | library | video` ship; end users see read-only badges. Disabling an engine hides it and skips its content loading — nothing is deleted.
 
-You have three options, in order of convenience:
-
-1. **Tauri admin app** — Run the admin (see §4 below) and use the **Config Editor** view for a structured form, or the **Setup Wizard** for a 6-step first-time flow.
-2. **Hand-edit** — Open `public/osler.config.json` in any editor, save, reload the app.
-3. **Instance generator** — Use the admin's **New Instance** view to scaffold a brand-new project folder with a fresh config + content stubs + README.
+You can hand-edit the file, or use the Tauri admin's **Config Editor** / **Setup Wizard** (§5).
 
 ---
 
-## 3. Engine plugins (admin-only)
+## 4. Deploy a full instance A → Z (Cloudflare, free tier)
 
-The 7 engine types are each treated as a toggleable plugin:
+Each step below lists its command, the files it touches, and how to verify it. Steps are ordered so the instance is never half-configured.
 
-| Engine | Content folder | What it does |
-|---|---|---|
-| `quiz` | `public/osler-content/qbank/` | Standard MCQ quizzes with 5 choices |
-| `bank` | `public/osler-content/qbank/` | Passage-based questions (shares folder with `quiz`) |
-| `written` | `public/osler-content/qbank/` | Free-text prompts with rubric review (shares folder) |
-| `flashcard` | `public/osler-content/flashcard/` | Spaced-repetition decks with subdecks |
-| `osce` | `public/osler-content/osce/` | Clinical OSCE simulator with AI voice |
-| `library` | `public/osler-content/library/` | Markdown article reader with highlighting |
-| `video` | `public/osler-content/videos/` | Video library with YouTube / mp4 / HLS |
+### Step 1 — Authenticate and pick your names
 
-### ⚠️ Plugins are admin-controlled, not user-controlled
+```bash
+npx wrangler login         # opens the browser; authorize your Cloudflare account
+```
 
-End users of your hosted instance **cannot** toggle plugins on or off. The decision of which engines to include is made by the instance admin (you) via `osler.config.json` and applies to every user of the instance. The in-app Settings → About section shows the enabled plugins as read-only badges with an explicit "Admin-controlled" tag.
+Choose:
+- **Pages project name** → your frontend URL becomes `https://<name>.pages.dev` (used in step 3 and step 8).
+- The Worker name defaults to `osler-cloud` (`cloudflare/worker/wrangler.toml` → `name`) — rename it here if you deploy multiple instances; your backend URL becomes `https://<worker-name>.<account-subdomain>.workers.dev` (the subdomain is shown after the first deploy in step 5).
 
-Disabling an engine:
-- Hides its module from the Learn hub (`learn.tsx` filters `ALL_MODULES` by `isEngineEnabled`).
-- Skips its category in `loadCategoryTrees()` / `loadContentForTypes()` / `loadContentByUid()` — content is never fetched from disk.
-- **Does NOT delete content on disk** — re-enabling the engine brings it back.
+### Step 2 — Create the core database
 
-### Per-engine overrides
+```bash
+cd cloudflare/worker
+npx wrangler d1 create osler-cloud
+```
 
-Each engine entry accepts optional overrides that take precedence over the built-in `ENGINE_META`:
+Copy the returned `database_id` into `cloudflare/worker/wrangler.toml`:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "osler-cloud"
+database_id = "<paste-the-uuid-here>"
+```
+
+**Verify:** `npx wrangler d1 list` shows `osler-cloud`.
+
+> R2 (optional, for the web-admin content workflow): `npx wrangler r2 bucket create osler-content` — the binding already exists in `wrangler.toml`. Skip it if you only ship static content packs; content-admin routes return 500 without it.
+
+### Step 3 — Point the Worker at your frontend
+
+In `cloudflare/worker/wrangler.toml` → `[vars]`:
+
+```toml
+ALLOWED_ORIGIN = "https://<name>.pages.dev"   # exact origin of your frontend
+WORKER_URL      = "https://osler-cloud.<account-subdomain>.workers.dev"
+```
+
+`ALLOWED_ORIGIN` is enforced for CORS — a mismatch means every browser request fails. `WORKER_URL` backs Google OAuth callbacks and transactional email; set it now and correct the subdomain after the first deploy if needed.
+
+### Step 4 — Set the Worker secrets
+
+```bash
+npx wrangler secret put JWT_SECRET        # REQUIRED — openssl rand -base64 32
+```
+
+Optional secrets (set later, each documented in [`docs/environment.md`](docs/environment.md)): `AUDIT_HMAC_KEY` (tamper-evident audit chain), `TURNSTILE_SECRET_KEY` (bot protection — then set `TURNSTILE_ENABLED = "true"` in `[vars]`), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (Google Sign-In), `RESEND_API_KEY` + `EMAIL_FROM` (transactional email), `GEMINI_ENCRYPTION_KEY` (encrypts users' stored Gemini keys), `CF_ANALYTICS_TOKEN` (live quota panel; add **D1 → Read** to that token for measured storage numbers).
+
+### Step 5 — Apply migrations and deploy the Worker
+
+```bash
+npm run db:migrate      # applies migrations/*.sql to the core D1 database
+npm run deploy          # deploys the Worker; prints its URL
+```
+
+**Verify:** `curl https://<worker-url>/v1/health` → `{"ok":true,...}`.
+
+### Step 6 — Point the frontend at the Worker
+
+In `public/osler.config.json`:
 
 ```jsonc
-"engines": {
-  "quiz": {
-    "enabled": true,
-    "label": "Weekly Quiz",       // overrides "Quiz"
-    "singular": "Quiz",
-    "color": "oklch(0.55 0.20 16)",  // overrides default oklch
-    "icon": "clipboard-list"          // overrides default lucide icon name
-  }
+"cloud": {
+  "enabled": true,
+  "apiUrl": "https://osler-cloud.<account-subdomain>.workers.dev",
+  "syncQbank": true,
+  "syncFlashcards": true
 }
 ```
 
-Read these via `getEngineMeta(type)` from `@/lib/osler/content`.
+`cloud.apiUrl` is the recommended way to set the backend URL (it wins over the `NEXT_PUBLIC_CLOUD_API_URL` env var and can be changed post-build via the Tauri admin without rebuilding).
+
+### Step 7 — Build and deploy the frontend
+
+```bash
+npm run generate-manifests     # only needed after adding/removing content packs
+npm run build                  # static export → out/
+npx wrangler pages deploy out --project-name <name>
+```
+
+(Or edit the `deploy:pages` script in the root `package.json` to your project name and run `npm run deploy:pages`.)
+
+**Verify:** open `https://<name>.pages.dev` — the app loads, and Settings → Sync shows the cloud backend as available.
+
+### Step 8 — Create the first admin
+
+Admin is **not** granted at registration. Register through the app (`/login` → create account), then promote yourself:
+
+```bash
+npx wrangler d1 execute osler-cloud --remote \
+  --command "UPDATE users SET role = 'admin' WHERE username = '<your-username>' COLLATE NOCASE;"
+```
+
+**Verify:** reload the app — the admin panel appears in the navigation.
+
+### Step 9 — Verify the whole stack
+
+- [ ] `GET /v1/health` returns `ok`
+- [ ] Register + login works (password reset email needs the optional Resend setup)
+- [ ] Answer a quiz question with two devices / browsers signed into the same account — progress syncs (the second device pulls within seconds via the realtime hub)
+- [ ] Admin → Analytics renders; the **Cloudflare Free Tier** panel shows your quotas
+
+### Step 10 — Optional scale-out and integrations
+
+- **D1 sharding (~2.5 GB sync pool)** — when sync data grows: `npm run db:shard` creates six sync shard databases + a telemetry database, migrates every user's rows into their shard, and activates the bindings; deploy again, then `npm run db:shard -- --prune`. Details: [`cloudflare/worker/README.md`](cloudflare/worker/README.md) → "D1 sharding". Uses 8 of the 10 free-tier database slots.
+- **Turnstile, Google Sign-In, email, live quota panel** — each is a secret + a config flip; exact steps in [`docs/environment.md`](docs/environment.md) and [`docs/cloudflare-backend.md`](docs/cloudflare-backend.md).
+- **Custom domain** — attach it to the Pages project, update `ALLOWED_ORIGIN` (step 3) + `site.url`, and redeploy both sides.
 
 ---
 
-## 4. The Tauri admin suite (Instance Manager & Content Studio)
+## 5. The Tauri admin suite (automates §3–§4)
 
-The admin suite is a standalone Tauri (Rust + HTML/JS) desktop application in [`tauri-admin/`](tauri-admin/) split into two dedicated applications / modes:
+The desktop app in [`tauri-admin/`](tauri-admin/) wraps the manual steps above into guided flows:
 
-1. **Osler Instance & Cloud Manager** (`instance-manager.html`):
-   - **Automated Step-by-Step Instance Generator**: 5-step guided wizard (Prerequisites → Site Identity & Engines → Cloudflare Full-Stack Configuration → Automated Deployment Pipeline → Ready Actions).
-   - **Prerequisites Diagnostic & Auto-Installer**: Checks Node.js (>= 18), Git, Wrangler CLI, and Cloudflare login status with 1-click install/fix.
-   - **Full Cloudflare Deployment**: Provisions Cloudflare Pages frontend, Worker backend, D1 SQL database & migrations, and R2 content storage bucket.
-   - **Clean Scaffolding**: Strips out `tauri-admin/`, `.osler-admin/`, and build artifacts from generated instances so they remain clean, lean Next.js apps.
-   - **Instance Code Patch & Update Engine**: Pulls updates from main Osler into instances with pre-update safety snapshots (`.osler-backup/`) while preserving custom content (`public/osler-content/`), settings, and secrets.
-   - **1-Click Direct Deployment**: Runs `npm run deploy:pages` and `npm run deploy:worker` straight from the dashboard.
-
-2. **Osler Content Studio (CMS)** (`studio.html`):
-   - Pure content authoring for medical educators: Question Banks, Flashcards, OSCE Stations, Written Clinical Cases, and Library Articles.
-   - WYSIWYG & EasyMDE Markdown editors, LaTeX formulas, Mermaid diagrams, and real-time schema validation.
-   - Content-only Git workflows and manifest generation.
-
-### Running the suite
+| App | What it does |
+|---|---|
+| **Osler Instance & Cloud Manager** (`instance-manager.html`) | 5-step instance generator (prerequisites → identity & engines → Cloudflare config → automated deployment → ready actions), prerequisites auto-installer, D1/R2/Pages/Worker provisioning, 1-click deploys, and an update engine with backups (`.osler-backup/`) |
+| **Osler Content Studio** (`studio.html`) | CMS for question banks, flashcards, OSCE stations, written cases, and articles — WYSIWYG/Markdown editors, LaTeX, Mermaid, schema validation, Git workflows |
 
 ```bash
 cd tauri-admin
-cargo tauri dev     # development
-cargo tauri build   # produce a release installer
+cargo tauri dev      # development
+cargo tauri build    # release installer
 ```
-
-Switch between **Instance Manager** and **Content Studio** via the topbar switcher pill or open `instance-manager.html` / `studio.html` directly.
 
 ---
 
-## 5. Custom themes
+## 6. Themes
 
-Beyond the built-in `dark` and `light` themes, you can define any number of custom palettes in `themes.custom[]`. Each entry has:
-
-- `id` — stable identifier used in the `data-theme` attribute and the theme switcher
-- `name` — display name
-- `variant` — `"dark"` or `"light"` (controls base background/foreground defaults; also drives any code that checks `.dark` / `.light` such as Mermaid)
-- Optional oklch color overrides for all design tokens:
-  - Core: `primary`, `primaryForeground`, `background`, `foreground`, `accent`, `muted`, `mutedForeground`, `destructive`, `border`, `input`, `ring`
-  - Surfaces: `card`, `cardForeground`, `popover`, `popoverForeground`, `secondary`, `secondaryForeground`
-  - Sidebar: `sidebar`, `sidebarForeground`, `sidebarPrimary`, `sidebarPrimaryForeground`, `sidebarAccent`, `sidebarAccentForeground`, `sidebarBorder`, `sidebarRing`
-
-The theme provider injects a single `<style id="osler-custom-themes">` block into `<head>` with one rule per custom theme, scoped to `.theme-<id>`. Switching to a custom theme adds both `.theme-<id>` and the variant class to `<html>` so existing `.dark` / `.light` checks keep working.
-
-```jsonc
-"themes": {
-  "default": "school-navy",
-  "custom": [
-    {
-      "id": "school-navy",
-      "name": "School Navy",
-      "variant": "dark",
-      "primary":    "oklch(0.45 0.18 260)",
-      "primaryForeground": "oklch(0.99 0 0)",
-      "accent":     "oklch(0.55 0.15 250)",
-      "background": "oklch(0.13 0.02 260)",
-      "foreground": "oklch(0.96 0.01 260)",
-      "card":       "oklch(0.19 0.022 260)",
-      "cardForeground": "oklch(0.96 0.01 260)",
-      "popover":    "oklch(0.19 0.022 260)",
-      "popoverForeground": "oklch(0.96 0.01 260)",
-      "secondary":  "oklch(0.26 0.025 260)",
-      "secondaryForeground": "oklch(0.96 0.01 260)",
-      "muted":      "oklch(0.24 0.02 260)",
-      "mutedForeground": "oklch(0.7 0.015 240)",
-      "destructive":"oklch(0.68 0.21 22)",
-      "border":     "oklch(1 0 0 / 8%)",
-      "input":      "oklch(1 0 0 / 10%)",
-      "ring":       "oklch(0.45 0.18 260)",
-      "sidebar":    "oklch(0.17 0.02 260)",
-      "sidebarForeground": "oklch(0.96 0.01 260)",
-      "sidebarPrimary": "oklch(0.45 0.18 260)",
-      "sidebarPrimaryForeground": "oklch(0.99 0 0)",
-      "sidebarAccent": "oklch(0.26 0.025 260)",
-      "sidebarAccentForeground": "oklch(0.96 0.01 260)",
-      "sidebarBorder": "oklch(1 0 0 / 6%)",
-      "sidebarRing": "oklch(0.45 0.18 260)"
-    },
-    {
-      "id": "clinic-light",
-      "name": "Clinic Light",
-      "variant": "light",
-      "primary":    "oklch(0.35 0.10 255)",
-      "primaryForeground": "oklch(0.99 0 0)",
-      "accent":     "oklch(0.65 0.12 250)",
-      "background": "oklch(0.99 0.005 240)",
-      "foreground": "oklch(0.18 0.02 250)",
-      "card":       "oklch(1 0 0)",
-      "cardForeground": "oklch(0.18 0.02 250)",
-      "popover":    "oklch(1 0 0)",
-      "popoverForeground": "oklch(0.18 0.02 250)",
-      "secondary":  "oklch(0.95 0.01 240)",
-      "secondaryForeground": "oklch(0.2 0.02 250)",
-      "muted":      "oklch(0.95 0.01 240)",
-      "mutedForeground": "oklch(0.5 0.015 240)",
-      "destructive":"oklch(0.58 0.24 27)",
-      "border":     "oklch(0.9 0.01 240)",
-      "input":      "oklch(0.9 0.01 240)",
-      "ring":       "oklch(0.38 0.09 255)",
-      "sidebar":    "oklch(0.97 0.005 240)",
-      "sidebarForeground": "oklch(0.18 0.02 250)",
-      "sidebarPrimary": "oklch(0.35 0.10 255)",
-      "sidebarPrimaryForeground": "oklch(0.99 0 0)",
-      "sidebarAccent": "oklch(0.92 0.025 240)",
-      "sidebarAccentForeground": "oklch(0.2 0.02 250)",
-      "sidebarBorder": "oklch(0.9 0.01 240)",
-      "sidebarRing": "oklch(0.38 0.09 255)"
-    }
-  ]
-}
-```
-
-End users can switch between any of the built-in + custom themes from the in-app theme toggle (top-right). The choice is persisted to `localStorage`.
+Beyond the built-in dark/light themes, `themes.custom[]` defines brand palettes. Each entry has `id`, `name`, `variant` (`"dark"` | `"light"`), and optional oklch overrides for every design token — core (`primary`, `background`, `foreground`, `accent`, `border`, `ring`, …), surfaces (`card`, `popover`, `secondary`, …), and the 9 `sidebar*` tokens. The provider injects one CSS rule per theme scoped to `.theme-<id>`, so existing `.dark`/`.light` checks keep working. See [`docs/hosting.md`](docs/hosting.md) for a filled-in example.
 
 ---
 
-## 6. Adding content
+## 7. Adding content
 
-Content lives in `public/osler-content/` in category folders. See [`AGENTS.md`](AGENTS.md) → "Content system" for the full spec; the short version:
+Content lives in `public/osler-content/` in category folders:
 
 ```
 public/osler-content/
 ├── qbank/           ← quiz / bank / written (JSON, type auto-detected from file keys)
-│   └── cardiology/
-│       └── arrhythmias/
-│           └── questions.json
 ├── flashcard/       ← flashcard (JSON)
 ├── osce/            ← osce (JSON)
 ├── library/         ← library (Markdown with YAML frontmatter)
 └── videos/          ← video (JSON)
 ```
 
-After adding or removing content, regenerate manifests:
+Branch folders group; leaf folders hold one or more merged JSON files. After adding or removing content:
 
 ```bash
 npm run generate-manifests
 ```
 
-Or use the admin's **Manifest** view → "Regenerate" button.
-
-### Per-pack language
-
-Every content pack can declare `lang: "en" | "ar"` on its manifest node and/or its `ContentMeta`. The renderer wraps the content body in the appropriate `dir`/`lang` container so an Arabic article renders RTL even inside an English UI shell.
+Every pack can declare `lang: "en" | "ar"` so content renders RTL inside an English UI shell and vice versa. Full spec: [`AGENTS.md`](AGENTS.md) → "Content system".
 
 ---
 
-## 7. Deployment
+## 8. Keeping your instance up to date
 
-Osler is a standard Next.js 16 standalone app. The build produces `.next/standalone/` which you run with `node .next/standalone/server.js`.
+**Option A — Tauri Instance Updater (recommended):** open the Instance Manager → **Check for Updates**. It previews file diffs, snapshots your instance into `.osler-backup/`, merges core updates while protecting your content, branding, and secrets, and supports 1-click rollback.
 
-### Quick deploy options
+**Option B — Git:**
 
-| Target | How |
-|---|---|
-| **Vercel** | Connect your GitHub fork → new project → deploy. No config needed. |
-| **GitHub Pages** | Use the admin's Deploy view → GitHub Pages provider. |
-| **Cloudflare Pages** | Admin's Deploy view → Cloudflare Pages provider. |
-| **Netlify** | Admin's Deploy view → Netlify provider. |
-| **Self-hosted (VPS)** | `npm run build` → copy `.next/standalone/` + `.next/static/` + `public/` to the server → `node server.js` behind a Caddy/nginx reverse proxy. A sample [`Caddyfile`](Caddyfile) is included. |
-
-See [`scripts/build-deliverable.sh`](scripts/build-deliverable.sh) (Linux) and [`scripts/build-deliverable.ps1`](scripts/build-deliverable.ps1) (Windows) for a packaged-deploy helper.
-
-### Environment variables
-
-Only one optional env var:
-
-- `NEXT_PUBLIC_INVIDIOUS_HOST` — alternate host for the YouTube video facade (privacy-friendly YouTube alternative). If unset, the standard YouTube IFrame API is used.
-
-The Gemini AI key is configured in-app (Settings → AI Assistant), not via env, so each user can bring their own.
-
----
-
-## 8. Keeping your instances and forks in sync
-
-You have two ways to receive updates from upstream Osler:
-
-### Option A: Using the Tauri Admin Instance Updater (Recommended)
-Open the **Osler Instance Manager** → select your instance directory → click **Check for Updates**.
-- Previews the exact file diffs in `src/`, `scripts/`, `cloudflare/worker/src/`, and D1 migrations.
-- Creates an automated backup snapshot in `.osler-backup/`.
-- Merges core updates while **strictly protecting** your content in `public/osler-content/`, custom branding, and secrets.
-- Provides 1-click rollback if needed.
-
-### Option B: Using Git upstream merge
 ```bash
 git fetch upstream
-git merge upstream/main           # or rebase if you prefer a linear history
-# Resolve any conflicts in osler.config.json (usually just keep yours)
+git merge upstream/main
+# resolve conflicts in osler.config.json (usually keep yours)
 git push origin main
 ```
 
-The `osler.config.json` schema is versioned (`schemaVersion`). Breaking changes to the schema will bump the version and the loader will migrate old configs forward automatically.
+After pulling backend changes, re-run `npm run db:migrate` (and `npm run db:migrate:shards` if sharded) before redeploying the Worker. The `osler.config.json` schema is versioned; the loader migrates old configs forward automatically.
 
 ---
 
 ## 9. Branding checklist
 
-Going from a fresh fork to a fully white-labelled instance:
-
-- [ ] Edit `public/osler.config.json` → `site.name`, `site.shortName`, `site.tagline`, `site.githubRepo` (your fork URL), `site.organisation`
-- [ ] Set `site.url` to your deployed https origin so social link previews show your image (see the config table in §1)
-- [ ] Toggle engines in `engines` to match what your audience needs
-- [ ] Add at least one custom theme in `themes.custom` with your brand colours
+- [ ] `site.name`, `site.shortName`, `site.tagline`, `site.githubRepo`, `site.organisation`, `site.url`
+- [ ] Toggle `engines` to your audience's needs
+- [ ] Add a custom theme in `themes.custom` with your brand colours
 - [ ] Set `defaults.language.ui` to your audience's primary language
-- [ ] Replace `public/assets/favicon.png`, `icon.svg`, and the `public/assets/icons/*` PWA icons with your own (sizes: 192, 512, maskable-192, maskable-512, apple-touch-icon)
-- [ ] (Optional) Replace the brand mark SVG in `src/components/osler/app-shell.tsx` (look for the `<Activity>` lucide icon in the header)
-- [ ] (Optional) Edit `public/manifest.webmanifest` to match your brand
-- [ ] Add your content under `public/osler-content/` and run `npm run generate-manifests`
-- [ ] Deploy (see §7)
+- [ ] Replace `public/assets/icon.svg`, `favicon.png`, and the PWA icons (`192`, `512`, maskable, apple-touch)
+- [ ] (Optional) Edit `public/manifest.webmanifest`
+- [ ] Add content under `public/osler-content/` + `npm run generate-manifests`
+- [ ] Deploy (§4) and promote the first admin (§4 step 8)
 
 ---
 
 ## 10. Getting help
 
 - **Source & issues:** <https://github.com/eyad-elghareeb/osler>
-- **Architecture & conventions:** [`AGENTS.md`](AGENTS.md)
-- **Main README:** [`README.md`](README.md)
+- **Full documentation:** [`docs/`](docs/) — hosting, deployment runbooks, security, admin guide, API reference, environment variables, troubleshooting
+- **Worker internals & sharding:** [`cloudflare/worker/README.md`](cloudflare/worker/README.md)
+- **Conventions:** [`AGENTS.md`](AGENTS.md)
 
-Pull requests are welcome. Please follow the conventions in `AGENTS.md` — especially the i18n rule that every new English string must land alongside its Arabic translation in the same commit.
+Pull requests are welcome — please follow the conventions in `AGENTS.md`, especially the rule that every new English string lands with its Arabic translation in the same commit.
