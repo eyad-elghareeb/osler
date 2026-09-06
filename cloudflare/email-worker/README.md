@@ -13,6 +13,11 @@ No custom domain needed at all. The Gmail SMTP approach works with just a Gmail 
 
 The trade-off: emails will be sent from `yourname@gmail.com`. Recipients will see it came from Gmail. You cannot make it look like it came from `@yourbrand.com` without owning that domain — that is what the Resend path is for.
 
+> **Automated path:** the Tauri admin app's Instance Generator does all of
+> this for you (relay deploy + secrets + private service binding + APP_ORIGIN
+> + migration + health check) — see the *Email delivery* section in step 3.
+> The manual steps below are for existing instances and troubleshooting.
+
 ---
 
 ## 1. Create the Gmail App Password

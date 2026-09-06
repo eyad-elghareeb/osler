@@ -6,6 +6,9 @@
 //   * writing optional Worker secrets (Google OAuth credentials)
 //   * promoting the first admin user
 //   * verifying the deployment with a health check
+//   * the Gmail relay worker A-to-Z (deploy_email_worker: relay deploy +
+//     secrets, /health sender check, private service binding + APP_ORIGIN on
+//     the main Worker, main redeploy, email_log migration)
 //
 // The wizard's "Ready" step drives these so a fresh instance goes from zero
 // to fully configured without touching a terminal.
@@ -249,16 +252,28 @@ pub struct EmailWorkerSetup {
     /// handles the token.
     pub email_token: Option<String>,
     pub from_name: Option<String>,
+    /// Pages origin of the instance app (e.g. https://my-school.pages.dev).
+    /// Written as APP_ORIGIN into the main Worker's [vars] — it drives the
+    /// password-reset / verify links and gates the admin test endpoint.
+    pub app_origin: Option<String>,
+    /// Core D1 database name for the email_log migration.
+    pub d1_name: Option<String>,
 }
 
 /// Deploy the standalone Gmail relay worker (cloudflare/email-worker) inside
-/// a generated instance and wire it to that instance's main Worker:
+/// a generated instance and wire it to that instance's main Worker, A to Z:
 ///   1. writes GMAIL_USER / GMAIL_APP_PASSWORD / EMAIL_TOKEN (+ FROM_NAME)
 ///      as relay secrets
-///   2. runs `npx wrangler deploy` in cloudflare/email-worker and parses the
-///      workers.dev URL from the output
-///   3. writes EMAIL_WORKER_URL + EMAIL_WORKER_TOKEN as main-Worker secrets
-/// Secret values are piped over stdin and never logged.
+///   2. runs `npx wrangler deploy` in cloudflare/email-worker, parses the
+///      workers.dev URL from the output, and verifies /health reports the
+///      configured sender (fail fast on a wrong address / bad App Password)
+///   3. wires the main Worker: EMAIL_WORKER_TOKEN (+ URL fallback) secrets,
+///      the private [[services]] EMAIL binding + APP_ORIGIN in its
+///      wrangler.toml, then redeploys so binding + vars take effect
+///   4. applies the email_log D1 migration for the admin delivery log
+/// Secret values are piped over stdin and never logged. The migration is
+/// best-effort (sends work without it) and surfaces as a warning instead of
+/// failing the whole setup.
 #[tauri::command]
 pub async fn deploy_email_worker(
     target_dir: Option<String>,
@@ -335,11 +350,28 @@ pub async fn deploy_email_worker(
             .map(|token| token.trim_matches(|c: char| ",;\"".contains(c)).to_string())
             .ok_or_else(|| "Deploy succeeded but no workers.dev URL was found in the output".to_string())?;
 
-        // 3. Wire the main Worker to the relay.
-        for (name, value) in [("EMAIL_WORKER_URL", url.clone()), ("EMAIL_WORKER_TOKEN", email_token)] {
+        // 3. Relay health: it must report our sender address. A mismatch
+        // means the secrets didn't land (or a typo in the Gmail address) —
+        // fail fast instead of wiring a dead relay.
+        let relay_sender = relay_health_sender(&url)?;
+        if relay_sender.to_lowercase() != setup.gmail_user.trim().to_lowercase() {
+            return Err(format!(
+                "Relay is live but reports sender '{}' instead of '{}' — check the Gmail address and App Password, then retry",
+                relay_sender,
+                setup.gmail_user.trim()
+            ));
+        }
+
+        let mut warnings: Vec<String> = Vec::new();
+
+        // 4. Wire the main Worker. Secrets apply live; the private service
+        // binding + APP_ORIGIN live in wrangler.toml and need a redeploy.
+        // EMAIL_WORKER_URL stays as a fallback for cross-account layouts —
+        // the binding takes precedence whenever present.
+        for (name, value) in [("EMAIL_WORKER_TOKEN", email_token.clone()), ("EMAIL_WORKER_URL", url.clone())] {
             let (code, out) = run_captured(
-                npx_command(&["wrangler", "secret", "put", &name], &main_dir),
-                Some(&value),
+                npx_command(&["wrangler", "secret", "put", name], &main_dir),
+                Some(value.as_str()),
                 120,
             )?;
             if code != 0 {
@@ -347,7 +379,37 @@ pub async fn deploy_email_worker(
             }
         }
 
-        Ok(json!({ "url": url, "secrets": secrets.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>() }))
+        let relay_name = wrangler_name(&email_dir.join("wrangler.toml")).unwrap_or_else(|| "osler-email".to_string());
+        match ensure_service_binding(&main_dir, &relay_name) {
+            Ok(true) => {}
+            Ok(false) => warnings.push("EMAIL service binding already present — left as is".to_string()),
+            Err(e) => warnings.push(format!("Service binding not written ({e}); relay still reachable over HTTPS")),
+        }
+        match setup.app_origin.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            Some(origin) => {
+                if let Err(e) = ensure_app_origin(&main_dir, origin) {
+                    warnings.push(format!("APP_ORIGIN not written ({e}); reset/verify links need it"));
+                }
+            }
+            None => warnings.push("No app origin supplied — set APP_ORIGIN in the main wrangler.toml so reset/verify links work".to_string()),
+        }
+
+        let (code, out) = run_captured(npx_command(&["wrangler", "deploy"], &main_dir), None, 300)?;
+        if code != 0 {
+            return Err(format!("Main Worker redeploy failed (binding/vars not live): {}", last_line(&out)));
+        }
+
+        // 5. email_log migration for the admin delivery log. Best-effort:
+        // logDelivery wraps its insert in try/catch, so sends work without
+        // the table — a failure here warns instead of failing the setup.
+        let d1 = setup.d1_name.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("osler-cloud");
+        match run_captured(npx_command(&["wrangler", "d1", "migrations", "apply", d1, "--remote"], &main_dir), None, 180) {
+            Ok((0, _)) => {}
+            Ok((_, out)) => warnings.push(format!("D1 migration notice: {}", last_line(&out))),
+            Err(e) => warnings.push(format!("D1 migration skipped: {e}")),
+        }
+
+        Ok(json!({ "url": url, "mode": "binding", "relay_sender": relay_sender, "warnings": warnings }))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -355,4 +417,149 @@ pub async fn deploy_email_worker(
 
 fn last_line(out: &str) -> String {
     out.lines().rev().map(str::trim).find(|l| !l.is_empty()).unwrap_or("unknown error").to_string()
+}
+
+/// GET the relay's /health endpoint and return its reported sender address.
+/// Proves the deployed relay answers and its secrets landed.
+fn relay_health_sender(relay_url: &str) -> Result<String, String> {
+    let health_url = format!("{}/health", relay_url.trim_end_matches('/'));
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(20))
+        .build();
+    let resp = agent
+        .get(&health_url)
+        .call()
+        .map_err(|e| format!("Relay deployed but its /health check failed: {e}"))?;
+    if resp.status() < 200 || resp.status() >= 300 {
+        return Err(format!(
+            "Relay deployed but /health returned HTTP {}",
+            resp.status()
+        ));
+    }
+    let body: Value = resp
+        .into_json()
+        .map_err(|e| format!("Relay /health returned non-JSON: {e}"))?;
+    Ok(body
+        .get("from")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
+/// First `name = "…"` value in a wrangler.toml (the Worker's script name).
+fn wrangler_name(toml_path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(toml_path).ok()?;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("name =") {
+            return trimmed
+                .split('=')
+                .nth(1)
+                .map(|v| v.trim().trim_matches('"').trim_matches('\'').to_string())
+                .filter(|s| !s.is_empty());
+        }
+    }
+    None
+}
+
+/// Ensure the private `EMAIL` service binding exists in the main Worker's
+/// wrangler.toml: uncomment the template block when present, else append.
+/// Returns true when the file was changed.
+fn ensure_service_binding(main_dir: &Path, relay_name: &str) -> Result<bool, String> {
+    let path = main_dir.join("wrangler.toml");
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("cannot read wrangler.toml: {e}"))?;
+    if content.lines().any(|l| l.trim() == "binding = \"EMAIL\"") {
+        return Ok(false);
+    }
+    let live = format!("[[services]]\nbinding = \"EMAIL\"\nservice = \"{relay_name}\"");
+    let lines: Vec<&str> = content.lines().collect();
+    let mut replaced = false;
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 3);
+    let mut i = 0;
+    while i < lines.len() {
+        if !replaced
+            && lines[i].trim() == "# [[services]]"
+            && lines
+                .get(i + 1)
+                .is_some_and(|l| l.trim() == "# binding = \"EMAIL\"")
+            && lines
+                .get(i + 2)
+                .is_some_and(|l| l.trim().starts_with("# service ="))
+        {
+            for part in live.lines() {
+                out.push(part.to_string());
+            }
+            i += 3;
+            replaced = true;
+        } else {
+            out.push(lines[i].to_string());
+            i += 1;
+        }
+    }
+    let mut body = out.join("\n");
+    if content.ends_with('\n') {
+        body.push('\n');
+    }
+    if !replaced {
+        if !body.ends_with('\n') {
+            body.push('\n');
+        }
+        body.push_str(&format!("\n{live}\n"));
+    }
+    std::fs::write(&path, body).map_err(|e| format!("cannot write wrangler.toml: {e}"))?;
+    Ok(true)
+}
+
+/// Ensure `APP_ORIGIN = "<origin>"` exists in the main Worker's [vars]:
+/// replace the line (commented template or stale value) when present, else
+/// insert after WORKER_URL, else append. Returns true when changed.
+fn ensure_app_origin(main_dir: &Path, origin: &str) -> Result<bool, String> {
+    if origin.contains('"') || origin.contains('\n') || !origin.contains("://") {
+        return Err(format!("refusing to write suspicious origin: {origin}"));
+    }
+    let path = main_dir.join("wrangler.toml");
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("cannot read wrangler.toml: {e}"))?;
+    let want = format!("APP_ORIGIN = \"{origin}\"");
+    let lines: Vec<&str> = content.lines().collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);
+    let mut done = false;
+    let mut changed = false;
+    for line in &lines {
+        let t = line.trim();
+        if !done && (t.starts_with("APP_ORIGIN") || t.starts_with("# APP_ORIGIN")) {
+            out.push(want.clone());
+            done = true;
+            changed = *line != want;
+        } else {
+            out.push(line.to_string());
+        }
+    }
+    if !done {
+        let mut inserted = false;
+        let mut with_insert: Vec<String> = Vec::with_capacity(out.len() + 1);
+        for line in out {
+            with_insert.push(line.clone());
+            if !inserted && line.trim().starts_with("WORKER_URL") {
+                with_insert.push(want.clone());
+                inserted = true;
+            }
+        }
+        if !inserted {
+            with_insert.push(want.clone());
+        }
+        out = with_insert;
+        changed = true;
+    }
+    if !changed {
+        return Ok(false);
+    }
+    let mut body = out.join("\n");
+    if content.ends_with('\n') {
+        body.push('\n');
+    }
+    std::fs::write(&path, body).map_err(|e| format!("cannot write wrangler.toml: {e}"))?;
+    Ok(true)
 }

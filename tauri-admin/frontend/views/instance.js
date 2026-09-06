@@ -781,16 +781,21 @@
                 } else {
                   try {
                     addLog("📧 Deploying the Gmail relay worker (email-worker)...", "#58a6ff");
+                    const appOrigin = "https://" + (state.cloud.projectName || "osler") + ".pages.dev";
                     const res = await invoke("deploy_email_worker", {
                       targetDir: state.targetDir,
                       setup: {
                         gmailUser: state.email.gmailUser.trim(),
                         gmailAppPassword: state.email.gmailAppPassword.trim(),
                         fromName: state.email.fromName.trim() || null,
+                        appOrigin,
+                        d1Name: state.cloud.d1Name || "osler-cloud",
                       },
                     });
                     state.email.url = res.url;
-                    addLog(`✅ Relay worker live at ${res.url} - password-reset email is now delivered via Gmail`, "#3fb950");
+                    addLog(`✅ Relay worker live at ${res.url} (sender verified: ${res.relay_sender})`, "#3fb950");
+                    addLog(`✅ Main Worker rewired over the private service binding (APP_ORIGIN=${appOrigin}) — send a test mail from Admin → Email`, "#3fb950");
+                    for (const w of res.warnings || []) addLog(`⚠️ ${w}`, "#d29922");
                   } catch (e) {
                     addLog(`⚠️ ${t("instance.email.deployFailed")}: ${String(e)}`, "#d29922");
                   }
