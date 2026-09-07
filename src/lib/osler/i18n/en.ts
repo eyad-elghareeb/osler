@@ -1238,6 +1238,12 @@ export const en = {
     "settings.danger.clearAll": "Clear All Progress",
     "settings.danger.confirm": "Are you sure?",
     "settings.danger.confirmYes": "Yes, clear everything",
+    "settings.danger.resetAll": "Reset all local data",
+    "settings.danger.resetAllSub": "Wipes every pack progress, session, flashcard review, note, sticky note, article highlight, achievement, and bookmark on this device. Cloud-synced data is preserved on the server.",
+    "settings.danger.resetAllConfirm": "Type RESET to wipe all local data",
+    "settings.danger.resetAllButton": "Reset all local data",
+    "settings.danger.resetAllDone": "All local data has been reset. The page will reload.",
+    "settings.danger.resetAllFailed": "Reset failed: {error}",
 
     "settings.guides.title": "Interactive Guides",
     "settings.guides.subtitle":
@@ -1357,12 +1363,12 @@ export const en = {
 
     "sync.file.exportTitle": "Backup Progress",
     "sync.file.exportDesc":
-      "Download all your progress data to a secure file. Use this file to restore your data on another device or after a reset.",
+      "Download a portable .osler-backup file containing your progress, sessions, notes, and achievements. Use it to move to a new device or keep an offline copy.",
     "sync.file.exportButton": "Download Backup",
     "sync.file.exporting": "Exporting\u2026",
     "sync.file.importTitle": "Restore Progress",
     "sync.file.importDesc":
-      "Select a backup file to restore your progress. Data will be merged with existing records.",
+      "Restore from a .osler-backup file. The contents are merged into your local data — newer records win.",
     "sync.file.importButton": "Select Backup File",
     "sync.file.reading": "Reading file\u2026",
     "sync.file.success": "Backup downloaded successfully",
@@ -1370,6 +1376,17 @@ export const en = {
     "sync.file.exportFailed": "Export failed: {error}",
     "sync.file.importFailed": "Import failed: {error}",
     "sync.file.unknownError": "Unknown error",
+    "sync.file.previewTitle": "Review backup before merging",
+    "sync.file.previewFrom": "From {name} \u00b7 {date}",
+    "sync.file.previewSize": "Size",
+    "sync.file.previewProgress": "Question records",
+    "sync.file.previewSessions": "Saved sessions",
+    "sync.file.previewFlashcards": "Flashcard reviews",
+    "sync.file.previewNotes": "Notes",
+    "sync.file.previewAchievements": "Achievements",
+    "sync.file.previewHighlights": "Article highlights",
+    "sync.file.previewN": "{n}",
+    "sync.file.confirmImport": "Merge into local data",
 
     "sync.network.title": "Network Sync",
     "sync.network.desc":

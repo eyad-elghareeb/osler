@@ -22,6 +22,12 @@ export const P2P_CHUNK_SIZE = 16_384;
 export const QR_CHUNK_SIZE = 700;
 export const MQTT_RELAY_MAX = 262_144;
 
+/** Hard size cap on the wire-format payload — protects against OOM / main-
+ *  thread freeze when an oversized or hostile packet is decoded. The cap is
+ *  ~25 MB compressed (well above a realistic full-state export) so legitimate
+ *  backups and P2P transfers pass through unchanged. */
+export const SYNC_WIRE_MAX_BYTES = 25 * 1024 * 1024;
+
 /* ── CRC32 ──────────────────────────────────────────────────────────── */
 
 let crcTable: Uint32Array | null = null;
@@ -88,6 +94,9 @@ export function encode(payload: SyncPayload): string {
 
 export function decode(wire: string): SyncPayload {
   if (!wire || typeof wire !== "string") throw new Error("Empty or non-string sync data");
+  if (wire.length > SYNC_WIRE_MAX_BYTES) {
+    throw new Error(`Sync payload too large: ${(wire.length / 1048576).toFixed(1)} MB (max ${SYNC_WIRE_MAX_BYTES / 1048576} MB)`);
+  }
   wire = sanitizeWire(wire);
   const trimmed = wire.trim();
   if (!trimmed.length) throw new Error("Blank sync data received");

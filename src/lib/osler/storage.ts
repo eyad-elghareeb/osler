@@ -9,6 +9,21 @@ import type { AchievementRecord } from "./achievements";
 const DB_NAME = "osler-db-v1";
 const DB_VERSION = 6;
 
+/** Hard limits on imported sync/backup payloads. A single oversized record
+ *  can OOM the tab or freeze the main thread during JSON.parse + IndexedDB
+ *  write; both caps below are deliberately generous (well above a realistic
+ *  full-state export) so legitimate backups pass but adversarial or corrupt
+ *  files fail fast with a clear error. */
+const IMPORT_MAX_KEYS = 50_000;
+const IMPORT_MAX_JSON_BYTES = 100 * 1024 * 1024; // 100 MB decompressed
+const IMPORT_MAX_RECORD_BYTES = 4 * 1024 * 1024;  // 4 MB per record
+const LOCALSTORAGE_OSLER_PREFIX = "osler-";
+const LOCALSTORAGE_PRESERVE = new Set<string>([
+  // Never wipe the live session — losing it would silently downgrade the
+  // user to a guest on reload. Cloud sync re-derives everything else.
+  "osler-local-session",
+]);
+
 /** localStorage key holding the bookmark state for library article paths —
  *  `Record<path, { a: addedAt, d?: deletedAt }>` (two-phase LWW set). Each
  *  counter is grow-only, so deletions propagate across sync and a later
@@ -98,6 +113,14 @@ export const articleBookmarks = {
     if (changed) writeBookmarkState(local);
     return changed;
   },
+
+  /** Wipe every local bookmark — used by the danger-zone full reset. */
+  clear(): void {
+    writeBookmarkState({});
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
+    }
+  },
 };
 
 /** Every content kind synced to the cloud, mirroring the worker's SYNC_KINDS.
@@ -121,6 +144,31 @@ export type SyncKind = (typeof SYNC_KINDS)[number];
 
 let dbInstance: IDBDatabase | null = null;
 let dbReady: Promise<IDBDatabase> | null = null;
+
+/** Rough JSON-size estimate of an arbitrary value (strings, arrays, plain
+ *  objects, primitives). Used to enforce import caps before touching IDB —
+ *  not a byte-perfect measurement, but it's O(n) and bounds the same
+ *  attack the caps are designed to defeat. */
+function byteSizeOf(value: unknown, seen: WeakSet<object> = new WeakSet()): number {
+  if (value === null || value === undefined) return 4;
+  const t = typeof value;
+  if (t === "string") return (value as string).length * 2;
+  if (t === "number" || t === "boolean") return 8;
+  if (t !== "object") return 8;
+  const obj = value as object;
+  if (seen.has(obj)) return 0;
+  seen.add(obj);
+  if (Array.isArray(obj)) {
+    let n = 8;
+    for (const item of obj) n += byteSizeOf(item, seen);
+    return n;
+  }
+  let n = 16;
+  for (const [k, v] of Object.entries(obj)) {
+    n += k.length * 2 + byteSizeOf(v, seen);
+  }
+  return n;
+}
 
 function openDB(): Promise<IDBDatabase> {
   if (dbInstance) return Promise.resolve(dbInstance);
@@ -183,6 +231,33 @@ function openDB(): Promise<IDBDatabase> {
   });
 
   return dbReady;
+}
+
+/** Wipe every Osler IndexedDB store at once. Used by the danger-zone "reset
+ *  all local data" button. The whole IDBDatabase is deleted and re-opened
+ *  with the original schema so on-disk storage is reclaimed (a clear() per
+ *  store would leave tombstones behind). */
+async function deleteEntireDatabase(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+  }
+  dbReady = null;
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => resolve();
+  });
+  // Wipe every in-memory cache entry so a re-opening session starts clean.
+  memoryCache.clear();
+  notesCache = null;
+  cacheHydrated = false;
+  if (cachedQuizSettings) cachedQuizSettings = null;
+  quizSettingsHydrated = false;
+  if (cachedDailyGoal) cachedDailyGoal = null;
+  dailyGoalHydrated = false;
 }
 
 async function idbGet<T>(storeName: string, key: string): Promise<T | null> {
@@ -645,26 +720,92 @@ export const storage = {
     // is a per-key union ranked by timestamp, so a plain delete would be
     // resurrected by the next pull from a device that still holds the records.
     const now = Date.now();
+    // Snapshot the keys first so the tombstone writes below can't perturb
+    // the iteration order (setCached mutates the same Map).
+    const targetKeys: string[] = [];
     for (const [k, v] of memoryCache) {
       if (k.startsWith(`progress:${uid}:`) && !(v as QuestionRecord).deletedAt) {
-        const record = { ...(v as QuestionRecord), timestamp: now, deletedAt: now };
-        setCached("progress", k.replace("progress:", ""), record);
-        idbPut("progress", k.replace("progress:", ""), record).catch(console.warn);
+        targetKeys.push(k);
       }
+    }
+    for (const k of targetKeys) {
+      const v = memoryCache.get(k) as QuestionRecord;
+      const record = { ...v, timestamp: now, deletedAt: now };
+      setCached("progress", k.replace("progress:", ""), record);
+      idbPut("progress", k.replace("progress:", ""), record).catch(console.warn);
     }
     dispatchChange("osler-progress-changed");
   },
 
   async clearAll() {
     const now = Date.now();
+    const targetKeys: string[] = [];
     for (const [k, v] of memoryCache) {
       if (k.startsWith("progress:") && !(v as QuestionRecord).deletedAt) {
-        const record = { ...(v as QuestionRecord), timestamp: now, deletedAt: now };
-        setCached("progress", k.replace("progress:", ""), record);
-        idbPut("progress", k.replace("progress:", ""), record).catch(console.warn);
+        targetKeys.push(k);
       }
     }
+    for (const k of targetKeys) {
+      const v = memoryCache.get(k) as QuestionRecord;
+      const record = { ...v, timestamp: now, deletedAt: now };
+      setCached("progress", k.replace("progress:", ""), record);
+      idbPut("progress", k.replace("progress:", ""), record).catch(console.warn);
+    }
     dispatchChange("osler-progress-changed");
+  },
+
+  /**
+   * Hard-reset the local device: delete the entire IndexedDB, wipe every
+   * `osler-*` localStorage key except the live session mirror (so the user
+   * stays signed in), clear the in-memory caches, and re-open a fresh DB.
+   *
+   * Unlike `clearAll`/`clearPack` (which tombstone progress so the deletion
+   * propagates to other devices), this is a *local* wipe — the next sync
+   * pull will resurrect any data the cloud still holds, but the user
+   * explicitly opted into a clean slate.
+   *
+   * Used by the danger-zone "Reset all local data" button.
+   */
+  async resetAll(): Promise<void> {
+    if (typeof window === "undefined") return;
+    // 1. Wipe localStorage. The live session key is preserved so a reload
+    //    doesn't downgrade the user to a guest.
+    const removeKeys: string[] = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(LOCALSTORAGE_OSLER_PREFIX) && !LOCALSTORAGE_PRESERVE.has(k)) {
+          removeKeys.push(k);
+        }
+      }
+      for (const k of removeKeys) localStorage.removeItem(k);
+    } catch {}
+    // 2. Wipe the IndexedDB. This clears progress, sessions, flashcards,
+    //    notes, sticky notes, article highlights, achievements, settings —
+    //    every store in one shot, with on-disk space reclaimed.
+    await deleteEntireDatabase();
+    // 3. Reset module-level caches (deleteEntireDatabase also resets them
+    //    but we reset here too in case the delete was blocked by an open
+    //    connection in another tab).
+    memoryCache.clear();
+    notesCache = null;
+    cachedQuizSettings = null;
+    quizSettingsHydrated = false;
+    cachedDailyGoal = null;
+    dailyGoalHydrated = false;
+    cacheHydrated = false;
+    // 4. Notify listeners so every store can re-render empty.
+    dispatchChange("osler-hydrated");
+    dispatchChange("osler-progress-changed");
+    dispatchChange("osler-sessions-changed");
+    dispatchChange("osler-flashcard-changed");
+    dispatchChange("osler-notes-changed");
+    dispatchChange("osler-article-highlights-changed");
+    dispatchChange("osler-achievements-changed");
+    dispatchChange("osler-settings-changed");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
+    }
   },
 
   packProgress(uid: string): PackProgress {
@@ -1046,6 +1187,31 @@ export const storage = {
   },
 
   async importData(data: Record<string, unknown>): Promise<void> {
+    // Hard guard: the payload itself must be a plain object whose key count
+    // and total in-memory size are bounded. A pathological import (e.g.
+    // malicious peer pushing a huge file or a corrupted backup) is rejected
+    // before we touch IndexedDB.
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Invalid import payload: expected a JSON object");
+    }
+    const keys = Object.keys(data);
+    if (keys.length > IMPORT_MAX_KEYS) {
+      throw new Error(`Import payload too large: ${keys.length} top-level keys (max ${IMPORT_MAX_KEYS})`);
+    }
+    let totalBytes = 0;
+    for (const key of keys) {
+      const value = data[key];
+      if (value === undefined) continue;
+      const size = byteSizeOf(value);
+      totalBytes += size;
+      if (size > IMPORT_MAX_RECORD_BYTES) {
+        throw new Error(`Import record "${key}" too large (${(size / 1048576).toFixed(1)} MB; max ${IMPORT_MAX_RECORD_BYTES / 1048576} MB)`);
+      }
+    }
+    if (totalBytes > IMPORT_MAX_JSON_BYTES) {
+      throw new Error(`Import payload too large: ${(totalBytes / 1048576).toFixed(1)} MB total (max ${IMPORT_MAX_JSON_BYTES / 1048576} MB)`);
+    }
+
     // 1. Progress — individual question records
     const rawProgress = data["osler_raw_progress"] as Record<string, QuestionRecord> | undefined;
     if (rawProgress && typeof rawProgress === "object") {

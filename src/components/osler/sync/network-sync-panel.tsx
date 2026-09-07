@@ -41,7 +41,7 @@ export function NetworkSyncPanel() {
   const [peerId, setPeerId] = React.useState("");
   const [manualId, setManualId] = React.useState("");
   const [roomInput, setRoomInput] = React.useState("");
-  const [incoming, setIncoming] = React.useState<IncomingSyncRequest | null>(null);
+  const [incoming, setIncoming] = React.useState<IncomingSyncRequest[]>([]);
 
   React.useEffect(() => {
     const tr = new NetworkTransport({
@@ -60,7 +60,12 @@ export function NetworkSyncPanel() {
       onRoomId: (id) => setRoomId(id),
       onIncomingRequest: (req) => {
         haptic("warning");
-        setIncoming(req);
+        setIncoming((prev) => {
+          // Replace any previous offer from the same peer (a resent payload
+          // supersedes the older one), then append so each peer gets a card.
+          const filtered = prev.filter((p) => p.peerId !== req.peerId);
+          return [...filtered, req];
+        });
       },
     });
     setTransport(tr);
@@ -187,10 +192,13 @@ export function NetworkSyncPanel() {
         </div>
       </Card>
 
-      {/* Incoming sync offer - nothing is merged until the user accepts. */}
+      {/* Incoming sync offer(s) — one card per peer. Nothing is merged until
+          the user accepts; multiple peers can push concurrently without
+          clobbering each other. */}
       <AnimatePresence>
-        {incoming && (
+        {incoming.map((req) => (
           <motion.div
+            key={req.peerId}
             initial={{ opacity: 0, y: 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6 }}
@@ -204,12 +212,12 @@ export function NetworkSyncPanel() {
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold mb-1">{t("sync.network.incomingTitle")}</h3>
                   <p className="text-xs text-muted-foreground mb-1">
-                    {t("sync.network.incomingFrom", { name: incoming.preview.senderName })}
+                    {t("sync.network.incomingFrom", { name: req.preview.senderName })}
                   </p>
                   <p className="text-xs text-muted-foreground mb-3">
                     {t("sync.network.incomingSummary", {
-                      packs: incoming.preview.packCount,
-                      progress: incoming.preview.progressCount,
+                      packs: req.preview.packCount,
+                      progress: req.preview.progressCount,
                     })}
                   </p>
                   <div className="flex gap-2">
@@ -219,8 +227,8 @@ export function NetworkSyncPanel() {
                       className="h-8 text-xs"
                       onClick={() => {
                         haptic("success");
-                        transport?.acceptIncoming();
-                        setIncoming(null);
+                        transport?.acceptIncoming(req.peerId);
+                        setIncoming((prev) => prev.filter((p) => p.peerId !== req.peerId));
                       }}
                     >
                       <Check className="size-3 me-1.5" /> {t("sync.network.accept")}
@@ -231,8 +239,8 @@ export function NetworkSyncPanel() {
                       className="h-8 text-xs"
                       onClick={() => {
                         haptic("light");
-                        transport?.rejectIncoming();
-                        setIncoming(null);
+                        transport?.rejectIncoming(req.peerId);
+                        setIncoming((prev) => prev.filter((p) => p.peerId !== req.peerId));
                       }}
                     >
                       {t("sync.network.decline")}
@@ -242,7 +250,7 @@ export function NetworkSyncPanel() {
               </div>
             </Card>
           </motion.div>
-        )}
+        ))}
       </AnimatePresence>
 
       {/* Room code - discovery is opt-in per session; both sides must enter

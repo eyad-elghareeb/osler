@@ -1233,6 +1233,12 @@ export const ar = {
     "settings.danger.clearAll": "مسح كل التقدّم",
     "settings.danger.confirm": "هل أنت متأكد؟",
     "settings.danger.confirmYes": "نعم، امسح كل شيء",
+    "settings.danger.resetAll": "إعادة تعيين كل البيانات المحلية",
+    "settings.danger.resetAllSub": "تمسح كل التقدّم والجلسات ومراجعات البطاقات والملاحظات والملاحظات اللاصقة وتظليل المقالات والإنجازات والإشارات المرجعية على هذا الجهاز. تُحفظ البيانات على الخادم إن كانت متزامنة مع السحابة.",
+    "settings.danger.resetAllConfirm": "اكتب RESET لمسح كل البيانات المحلية",
+    "settings.danger.resetAllButton": "إعادة تعيين كل البيانات المحلية",
+    "settings.danger.resetAllDone": "تمت إعادة تعيين كل البيانات المحلية. ستُعاد تحميل الصفحة.",
+    "settings.danger.resetAllFailed": "فشل الإعادة: {error}",
 
     "settings.guides.title": "الجولات التعريفية",
     "settings.guides.subtitle":
@@ -1352,12 +1358,12 @@ export const ar = {
 
     "sync.file.exportTitle": "نسخ احتياطي للتقدم",
     "sync.file.exportDesc":
-      "نزّل كل بيانات تقدمك إلى ملف آمن. استخدم هذا الملف لاستعادة بياناتك على جهاز آخر أو بعد إعادة تعيين.",
+      "نزّل ملف ‎.osler-backup‎ يحتوي على تقدّمك والجلسات والملاحظات والإنجازات. استخدمه لنقل بياناتك إلى جهاز آخر أو للاحتفاظ بنسخة محلية.",
     "sync.file.exportButton": "تنزيل النسخ الاحتياطي",
     "sync.file.exporting": "جارٍ التصدير…",
     "sync.file.importTitle": "استعادة التقدم",
     "sync.file.importDesc":
-      "اختر ملف نسخ احتياطي لاستعادة تقدمك. سيتم دمج البيانات مع السجلات الحالية.",
+      "استعد من ملف ‎.osler-backup‎. تُدمج المحتويات في بياناتك المحلية، وتُفضَّل السجلات الأحدث.",
     "sync.file.importButton": "اختيار ملف النسخ الاحتياطي",
     "sync.file.reading": "جارٍ قراءة الملف…",
     "sync.file.success": "تم تنزيل النسخ الاحتياطي بنجاح",
@@ -1365,6 +1371,17 @@ export const ar = {
     "sync.file.exportFailed": "فشل التصدير: {error}",
     "sync.file.importFailed": "فشل الاستيراد: {error}",
     "sync.file.unknownError": "خطأ غير معروف",
+    "sync.file.previewTitle": "راجع النسخة قبل الدمج",
+    "sync.file.previewFrom": "من {name} \u00b7 {date}",
+    "sync.file.previewSize": "الحجم",
+    "sync.file.previewProgress": "سجلات الأسئلة",
+    "sync.file.previewSessions": "الجلسات المحفوظة",
+    "sync.file.previewFlashcards": "مراجعات البطاقات",
+    "sync.file.previewNotes": "الملاحظات",
+    "sync.file.previewAchievements": "الإنجازات",
+    "sync.file.previewHighlights": "تظليل المقالات",
+    "sync.file.previewN": "{n}",
+    "sync.file.confirmImport": "دمج في البيانات المحلية",
 
     "sync.network.title": "مزامنة الشبكة",
     "sync.network.desc":

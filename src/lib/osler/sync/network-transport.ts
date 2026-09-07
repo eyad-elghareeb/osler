@@ -95,8 +95,15 @@ export class NetworkTransport {
   private started = false;
   private discovering = false;
 
-  /** Data received but not yet accepted/rejected by the user. */
-  private pending: { peerId: string; label: string; payload: SyncProtocol.SyncPayload } | null = null;
+  /** Data received but not yet accepted/rejected by the user. Held as a queue
+   *  keyed by peer so a second push from another peer doesn't clobber the
+   *  first — the UI gets one card per peer. */
+  private pending: Map<string, { peerId: string; label: string; payload: SyncProtocol.SyncPayload }> = new Map();
+
+  /** Bound on unavailable-id retries so a PeerJS ID that collides twice in a
+   *  row can't infinite-loop the start() recursion. */
+  private unavailableRetries = 0;
+  private static readonly MAX_UNAVAILABLE_RETRIES = 3;
 
   /* MQTT discovery */
   private mqttClient: unknown = null;
@@ -152,6 +159,7 @@ export class NetworkTransport {
       const peer = this.peer;
 
       peer.on("open", () => {
+        this.unavailableRetries = 0;
         this.callbacks.onPeerId(this.localPeerId);
         resolve();
       });
@@ -162,6 +170,11 @@ export class NetworkTransport {
 
       peer.on("error", (err) => {
         if ((err as { type: string }).type === "unavailable-id") {
+          this.unavailableRetries += 1;
+          if (this.unavailableRetries > NetworkTransport.MAX_UNAVAILABLE_RETRIES) {
+            reject(new Error("PeerJS ID unavailable after multiple retries — please try again"));
+            return;
+          }
           const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
           const newId = `${this.localPeerId}-${suffix}`;
           try { localStorage.setItem("osler_sync_device_id", newId); } catch { }
@@ -260,6 +273,8 @@ export class NetworkTransport {
       try { conn.close(); } catch { }
     }
     this.connections.clear();
+    this.pending.clear();
+    this.unavailableRetries = 0;
     this.peer?.destroy();
     this.peer = null;
     if (this.mqttClient) {
@@ -380,7 +395,7 @@ export class NetworkTransport {
       // Hold the payload for user review — nothing touches storage until
       // acceptIncoming() is called. A peer that connects and pushes
       // uninvited can no longer mutate this device's data.
-      this.pending = { peerId: conn.peer, label: conn.peer, payload };
+      this.pending.set(conn.peer, { peerId: conn.peer, label: conn.peer, payload });
       this.callbacks.onIncomingRequest({
         peerId: conn.peer,
         label: this.connections.get(conn.peer)?.info.label ?? conn.peer,
@@ -397,11 +412,14 @@ export class NetworkTransport {
     }
   }
 
-  /** Merge the pending incoming payload into local storage. */
-  async acceptIncoming(): Promise<void> {
-    const pending = this.pending;
+  /** Merge the pending incoming payload from the given peer into local storage. */
+  async acceptIncoming(peerId?: string): Promise<void> {
+    // Default: accept the oldest pending offer.
+    const targetPeer = peerId ?? this.pending.keys().next().value;
+    if (!targetPeer) return;
+    const pending = this.pending.get(targetPeer);
     if (!pending) return;
-    this.pending = null;
+    this.pending.delete(targetPeer);
     this.callbacks.onStatusChanged("connected", "Received data - importing...");
     try {
       await mergePayloadIntoStorage(pending.payload);
@@ -412,13 +430,39 @@ export class NetworkTransport {
   }
 
   /** Discard the pending incoming payload without importing. */
-  rejectIncoming(): void {
-    this.pending = null;
+  rejectIncoming(peerId?: string): void {
+    const targetPeer = peerId ?? this.pending.keys().next().value;
+    if (!targetPeer) return;
+    this.pending.delete(targetPeer);
     this.callbacks.onStatusChanged("connected", "Sync offer declined");
   }
 
   get hasPendingIncoming(): boolean {
-    return this.pending !== null;
+    return this.pending.size > 0;
+  }
+
+  /** Snapshot of every pending offer — lets the UI render one card per peer. */
+  get pendingIncomingList(): IncomingSyncRequest[] {
+    const out: IncomingSyncRequest[] = [];
+    for (const entry of this.pending.values()) {
+      const summary = SyncProtocol.preview(
+        // Re-derive the wire form only if needed; the entry already carries
+        // senderName/packCount via the original onIncomingRequest callback,
+        // but that callback isn't accessible here, so we recompute.
+        JSON.stringify(entry.payload),
+      );
+      out.push({
+        peerId: entry.peerId,
+        label: this.connections.get(entry.peerId)?.info.label ?? entry.label,
+        preview: {
+          senderName: String(entry.payload.senderName ?? "Unknown device"),
+          packCount: summary?.packCount ?? 0,
+          progressCount: summary?.progressCount ?? 0,
+        },
+        receivedAt: 0,
+      });
+    }
+    return out;
   }
 
   /* ── MQTT discovery ────────────────────────────────────────────────── */
