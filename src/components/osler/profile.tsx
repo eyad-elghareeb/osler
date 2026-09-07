@@ -67,6 +67,7 @@ import {
   PageHeader,
   StatTile as SharedStatTile,
   OslerCard,
+  HubSkeleton,
   type StatTileProps,
 } from "./ui-primitives";
 
@@ -97,6 +98,11 @@ export function Profile({
   const onViewChange = propOnViewChange || navigate;
   const onOpenSettingsSection = propOnOpenSettingsSection || ((section: any) => navigate("settings", { section }));
   const [syncOpen, setSyncOpen] = React.useState(false);
+  // Gate first paint on storage hydration (same as the dashboard): a cold
+  // reload directly on /profile would otherwise flash zeros across every
+  // stat, the heatmap, and achievements before the real values land.
+  const [hydrated, setHydrated] = React.useState(() => storage.isHydrated());
+  React.useEffect(() => storage.onHydrated(() => setHydrated(true)), []);
   const [progress, setProgress] = React.useState(storage.allProgress());
   const [unlockedAchievements, setUnlockedAchievements] = React.useState<Record<string, AchievementRecord>>({});
   const [, force] = React.useReducer((x) => x + 1, 0);
@@ -183,6 +189,16 @@ export function Profile({
     for (const id of earnedKey.split(",")) achievementsStore.unlock(id);
   }, [earnedKey]);
   const unlockedIds = new Set<string>([...Object.keys(unlockedAchievements), ...earned]);
+
+  if (!hydrated) {
+    return (
+      <div className="osler-page">
+        <div className="osler-page__inner--narrow">
+          <HubSkeleton hero statCount={4} cardCount={2} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="osler-page">
