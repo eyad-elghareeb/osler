@@ -1351,6 +1351,24 @@ export const en = {
     "article.bookmarkRemove": "Remove bookmark",
     "article.notFound": "Article not found.",
 
+    /* Account-switch / guest-upgrade conflict prompt */
+    "conflict.title": "Local data found",
+    "conflict.body": "This device has its own progress, sessions, flashcards, and notes. Pick which copy to keep — merging is the default but can produce surprising overlap if both sides have different data.",
+    "conflict.localTitle": "On this device",
+    "conflict.cloudTitle": "On the cloud account",
+    "conflict.keepLocalTitle": "Keep this device's data",
+    "conflict.keepLocalDesc": "Push everything here to the cloud. Anything only on the cloud will be overwritten.",
+    "conflict.keepCloudTitle": "Keep the cloud account's data",
+    "conflict.keepCloudDesc": "Wipe this device (your sign-in stays) and pull everything from the cloud.",
+    "conflict.mergeTitle": "Merge (recommended)",
+    "conflict.mergeDesc": "Newest timestamp wins per record. Safe for the same account on a second device; surprising for two different accounts.",
+    "conflict.kindQbank": "Questions",
+    "conflict.kindFlashcards": "Flashcards",
+    "conflict.kindSessions": "Sessions",
+    "conflict.kindNotes": "Notes",
+    "conflict.kindHighlights": "Highlights",
+    "conflict.kindAchievements": "Achievements",
+
     /* Sync */
     "sync.title": "Progress Sync",
     "sync.subtitle": "Export, import, and sync your progress across devices.",

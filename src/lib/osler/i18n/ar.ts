@@ -1346,6 +1346,24 @@ export const ar = {
     "article.bookmarkRemove": "إزالة الإشارة المرجعية",
     "article.notFound": "المقال غير موجود.",
 
+    /* نافذة تعارض التبديل بين الحسابات / ترقية الضيف */
+    "conflict.title": "وُجدت بيانات محلية",
+    "conflict.body": "هذا الجهاز يحتوي على تقدّمه الخاص من جلسات وبطاقات وملاحظات. اختر أي نسخة تُحفظ — الدمج هو الافتراضي لكنه قد يسبّب تداخلاً غير متوقع إذا كانت النسختان مختلفتين.",
+    "conflict.localTitle": "على هذا الجهاز",
+    "conflict.cloudTitle": "على الحساب السحابي",
+    "conflict.keepLocalTitle": "احفظ بيانات هذا الجهاز",
+    "conflict.keepLocalDesc": "ادفع كل البيانات المحلية إلى السحابة. ستُستبدل أي بيانات لا توجد إلا على السحابة.",
+    "conflict.keepCloudTitle": "احفظ بيانات الحساب السحابي",
+    "conflict.keepCloudDesc": "امسح بيانات هذا الجهاز (يبقى تسجيل دخولك) واسحب كل شيء من السحابة.",
+    "conflict.mergeTitle": "ادمج (موصى به)",
+    "conflict.mergeDesc": "يفوز السجل ذو الطابع الزمني الأحدث. آمن لنفس الحساب على جهاز ثانٍ؛ قد يكون مفاجئًا لحسابين مختلفين.",
+    "conflict.kindQbank": "الأسئلة",
+    "conflict.kindFlashcards": "البطاقات",
+    "conflict.kindSessions": "الجلسات",
+    "conflict.kindNotes": "الملاحظات",
+    "conflict.kindHighlights": "التظليل",
+    "conflict.kindAchievements": "الإنجازات",
+
     /* Sync */
     "sync.title": "مزامنة التقدّم",
     "sync.subtitle": "صدّر واستورد وزامن تقدّمك بين أجهزتك.",

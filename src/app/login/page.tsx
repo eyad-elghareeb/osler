@@ -28,7 +28,7 @@ function isSafeLocalPath(input: string | null | undefined): input is string {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, username, loading } = useOslerSession();
+  const { login, username, loading, pendingConflict, conflictCheckPending } = useOslerSession();
 
   React.useEffect(() => {
     void startBackgroundPrecaching();
@@ -44,12 +44,20 @@ function LoginContent() {
   // function in session-context updates the React state synchronously
   // (no cookie roundtrip — the static export has no server), so by the
   // time this effect fires the RouteGuard already sees the session.
+  //
+  // Hold the redirect while:
+  //  - an account-switch / guest-upgrade conflict is being resolved, so
+  //    the dialog (mounted at the root layout) stays visible above the
+  //    login page instead of being lost to the navigation.
+  //  - the conflict check itself is still in flight, so a guest-upgrade
+  //    prompt doesn't get skipped because the redirect fires first.
   React.useEffect(() => {
     if (loading) return;
-    if (username) {
-      router.replace(next);
-    }
-  }, [username, loading, router, next]);
+    if (!username) return;
+    if (pendingConflict) return;
+    if (conflictCheckPending) return;
+    router.replace(next);
+  }, [username, loading, router, next, pendingConflict, conflictCheckPending]);
 
   const handleLogin = React.useCallback(
     (name: string) => {

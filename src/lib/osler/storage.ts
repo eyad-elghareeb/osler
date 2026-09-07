@@ -1312,7 +1312,123 @@ export const storage = {
       }
     }
   },
+
+  /**
+   * Cheap snapshot of the local data: per-kind record counts + max
+   * timestamp. Used by the account-switch / guest-upgrade conflict
+   * detection so the UI can decide whether to prompt the user.
+   *
+   * Bookmarks are localStorage-backed (not IndexedDB) so they live in
+   * the `bookmarks` kind with their own counters.
+   */
+  getLocalDataSummary(): DataSummary {
+    let qbank = 0;
+    let qbankLatest = 0;
+    let flashcards = 0;
+    let flashcardsLatest = 0;
+    let sessions = 0;
+    let sessionsLatest = 0;
+    let notes = 0;
+    let notesLatest = 0;
+    let articleHighlights = 0;
+    let articleHighlightsLatest = 0;
+    let achievements = 0;
+    for (const [k, v] of memoryCache) {
+      if (k.startsWith("progress:")) {
+        const r = v as { timestamp?: number; deletedAt?: number };
+        if (r.deletedAt) continue;
+        qbank++;
+        if ((r.timestamp ?? 0) > qbankLatest) qbankLatest = r.timestamp ?? 0;
+      } else if (k.startsWith("flashcardReviews:")) {
+        const r = v as { lastReviewed?: number; deletedAt?: number };
+        if (r.deletedAt) continue;
+        flashcards++;
+        if ((r.lastReviewed ?? 0) > flashcardsLatest) flashcardsLatest = r.lastReviewed ?? 0;
+      } else if (k.startsWith("sessions:session:") && k !== "sessions:session:__active__") {
+        const r = v as { completedAt?: number; startedAt?: number; deletedAt?: number };
+        if (r.deletedAt) continue;
+        sessions++;
+        const t = r.completedAt ?? r.startedAt ?? 0;
+        if (t > sessionsLatest) sessionsLatest = t;
+      } else if (k.startsWith("articleHighlights:")) {
+        const list = v as Array<{ deletedAt?: number; updatedAt?: number }>;
+        let liveCount = 0;
+        let latest = 0;
+        for (const h of list ?? []) {
+          if (h.deletedAt) continue;
+          liveCount++;
+          const t = typeof h.updatedAt === "number" ? h.updatedAt : 0;
+          if (t > latest) latest = t;
+        }
+        articleHighlights += liveCount;
+        if (latest > articleHighlightsLatest) articleHighlightsLatest = latest;
+      } else if (k.startsWith("achievements:")) {
+        achievements++;
+      }
+    }
+    const notesArr = notesCache ?? [];
+    for (const n of notesArr) {
+      if (n.deletedAt) continue;
+      notes++;
+      if ((n.updatedAt ?? 0) > notesLatest) notesLatest = n.updatedAt ?? 0;
+    }
+    return {
+      qbank: { count: qbank, latestTimestamp: qbankLatest },
+      flashcards: { count: flashcards, latestTimestamp: flashcardsLatest },
+      sessions: { count: sessions, latestTimestamp: sessionsLatest },
+      notes: { count: notes, latestTimestamp: notesLatest },
+      articleHighlights: { count: articleHighlights, latestTimestamp: articleHighlightsLatest },
+      achievements: { count: achievements, latestTimestamp: 0 },
+    };
+  },
+
+  /** Wipe every store (progress/sessions/flashcards/notes/highlights/
+   *  achievements/settings + bookmarks) while preserving the live session
+   *  mirror so a signed-in user doesn't drop to a local-only account.
+   *  Used by "keep cloud" conflict resolution. */
+  async wipeAllKeepSession(): Promise<void> {
+    await storage.resetAll();
+  },
 };
+
+/** Per-kind counts + the newest timestamp observed locally. Returned by
+ *  `storage.getLocalDataSummary()` and matched against the cloud's snapshot
+ *  to detect guest-upgrade / account-switch conflicts. */
+export interface DataSummaryKind {
+  count: number;
+  latestTimestamp: number;
+}
+
+export interface DataSummary {
+  qbank: DataSummaryKind;
+  flashcards: DataSummaryKind;
+  sessions: DataSummaryKind;
+  notes: DataSummaryKind;
+  articleHighlights: DataSummaryKind;
+  achievements: DataSummaryKind;
+}
+
+export const EMPTY_DATA_SUMMARY: DataSummary = {
+  qbank: { count: 0, latestTimestamp: 0 },
+  flashcards: { count: 0, latestTimestamp: 0 },
+  sessions: { count: 0, latestTimestamp: 0 },
+  notes: { count: 0, latestTimestamp: 0 },
+  articleHighlights: { count: 0, latestTimestamp: 0 },
+  achievements: { count: 0, latestTimestamp: 0 },
+};
+
+/** Heuristic: does this summary contain any non-trivial local data? Used
+ *  to skip the conflict prompt when the device is effectively empty. */
+export function hasLocalData(summary: DataSummary): boolean {
+  return Object.values(summary).some((k) => k.count > 0);
+}
+
+/** Heuristic: does the conflict prompt make sense? It does when BOTH
+ *  sides have non-empty data — if either side is empty the answer is
+ *  obvious (no merge is going to surprise the user). */
+export function hasConflict(local: DataSummary, remote: DataSummary): boolean {
+  return hasLocalData(local) && hasLocalData(remote);
+}
 
 /* ── Saved Sessions ─────────────────────────────────────────────────── */
 

@@ -1,5 +1,14 @@
 import { getConfig, loadConfig } from "@/lib/osler/config";
-import { storage, settings, SYNC_KINDS, type SyncKind } from "@/lib/osler/storage";
+import {
+  storage,
+  settings,
+  SYNC_KINDS,
+  EMPTY_DATA_SUMMARY,
+  type SyncKind,
+  type DataSummary,
+  type DataSummaryKind,
+  hasLocalData,
+} from "@/lib/osler/storage";
 import {
   getRealtimeConnId,
   startRealtime,
@@ -451,6 +460,84 @@ export async function pullSettingsFromCloud(sessionOverride?: CloudSession): Pro
   } catch {
     // silent – settings sync is best-effort on login/restore
   }
+}
+
+/** The cloud's per-kind record counts + max updatedAt — fetched cheaply via
+ *  GET /v1/sync?head=true (the worker's HEAD-style summary endpoint). Used
+ *  by the conflict-detection logic so the UI can decide whether to prompt
+ *  the user before merging local data into a fresh account. */
+export async function fetchRemoteDataSummary(session: CloudSession): Promise<DataSummary> {
+  try {
+    const head = await request<{
+      timestamps?: Record<string, number>;
+      counts?: Record<string, number>;
+    }>("/v1/sync?head=true", {}, session.token);
+    const ts = head.timestamps ?? {};
+    const counts = head.counts ?? {};
+    const pick = (kind: SyncKind): DataSummaryKind => ({
+      count: typeof counts[kind] === "number" ? counts[kind] : 0,
+      latestTimestamp: typeof ts[kind] === "number" ? ts[kind] : 0,
+    });
+    return {
+      qbank: pick("qbank"),
+      flashcards: pick("flashcards"),
+      sessions: pick("sessions"),
+      notes: pick("notes"),
+      articleHighlights: pick("articleHighlights"),
+      achievements: pick("achievements"),
+    };
+  } catch {
+    // Offline / 5xx — assume empty so the caller falls through to "no conflict"
+    // and the merge happens normally when the user retries.
+    return { ...EMPTY_DATA_SUMMARY };
+  }
+}
+
+/**
+ * "Keep this device's data" — push every local store to the cloud WITHOUT
+ * pulling, so the device's data wins and the cloud ends up with the local
+ * records as its latest state. The caller should already have called
+ * `fetchRemoteDataSummary` (and shown the prompt) before this fires.
+ *
+ * Per-kind optimistic concurrency headers keep the push idempotent against
+ * any silent edits on other devices that landed while this one was offline.
+ */
+export async function pushAllToCloud(session: CloudSession): Promise<void> {
+  await storage.ensureCacheHydrated();
+  // Read the cloud's authoritative per-kind timestamps so each push is
+  // optimistic-concurrency checked against what the server actually has.
+  let serverTimestamps: Record<string, number> = {};
+  try {
+    const head = await request<{ timestamps?: Record<string, number> }>("/v1/sync?head=true", {}, session.token);
+    serverTimestamps = head.timestamps ?? {};
+  } catch {
+    // Offline — push without OCC headers and let the next reconcile re-pull.
+  }
+  const headers: Record<string, string> = { "x-osler-realtime-conn": getRealtimeConnId() };
+  for (const kind of SYNC_KINDS) {
+    if (serverTimestamps[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverTimestamps[kind]);
+  }
+  const payload = storage.exportSyncSnapshot();
+  await request("/v1/sync", {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(payload),
+  }, session.token);
+}
+
+/**
+ * "Keep cloud's data" — wipe every local store (preserving the live session
+ * mirror), then pull every kind from the cloud so this device mirrors the
+ * account exactly. Used by the conflict prompt.
+ */
+export async function pullAllFromCloud(session: CloudSession): Promise<void> {
+  await storage.wipeAllKeepSession();
+  const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(
+    `/v1/sync?kinds=${SYNC_KINDS.join(",")}`,
+    {},
+    session.token,
+  );
+  await storage.mergeCloudSnapshot(remote);
 }
 
 /** Helper: resolve the cloud API URL the same way admin-api.ts does. */

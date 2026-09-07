@@ -158,6 +158,7 @@ export const viewport = {
 
 import { OslerSessionProvider } from "@/lib/osler/session-context";
 import { RouteGuard } from "@/components/osler/route-guard";
+import { AccountConflictDialog } from "@/components/osler/account-conflict-dialog";
 
 export default function RootLayout({
   children,
@@ -199,6 +200,11 @@ export default function RootLayout({
                     <AnimationsProvider>{children}</AnimationsProvider>
                   </AnalyticsProvider>
                 </RouteGuard>
+                {/* Account-switch / guest-upgrade conflict prompt. Mounted at
+                    the root layout (not inside AppShell) so it can also fire
+                    on /login after a register — the user picks a resolution
+                    before the RouteGuard redirects them to the app. */}
+                <AccountConflictDialog />
               </OslerSessionProvider>
             </OslerI18nProvider>
           </OslerThemeProvider>

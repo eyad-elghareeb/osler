@@ -7,9 +7,12 @@ import {
   cloudEnabled,
   clearCloudSession,
   consumeGoogleLogin,
+  fetchRemoteDataSummary,
   getCloudSyncEnabled,
   notifySyncStatus,
+  pullAllFromCloud,
   pullSettingsFromCloud,
+  pushAllToCloud,
   readCloudSession,
   readStoredCloudSession,
   refreshCloudSession,
@@ -22,6 +25,7 @@ import {
 import { loadPdfFonts } from "@/lib/osler/pdf-fonts";
 import { maybeReportGuestPresence } from "@/lib/osler/guest-presence";
 import { getConfig, isConfigCached } from "@/lib/osler/config";
+import { hasConflict, storage, type DataSummary } from "@/lib/osler/storage";
 
 interface SessionContextType {
   username: string | null;
@@ -29,7 +33,30 @@ interface SessionContextType {
   loading: boolean;
   login: (name: string, session?: CloudSession | null) => void;
   logout: () => void;
+  /** Pending account-switch / guest-upgrade conflict. Null when no conflict
+   *  was detected or the user already resolved one. The dialog listens for
+   *  this and renders the three-way choice. */
+  pendingConflict: PendingConflict | null;
+  resolveConflict: (resolution: ConflictResolution) => Promise<void>;
+  /** True until the conflict-detection pass for the current cloudSession has
+   *  completed (either set a conflict OR cleared it as "no conflict"). The
+   *  /login redirect waits on this so a guest-upgrade prompt doesn't get
+   *  lost to navigation. */
+  conflictCheckPending: boolean;
 }
+
+/** Snapshot of the local vs remote data shapes at the moment the conflict
+ *  was detected — the dialog uses this to render per-kind counts. */
+export interface PendingConflict {
+  cloudSession: CloudSession;
+  local: DataSummary;
+  remote: DataSummary;
+}
+
+/** What the user chose in the conflict prompt. */
+export type ConflictResolution = "keep-local" | "keep-cloud" | "merge";
+
+const LOCAL_ACCOUNT_KEY = "osler-last-cloud-user-id";
 
 const OslerSessionContext = React.createContext<SessionContextType | null>(null);
 
@@ -298,6 +325,85 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     void pullSettingsFromCloud(cloudSession);
   }, [cloudSession]);
 
+  // Conflict detection: when a fresh cloud session is established on a device
+  // that already has local data, fetch the cloud's per-kind counts + max
+  // timestamps. If BOTH sides have non-trivial data, surface the prompt so
+  // the user can choose keep-local / keep-cloud / merge instead of letting
+  // monotonic merge silently corrupt one or the other.
+  //
+  // Skipped when the new cloud session belongs to the SAME user that was
+  // signed in here previously (the device-local data legitimately belongs
+  // to this account) — only "I signed out and signed into a different
+  // account" or "I was a guest and now I'm a fresh account" trigger the
+  // prompt.
+  const [pendingConflict, setPendingConflict] = React.useState<PendingConflict | null>(null);
+  const [conflictCheckPending, setConflictCheckPending] = React.useState(false);
+  React.useEffect(() => {
+    if (!cloudSession?.token) {
+      setPendingConflict(null);
+      setConflictCheckPending(false);
+      return;
+    }
+    let cancelled = false;
+    const lastUserId = (() => {
+      try { return localStorage.getItem(LOCAL_ACCOUNT_KEY); } catch { return null; }
+    })();
+    const currentUserId = cloudSession.user.id;
+    if (lastUserId === currentUserId) {
+      // Same user as last time on this device — local data is theirs; no prompt.
+      setConflictCheckPending(false);
+      return;
+    }
+    setConflictCheckPending(true);
+    void (async () => {
+      try {
+        const local = storage.getLocalDataSummary();
+        const remote = await fetchRemoteDataSummary(cloudSession);
+        if (cancelled) return;
+        if (hasConflict(local, remote)) {
+          setPendingConflict({ cloudSession, local, remote });
+        } else {
+          // No conflict: either side is empty. Remember this user as the last
+          // one on this device so a subsequent sign-out + sign-in of the SAME
+          // account doesn't re-trigger the check.
+          try { localStorage.setItem(LOCAL_ACCOUNT_KEY, currentUserId); } catch {}
+        }
+      } finally {
+        if (!cancelled) setConflictCheckPending(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudSession]);
+
+  const resolveConflict = React.useCallback(
+    async (resolution: ConflictResolution) => {
+      const current = pendingConflict;
+      if (!current) return;
+      setPendingConflict(null);
+      try {
+        if (resolution === "keep-local") {
+          await pushAllToCloud(current.cloudSession);
+          notifySyncStatus("syncing");
+        } else if (resolution === "keep-cloud") {
+          await pullAllFromCloud(current.cloudSession);
+        }
+        // "merge" is a no-op — the sync loop's normal pull/push cycle already
+        // performs the monotonic merge; we just dismiss the prompt.
+        try {
+          localStorage.setItem(LOCAL_ACCOUNT_KEY, current.cloudSession.user.id);
+        } catch {}
+      } catch (err) {
+        // Re-surface the conflict so the user can retry — silent failure
+        // here would leave the device in a half-applied state.
+        setPendingConflict(current);
+        throw err;
+      }
+    },
+    [pendingConflict]
+  );
+
   // Start cloud sync only when we have a real CloudSession with a token AND
   // the user opted in. When a session exists but sync is off, surface an
   // explicit "off" status so the shell's sync dot never claims a phantom
@@ -392,7 +498,13 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     const currentSession = cloudSession;
     setUsername(null);
     setCloudSession(null);
+    setPendingConflict(null);
     persistLocalUsername(null);
+    // Clear the per-device last-user marker so the next sign-in re-checks
+    // for conflicts — switching accounts on the same device must always
+    // re-evaluate, but signing the same account out + back in (e.g.
+    // token rotation) keeps it suppressed.
+    try { localStorage.removeItem(LOCAL_ACCOUNT_KEY); } catch {}
     void logoutCloudAccount(currentSession);
     router.push("/login");
   }, [cloudSession, router, persistLocalUsername]);
@@ -405,6 +517,9 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
         loading,
         login,
         logout,
+        pendingConflict,
+        resolveConflict,
+        conflictCheckPending,
       }}
     >
       {children}
