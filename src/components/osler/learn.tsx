@@ -144,6 +144,14 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
   >(null);
 
   React.useEffect(() => {
+    const applyNode = (node: ContentTreeNode | undefined) => {
+      if (!node) return;
+      const eng = node.type;
+      if (eng === "flashcard") setRecentModule("flashcards");
+      else if (eng === "osce") setRecentModule("osce");
+      else if (eng === "library") setRecentModule("library");
+      else if (eng === "video") setRecentModule("videos");
+    };
     const pickRecent = () => {
       const all = storage.allProgress();
       if (all.length === 0) return;
@@ -153,6 +161,19 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
       );
       const latestUid = sorted[0]?.uid;
       if (!latestUid) return;
+      // Fast path: resolve from the synchronously cached trees so warm
+      // revisits paint the "Continue" badge on first paint instead of
+      // popping it (and shifting the card title) after the async manifest
+      // round-trip lands.
+      const cached = (["library", "flashcard", "osce", "video"] as const).map((t) =>
+        getCachedCategoryTree(t),
+      );
+      if (!cached.some((t) => t === null)) {
+        applyNode(
+          cached.flatMap((t) => flattenTree(t!)).find((item) => item.uid === latestUid),
+        );
+        return;
+      }
       Promise.all([
         loadCategoryTree("library"),
         loadCategoryTree("flashcard"),
@@ -160,13 +181,7 @@ export function Learn({ onNavigate: propOnNavigate }: LearnProps = {}) {
         loadCategoryTree("video"),
       ])
         .then((trees) => {
-          const node = trees.flatMap(flattenTree).find((item) => item.uid === latestUid);
-          if (!node) return;
-          const eng = node.type;
-          if (eng === "flashcard") setRecentModule("flashcards");
-          else if (eng === "osce") setRecentModule("osce");
-          else if (eng === "library") setRecentModule("library");
-          else if (eng === "video") setRecentModule("videos");
+          applyNode(trees.flatMap(flattenTree).find((item) => item.uid === latestUid));
         })
         .catch(() => {});
     };

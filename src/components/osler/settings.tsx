@@ -141,17 +141,11 @@ export function Settings({
   // We always start there unless the caller explicitly requests a non-default
   // section via initialSection.
   //
-  // BUG FIX: The previous logic used `useIsMobile()` in the initializer, but
-  // `useIsMobile()` returns false on the very first render (its internal
-  // useState starts as undefined → !!undefined = false). This caused
-  // mobileHome to initialize as false, so the language subpage showed first
-  // on mobile. The effect `if (!isMobile) setMobileHome(false)` then ran on
-  // mount with the stale isMobile=false, cementing the wrong value.
-  //
-  // FIX: Use a lazy initializer that reads window.innerWidth synchronously.
-  // Since Settings only mounts when the user navigates to it (view === "settings"),
-  // window is always available — no SSR concern. The prevIsMobileRef effect
-  // handles form-factor changes (desktop ↔ mobile resize) without touching
+  // The lazy initializer reads window.innerWidth synchronously (mirroring
+  // what useIsMobile() itself now does on first render). Since Settings only
+  // mounts when the user navigates to it (view === "settings"), window is
+  // always available — no SSR concern. The prevIsMobileRef effect handles
+  // form-factor changes (desktop ↔ mobile resize) without touching
   // mobileHome on the initial mount.
   const [mobileHome, setMobileHome] = React.useState<boolean>(() => {
     if (typeof window === "undefined") return false;

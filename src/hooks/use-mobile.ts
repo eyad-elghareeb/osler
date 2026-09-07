@@ -6,7 +6,14 @@ const MOBILE_BREAKPOINT = 768
 const TABLET_MAX_BREAKPOINT = 1024
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+  // Read the width synchronously on first render (not in the effect below)
+  // so phones paint the mobile layout immediately. The previous
+  // effect-only init always first-rendered the desktop tree, then swapped
+  // a frame later — a full-layout flash on every cold load on mobile.
+  // SSR/prerender keeps `undefined` (→ false), matching the server HTML.
+  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(() =>
+    typeof window === "undefined" ? undefined : window.innerWidth < MOBILE_BREAKPOINT,
+  )
 
   React.useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
@@ -24,7 +31,12 @@ export function useIsMobile() {
 /** 768–1023px (iPad portrait and friends): the desktop chrome works, but
  *  multi-pane studio layouts stack into their compact variants. */
 export function useIsTablet() {
-  const [isTablet, setIsTablet] = React.useState<boolean | undefined>(undefined)
+  // Same synchronous first render as useIsMobile (see above).
+  const [isTablet, setIsTablet] = React.useState<boolean | undefined>(() =>
+    typeof window === "undefined"
+      ? undefined
+      : window.innerWidth >= MOBILE_BREAKPOINT && window.innerWidth < TABLET_MAX_BREAKPOINT,
+  )
 
   React.useEffect(() => {
     const mql = window.matchMedia(`(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: ${TABLET_MAX_BREAKPOINT - 1}px)`)
