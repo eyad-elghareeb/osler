@@ -351,7 +351,7 @@ export interface StatTileProps {
   compact?: boolean;
   /**
    * Optional trend indicator rendered beside the value — typically a
-   * `<SparkTrend>` from `analytics-primitives.tsx`. Omit entirely rather
+   * `<SparkTrend>` from `analytics-spark.tsx`. Omit entirely rather
    * than passing one for a tile that has no time-series backing it; this
    * is additive polish, not a required part of the tile.
    */

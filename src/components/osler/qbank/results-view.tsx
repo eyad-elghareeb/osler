@@ -13,7 +13,7 @@ import { generateResultsPdf, downloadPdf } from "@/lib/osler/pdf";
 import { type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
 import { PdfExportDialog } from "@/components/osler/lazy-tools";
 import { MetricBar } from "@/components/osler/ui-primitives";
-import { SparkTrend } from "@/components/osler/analytics-primitives";
+import { SparkTrend } from "@/components/osler/analytics-spark";
 import { choiceLetter, SessionData, SummaryRow, formatTime, formatMs } from "./shared";
 import {
   difficultyBreakdown,

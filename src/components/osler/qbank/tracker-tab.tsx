@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { SectionHeading, StatTile, EmptyState, LoadingState, MetricBar, SectionList, SectionItem } from "@/components/osler/ui-primitives";
-import { SparkTrend, defaultSparkDelta } from "@/components/osler/analytics-primitives";
+import { SparkTrend, defaultSparkDelta } from "@/components/osler/analytics-spark";
 import { TrackerTree, type TrackerTreeNode } from "@/components/osler/tracker-tree";
 import { TrackerPreviewSheet, type TrackerPreviewItem } from "@/components/osler/tracker-preview";
 import { generateResultsPdf, generateDashboardPdf, downloadPdf, type FullQuestion } from "@/lib/osler/pdf";
