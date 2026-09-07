@@ -21,6 +21,7 @@ import {
 } from "@/lib/osler/cloud";
 import { loadPdfFonts } from "@/lib/osler/pdf-fonts";
 import { maybeReportGuestPresence } from "@/lib/osler/guest-presence";
+import { getConfig, isConfigCached } from "@/lib/osler/config";
 
 interface SessionContextType {
   username: string | null;
@@ -60,11 +61,83 @@ const LOCAL_SESSION_KEY = "osler-local-session";
  *      NO "logged in by name only" half-state: a user is either fully
  *      authenticated (cloud or local) or on the login screen.
  */
+/**
+ * Whether a stored cloud session may paint the first frame. The async
+ * restore below is the authority on cloud availability; this only guards the
+ * pre-paint fast path. Distrust solely when a cached config explicitly
+ * disables cloud (plus no env URL) — cold boots with no cache yet trust the
+ * stored session and let the restore correct any drift.
+ */
+function cloudPlausibleSync(): boolean {
+  try {
+    if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_CLOUD_API_URL) return true;
+  } catch {
+    // ignore — fall through to the config check
+  }
+  try {
+    if (!isConfigCached()) return true;
+    const cloud = getConfig().cloud as { enabled?: boolean; apiUrl?: string } | undefined;
+    return !!(cloud?.enabled && cloud?.apiUrl);
+  } catch {
+    return true;
+  }
+}
+
 export function OslerSessionProvider({ children }: { children: React.ReactNode }) {
   const [username, setUsername] = React.useState<string | null>(null);
   const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
   const router = useRouter();
+
+  /**
+   * Pre-paint bootstrap from the persisted storage mirrors. First render
+   * intentionally matches the prerender (signed out + loading) so hydration
+   * never mismatches; this layout effect restores the stored session
+   * synchronously before the browser paints, so a returning user sees the
+   * app — not the boot splash — on the very first frame.
+   *
+   * Trust rules mirror the async restore below, just earlier:
+   * `readCloudSession()` already rejects expired sessions, local guests need
+   * no backend, and cloud sessions are gated on `cloudPlausibleSync()`. The
+   * restore still runs afterwards (refresh-if-expiring, presence reporting)
+   * and its identical values bail out of re-rendering.
+   */
+  React.useLayoutEffect(() => {
+    let cloud: CloudSession | null = null;
+    try {
+      if (cloudPlausibleSync()) cloud = readCloudSession();
+    } catch {
+      cloud = null;
+    }
+    if (cloud) {
+      setCloudSession(cloud);
+      setUsername(cloud.user.displayName);
+      setLoading(false);
+      return;
+    }
+    let local: string | null = null;
+    try {
+      local = sessionStorage.getItem(LOCAL_SESSION_KEY) ?? localStorage.getItem(LOCAL_SESSION_KEY);
+    } catch {
+      local = null;
+    }
+    if (local) {
+      setUsername(local);
+      setLoading(false);
+      void maybeReportGuestPresence(local);
+      return;
+    }
+    // No usable session. An expired stored cloud session may still revive via
+    // refresh — stay loading until the restore resolves, unless cloud is
+    // explicitly off (then nothing can revive it).
+    let mayRevive = false;
+    try {
+      mayRevive = cloudPlausibleSync() && readStoredCloudSession() !== null;
+    } catch {
+      mayRevive = false;
+    }
+    if (!mayRevive) setLoading(false);
+  }, []);
 
   // Load PDF fonts once on the client (cheap; cached).
   React.useEffect(() => {

@@ -70,6 +70,21 @@ function isLoginPath(input: string): boolean {
 }
 
 /**
+ * True when the URL carries a password-reset / email-verify bearer token.
+ * Read during render (client-only file) so the /login fast path below can
+ * decide without waiting for effects.
+ */
+function hasBearerLink(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search || "");
+    return params.get("reset") !== null || params.get("verify") !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Branded first-paint screen shown while the session is being restored.
  *
  * The static export has no server runtime, so the boot HTML can't know
@@ -200,6 +215,15 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   // Public paths (admin, assets, service worker, …) always pass through —
   // AdminShell gates its own auth.
   if (isPublicPath(pathname)) return <>{children}</>;
+
+  // Guests on /login render immediately: the redirect effect is a no-op
+  // there without a session, and a reset/verify bearer link must reach the
+  // form — waiting for the cloud check first only adds a splash frame.
+  // Signed-in users without a bearer link still see the splash while the
+  // redirect to `next` fires.
+  if (!loading && isLoginPath(pathname) && (!hasSession || hasBearerLink())) {
+    return <>{children}</>;
+  }
 
   // Session not restored yet — branded boot screen, never content.
   if (loading || isCloudEnabled === null) return <BootScreen />;

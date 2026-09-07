@@ -94,7 +94,11 @@ export function PwaInstallButton({ className }: { className?: string }) {
     </button>
   );
 
-  if (dismissed && !checkingDismiss) return null;
+  // Hold layout space while the IndexedDB dismiss-flag check resolves so
+  // the header doesn't shift a frame after paint.
+  if (checkingDismiss) return <span className="size-9 shrink-0" aria-hidden />;
+
+  if (dismissed) return null;
 
   if (canPrompt) {
     return (

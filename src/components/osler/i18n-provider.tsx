@@ -41,25 +41,26 @@ interface I18nContextValue {
 const I18nContext = React.createContext<I18nContextValue | null>(null);
 
 export function OslerI18nProvider({ children }: { children: React.ReactNode }) {
-  // Read the persisted language synchronously during init (not in an effect)
-  // so the first paint already uses the user's language. The previous
-  // effect-based hydration always first-painted English, then swapped the
-  // entire UI to Arabic a frame later — a full-text flash plus an LTR→RTL
-  // layout mirror on every load for Arabic users.
-  const [lang, setLangState] = React.useState<UiLang>(() => {
+  // First render intentionally matches the prerendered default-language HTML
+  // so hydration never mismatches across the whole tree. The layout effect
+  // below upgrades to the persisted language synchronously before the
+  // browser paints — an effect-based hydration instead first-painted English
+  // and swapped the entire UI to Arabic a frame later (full-text flash plus
+  // an LTR→RTL layout mirror on every load for Arabic users).
+  const [lang, setLangState] = React.useState<UiLang>(DEFAULT_UI_LANG);
+  const [contentFilter, setContentFilterState] = React.useState<ContentLangFilter>(
+    DEFAULT_CONTENT_LANG_FILTER,
+  );
+  React.useLayoutEffect(() => {
     try {
-      return loadUiLang();
+      const storedLang = loadUiLang();
+      if (storedLang !== DEFAULT_UI_LANG) setLangState(storedLang);
+      const storedFilter = loadContentLangFilter();
+      if (storedFilter !== DEFAULT_CONTENT_LANG_FILTER) setContentFilterState(storedFilter);
     } catch {
-      return DEFAULT_UI_LANG;
+      // ignore — defaults stand
     }
-  });
-  const [contentFilter, setContentFilterState] = React.useState<ContentLangFilter>(() => {
-    try {
-      return loadContentLangFilter();
-    } catch {
-      return DEFAULT_CONTENT_LANG_FILTER;
-    }
-  });
+  }, []);
   // Whether the osler.config has been loaded — used to force a re-render of
   // any consumer that reads site name / tagline via t("app.name") etc.
   const [, setConfigVersion] = React.useState(0);

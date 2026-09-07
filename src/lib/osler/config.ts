@@ -920,6 +920,22 @@ export function getConfig(): OslerConfig {
   return DEFAULT_CONFIG;
 }
 
+/**
+ * True once real config is available synchronously — resolved in memory or
+ * mirrored from a previous boot in localStorage. Lets first-paint code
+ * (theme, session bootstrap) distinguish "config says cloud is off" from
+ * "config hasn't loaded yet and defaults are standing in".
+ */
+export function isConfigCached(): boolean {
+  if (cached) return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Replace the in-memory cache (used after admin writes a new config). */
 export function setCachedConfig(cfg: OslerConfig): void {
   cached = cfg;

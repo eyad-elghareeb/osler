@@ -202,53 +202,55 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
 }
 
 export function OslerThemeProvider({ children }: { children: React.ReactNode }) {
-  // Applied theme id. Lazy-init to match THEME_INIT_SCRIPT so first paint
-  // agrees with the pre-paint class (explicit dark/light, else the OS). A
-  // stored custom id is validated against the synchronously cached config
-  // (localStorage mirror of the last boot) so custom-theme users first-paint
-  // on their palette instead of flashing the built-in dark theme until the
-  // async config fetch resolves.
-  const [theme, setThemeState] = React.useState<string>(() => {
-    const stored = readStoredThemeChoice();
-    if (stored === "dark" || stored === "light") return stored;
-    if (stored && stored !== SYSTEM_THEME_CHOICE) {
-      try {
-        if (getCustomThemes().some((t) => t.id === stored)) return stored;
-        const def = getDefaultTheme();
-        if (def) return def;
-      } catch {
-        // ignore — fall through to dark
-      }
-      return "dark";
-    }
-    return systemTheme();
-  });
-  // Stored choice: a theme id, or "system" while following the OS. Null
-  // until the config load resolves it (treated as following).
-  const [themeChoice, setThemeChoice] = React.useState<string>(() => readStoredThemeChoice() ?? SYSTEM_THEME_CHOICE);
-  // Seed from the synchronous config cache so isDark / availableThemes agree
-  // with the applied class before the async load resolves.
-  const [customThemes, setCustomThemes] = React.useState<CustomThemeConfig[]>(() => {
-    try {
-      return getCustomThemes();
-    } catch {
-      return [];
-    }
-  });
+  // Applied theme id. First render intentionally stays on the prerendered
+  // "dark" so hydration matches the server HTML; the layout effect below
+  // resolves the stored choice synchronously before the browser paints, so
+  // there is neither a hydration mismatch nor a visible theme flash.
+  const [theme, setThemeState] = React.useState<string>("dark");
+  // Stored choice: a theme id, or "system" while following the OS. Starts
+  // as "system" to match the prerender; the layout effect below resolves the
+  // real stored value before paint.
+  const [themeChoice, setThemeChoice] = React.useState<string>(SYSTEM_THEME_CHOICE);
+  const [customThemes, setCustomThemes] = React.useState<CustomThemeConfig[]>([]);
   // Mirror of customThemes for the matchMedia listener (avoids re-binding).
   const customThemesRef = React.useRef<CustomThemeConfig[]>([]);
   customThemesRef.current = customThemes;
 
-  // Apply the cached custom palette before first paint (layout effect runs
-  // synchronously after DOM insert, ahead of the browser's paint), so the
-  // async loadConfig() below never flashes a wrong theme on repeat visits.
+  // Resolve the stored choice before first paint (layout effects run
+  // synchronously after DOM insert, ahead of the browser's paint). A stored
+  // custom id is validated against the synchronously cached config
+  // (localStorage mirror of the last boot) so custom-theme users land on
+  // their palette instead of flashing the built-in theme until the async
+  // config fetch below resolves.
   React.useLayoutEffect(() => {
+    const apply = (id: string, customs: CustomThemeConfig[]) => {
+      setThemeState(id);
+      setCustomThemes(customs);
+      if (customs.length > 0) injectCustomThemeStyles(customs);
+      applyThemeClass(id, customs);
+    };
     try {
+      const stored = readStoredThemeChoice();
+      setThemeChoice(stored ?? SYSTEM_THEME_CHOICE);
       const syncCustom = getCustomThemes();
-      if (syncCustom.length > 0) {
-        injectCustomThemeStyles(syncCustom);
-        applyThemeClass(theme, syncCustom);
+      if (stored === "dark" || stored === "light") {
+        if (stored !== "dark") apply(stored, syncCustom);
+        else if (syncCustom.length > 0) setCustomThemes(syncCustom);
+        return;
       }
+      if (stored && stored !== SYSTEM_THEME_CHOICE) {
+        if (syncCustom.some((t) => t.id === stored)) {
+          apply(stored, syncCustom);
+          return;
+        }
+        const def = getDefaultTheme();
+        if (def && def !== "dark") apply(def, syncCustom);
+        else if (syncCustom.length > 0) setCustomThemes(syncCustom);
+        return;
+      }
+      const sys = systemTheme();
+      if (sys !== "dark") apply(sys, syncCustom);
+      else if (syncCustom.length > 0) setCustomThemes(syncCustom);
     } catch {
       // ignore — the async config load recovers below
     }
