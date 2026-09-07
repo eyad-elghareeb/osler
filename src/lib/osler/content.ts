@@ -216,15 +216,19 @@ export function getCachedAllCategoryLeaves(): ContentTreeNode[] | null {
  * R2 content dropped with the category folder itself inside the selection
  * (e.g. dragging a `library/` folder into the library destination) lands at
  * `content-files/library/library/...`, and the manifest then wraps the whole
- * category under a phantom "library" root. Hoist such nodes' children so the
- * tree starts at the real folders; paths and uids are preserved verbatim so
- * content URLs and progress keys stay stable. Nodes carrying their own files
- * are left untouched — nothing is dropped.
+ * category under a phantom "library" root. The smart sync can also emit the
+ * same wrapper with an empty path (`path: ""`, title after the category).
+ * Hoist such nodes' children so the tree starts at the real folders; paths
+ * and uids are preserved verbatim so content URLs and progress keys stay
+ * stable. Nodes carrying their own files are left untouched — nothing is
+ * dropped — and empty childless nodes are kept as-is.
  */
 function unwrapCategoryDuplicateRoots(nodes: ContentTreeNode[], folder: string): ContentTreeNode[] {
-  return nodes.flatMap((node) =>
-    (node.files?.length ?? 0) === 0 && node.path.replace(/\/$/, "") === folder ? node.items : [node]
-  );
+  return nodes.flatMap((node) => {
+    if ((node.files?.length ?? 0) !== 0 || node.items.length === 0) return [node];
+    const stripped = node.path.replace(/\/$/, "");
+    return stripped === "" || stripped === folder ? node.items : [node];
+  });
 }
 
 /**
