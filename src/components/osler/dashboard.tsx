@@ -162,7 +162,11 @@ export function Dashboard({
   React.useEffect(() => {
     if (leaves === null || !hydrated || walkthroughOpen) return;
     if (!isWalkthroughCompleted("dashboard") && !isWalkthroughCompleted("qbank-hub")) {
-      setWalkthroughOpen(true);
+      // Let the dashboard entrance settle before the spotlight slams over
+      // it — starting the tour the same frame content paints reads as a
+      // flash, and navigating away first cancels it entirely.
+      const t = setTimeout(() => setWalkthroughOpen(true), 1200);
+      return () => clearTimeout(t);
     }
   }, [leaves, hydrated, walkthroughOpen]);
 

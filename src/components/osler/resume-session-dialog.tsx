@@ -284,7 +284,11 @@ export function AutoResumeSessionDialog() {
     // dismissed, it stays dismissed until the active session changes
     // (a new session gets a new sessionId, which won't be in the set).
     if (sid && dismissedSessionIds.has(sid)) return;
-    setOpen(true);
+    // Let the incoming view settle first — popping the instant the page
+    // mounts (or storage hydration lands a beat later) reads as a glitch
+    // over the transition. Navigating away before the beat cancels it.
+    const t = setTimeout(() => setOpen(true), 1200);
+    return () => clearTimeout(t);
     // Intentionally only depends on sessionId + startedAt so it doesn't
     // re-pop on every answer (which updates the active record).
   }, [activeSession?.sessionId, activeSession?.startedAt]);
