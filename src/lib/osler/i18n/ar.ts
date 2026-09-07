@@ -1363,6 +1363,7 @@ export const ar = {
     "conflict.kindNotes": "الملاحظات",
     "conflict.kindHighlights": "التظليل",
     "conflict.kindAchievements": "الإنجازات",
+    "conflict.errorGeneric": "فشل المزامنة. تحقّق من اتصالك وأعد المحاولة.",
 
     /* Sync */
     "sync.title": "مزامنة التقدّم",

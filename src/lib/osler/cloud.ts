@@ -501,6 +501,8 @@ export async function fetchRemoteDataSummary(session: CloudSession): Promise<Dat
  *
  * Per-kind optimistic concurrency headers keep the push idempotent against
  * any silent edits on other devices that landed while this one was offline.
+ * Instance-level config flags (syncQbank / syncFlashcards / syncContent)
+ * are honoured so disabled kinds stay disabled on this device.
  */
 export async function pushAllToCloud(session: CloudSession): Promise<void> {
   await storage.ensureCacheHydrated();
@@ -513,11 +515,12 @@ export async function pushAllToCloud(session: CloudSession): Promise<void> {
   } catch {
     // Offline — push without OCC headers and let the next reconcile re-pull.
   }
+  const activeKinds = SYNC_KINDS.filter(pullableKind);
   const headers: Record<string, string> = { "x-osler-realtime-conn": getRealtimeConnId() };
-  for (const kind of SYNC_KINDS) {
+  for (const kind of activeKinds) {
     if (serverTimestamps[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverTimestamps[kind]);
   }
-  const payload = storage.exportSyncSnapshot();
+  const payload = storage.exportSyncSnapshot(activeKinds);
   await request("/v1/sync", {
     method: "PUT",
     headers,
@@ -526,18 +529,92 @@ export async function pushAllToCloud(session: CloudSession): Promise<void> {
 }
 
 /**
- * "Keep cloud's data" — wipe every local store (preserving the live session
- * mirror), then pull every kind from the cloud so this device mirrors the
- * account exactly. Used by the conflict prompt.
+ * "Keep cloud's data" — fetch every kind from the cloud FIRST, then wipe
+ * local (preserving the live session mirror) and merge the snapshot in.
+ * Pull-then-wipe means a network failure leaves the user with their
+ * original local data intact — wiping first would have been destructive
+ * on transient network errors.
  */
 export async function pullAllFromCloud(session: CloudSession): Promise<void> {
-  await storage.wipeAllKeepSession();
+  // Pull first so a network failure doesn't destroy local state.
   const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(
     `/v1/sync?kinds=${SYNC_KINDS.join(",")}`,
     {},
     session.token,
   );
+  // Wipe local (session preserved) and merge the snapshot in. Order matters:
+  // storage.mergeCloudSnapshot expects a clean cache to receive records in,
+  // otherwise the per-kind unions would resurrect records the user just
+  // chose to discard.
+  await storage.wipeAllKeepSession();
   await storage.mergeCloudSnapshot(remote);
+}
+
+/**
+ * "Merge" — do the same pull-then-push that the normal sync loop performs,
+ * but synchronously so the dialog can wait for it before dismissing. Used
+ * by the conflict-resolution flow when the user picks "merge" without
+ * having enabled cloud sync on this device.
+ */
+export async function mergeNow(session: CloudSession): Promise<void> {
+  await storage.ensureCacheHydrated();
+  // 1. Pull: HEAD first so we know which kinds are stale server-side.
+  let serverTimestamps: Record<string, number> = {};
+  try {
+    const head = await request<{
+      timestamps?: Record<string, number>;
+      quota?: { usedBytes: number; limitBytes: number };
+    }>("/v1/sync?head=true", {}, session.token);
+    serverTimestamps = head.timestamps ?? {};
+  } catch {
+    // Offline — push without OCC; the next reconcile will re-pull.
+  }
+  // 2. Pull every kind the server actually has. Filter through pullableKind
+  // so config-disabled kinds stay disabled on this device.
+  const pullable = SYNC_KINDS.filter(pullableKind);
+  if (pullable.length > 0) {
+    try {
+      const remote = await request<Record<string, { records: Record<string, unknown>; updatedAt: number }>>(
+        `/v1/sync?kinds=${pullable.join(",")}`,
+        {},
+        session.token,
+      );
+      await storage.mergeCloudSnapshot(remote);
+      for (const kind of SYNC_KINDS) {
+        if (remote[kind]) serverTimestamps[kind] = remote[kind].updatedAt ?? 0;
+      }
+    } catch {
+      // Offline — push without a prior pull. The OCC headers will be missing
+      // and the server uses last-writer-wins; this is the same behaviour the
+      // regular sync loop has when it pushes without a prior pull.
+    }
+  }
+  // 3. Push local with optimistic-concurrency headers.
+  const headers: Record<string, string> = { "x-osler-realtime-conn": getRealtimeConnId() };
+  for (const kind of SYNC_KINDS) {
+    if (serverTimestamps[kind] > 0) headers[`x-sync-since-${kind}`] = String(serverTimestamps[kind]);
+  }
+  const payload = storage.exportSyncSnapshot(SYNC_KINDS.filter(pullableKind));
+  await request("/v1/sync", {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(payload),
+  }, session.token);
+}
+
+/** Per-kind gate used by both the background sync loop AND the one-shot
+ *  conflict-resolution push/pull/merge. Defaults to `true` when the config
+ *  hasn't loaded yet — the cloud worker enforces the same gate server-side,
+ *  so the worst case is a one-shot push that lands on a kind the instance
+ *  has disabled; the server drops it and the next reconcile cleans up. */
+function pullableKind(kind: SyncKind): boolean {
+  if (kind === "settings") return true;
+  const cfg = (() => {
+    try { return getConfig().cloud as { syncQbank?: boolean; syncFlashcards?: boolean; syncContent?: boolean }; } catch { return {} as { syncQbank?: boolean; syncFlashcards?: boolean; syncContent?: boolean }; }
+  })();
+  if (kind === "qbank") return cfg.syncQbank !== false;
+  if (kind === "flashcards") return cfg.syncFlashcards !== false;
+  return cfg.syncContent !== false;
 }
 
 /** Helper: resolve the cloud API URL the same way admin-api.ts does. */
@@ -833,16 +910,6 @@ export function startCloudSync(session: CloudSession): () => void {
       syncQuota = { usedBytes: quota.usedBytes, limitBytes: quota.limitBytes };
       window.dispatchEvent(new CustomEvent("osler-cloud-sync-quota", { detail: syncQuota }));
     }
-  };
-
-  const pullableKind = (kind: SyncKind): boolean => {
-    // settings is account-level and always synced, even when other content
-    // kinds are disabled — it carries the sync-enabled flag itself so a new
-    // device picks it up on its next login.
-    if (kind === "settings") return true;
-    if (kind === "qbank") return getConfig().cloud.syncQbank;
-    if (kind === "flashcards") return getConfig().cloud.syncFlashcards;
-    return getConfig().cloud.syncContent;
   };
 
   /** GET the given kinds (deduped, config-gated) and merge them locally. */

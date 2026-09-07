@@ -28,7 +28,7 @@ function isSafeLocalPath(input: string | null | undefined): input is string {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, username, loading, pendingConflict, conflictCheckPending } = useOslerSession();
+  const { login, username, loading, pendingConflict, conflictCheckPending, conflictResolving } = useOslerSession();
 
   React.useEffect(() => {
     void startBackgroundPrecaching();
@@ -51,13 +51,16 @@ function LoginContent() {
   //    login page instead of being lost to the navigation.
   //  - the conflict check itself is still in flight, so a guest-upgrade
   //    prompt doesn't get skipped because the redirect fires first.
+  //  - a resolution network call is in progress (push/pull/merge), so the
+  //    device isn't left in a half-applied state when the redirect fires.
   React.useEffect(() => {
     if (loading) return;
     if (!username) return;
     if (pendingConflict) return;
     if (conflictCheckPending) return;
+    if (conflictResolving) return;
     router.replace(next);
-  }, [username, loading, router, next, pendingConflict, conflictCheckPending]);
+  }, [username, loading, router, next, pendingConflict, conflictCheckPending, conflictResolving]);
 
   const handleLogin = React.useCallback(
     (name: string) => {

@@ -19,9 +19,20 @@ const IMPORT_MAX_JSON_BYTES = 100 * 1024 * 1024; // 100 MB decompressed
 const IMPORT_MAX_RECORD_BYTES = 4 * 1024 * 1024;  // 4 MB per record
 const LOCALSTORAGE_OSLER_PREFIX = "osler-";
 const LOCALSTORAGE_PRESERVE = new Set<string>([
-  // Never wipe the live session — losing it would silently downgrade the
-  // user to a guest on reload. Cloud sync re-derives everything else.
+  // Local guest display-name mirror — losing it would silently downgrade the
+  // user to "no session" on reload. Cloud sync re-derives everything else.
   "osler-local-session",
+  // Cloud session mirror — `wipeAllKeepSession` is invoked by the
+  // account-switch "keep cloud" path and the danger-zone reset. Without
+  // preserving it, a cloud-signed-in user would lose their session on
+  // next page load and silently drop to local mode. Cloud sign-out clears
+  // this key explicitly via `clearCloudSession()` in cloud.ts.
+  "osler-cloud-session-v1",
+  // Per-device last-cloud-user marker — see session-context.tsx. Wiping
+  // this would re-prompt the conflict dialog for the same user on the
+  // same device, which is exactly the regression `wipeAllKeepSession`
+  // exists to avoid.
+  "osler-last-cloud-user-id",
 ]);
 
 /** localStorage key holding the bookmark state for library article paths —

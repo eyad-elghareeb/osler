@@ -18,34 +18,38 @@ import { haptic } from "@/lib/osler/native";
  *    anything that wasn't already here.
  *  - Keep cloud's data         → wipe local (preserving the live session),
  *    pull everything from cloud.
- *  - Merge                     → default monotonic merge (newer timestamp wins
- *    per record); just dismisses the prompt.
+ *  - Merge                     → same pull-then-push the sync loop does,
+ *    executed inline so it works even when cloud sync is opt-in and off.
  *
- *  The dialog is mounted at the AppShell level so it can appear on top of
- *  every view without each studio re-implementing the gate.
+ *  The dialog is mounted at the ROOT layout (sibling of RouteGuard, inside
+ *  OslerSessionProvider) so it renders above /login too — a guest who
+ *  registers sees the prompt before the redirect fires.
  */
 export function AccountConflictDialog() {
-  const { pendingConflict, resolveConflict } = useOslerSession();
+  const { pendingConflict, conflictResolving, resolveConflict } = useOslerSession();
   const { t } = useI18n();
   const [busy, setBusy] = React.useState<ConflictResolution | null>(null);
   const [error, setError] = React.useState("");
 
   const handleResolve = React.useCallback(
     async (resolution: ConflictResolution) => {
-      if (busy) return;
+      // Honour the authoritative state from session-context — a stale local
+      // `busy` would re-enable buttons while a different effect (or the
+      // session-refreshed listener) is mid-flight.
+      if (busy || conflictResolving) return;
       setError("");
       setBusy(resolution);
       try {
         await resolveConflict(resolution);
         haptic("success");
       } catch (err) {
-        setError((err as Error).message || "Conflict resolution failed");
+        setError((err as Error).message || t("conflict.errorGeneric"));
         haptic("error");
       } finally {
         setBusy(null);
       }
     },
-    [busy, resolveConflict]
+    [busy, conflictResolving, resolveConflict, t]
   );
 
   return (
@@ -91,6 +95,7 @@ export function AccountConflictDialog() {
               <ChoiceButton
                 onClick={() => handleResolve("keep-local")}
                 busy={busy}
+                externallyBusy={conflictResolving}
                 icon={CloudUpload}
                 title={t("conflict.keepLocalTitle")}
                 description={t("conflict.keepLocalDesc")}
@@ -99,6 +104,7 @@ export function AccountConflictDialog() {
               <ChoiceButton
                 onClick={() => handleResolve("keep-cloud")}
                 busy={busy}
+                externallyBusy={conflictResolving}
                 icon={CloudDownload}
                 title={t("conflict.keepCloudTitle")}
                 description={t("conflict.keepCloudDesc")}
@@ -107,6 +113,7 @@ export function AccountConflictDialog() {
               <ChoiceButton
                 onClick={() => handleResolve("merge")}
                 busy={busy}
+                externallyBusy={conflictResolving}
                 icon={GitMerge}
                 title={t("conflict.mergeTitle")}
                 description={t("conflict.mergeDesc")}
@@ -161,6 +168,7 @@ function SummaryGrid({
 function ChoiceButton({
   onClick,
   busy,
+  externallyBusy,
   icon: Icon,
   title,
   description,
@@ -168,6 +176,7 @@ function ChoiceButton({
 }: {
   onClick: () => void;
   busy: ConflictResolution | null;
+  externallyBusy: boolean;
   icon: typeof Cloud;
   title: string;
   description: string;
@@ -178,8 +187,7 @@ function ChoiceButton({
     default: "border-border bg-card hover:bg-muted/40 text-foreground",
     ghost: "border-border bg-transparent hover:bg-muted/40 text-muted-foreground",
   }[tone];
-  const isBusy = busy !== null;
-  const isMine = busy !== null;
+  const isBusy = busy !== null || externallyBusy;
   return (
     <button
       type="button"
@@ -192,7 +200,7 @@ function ChoiceButton({
       )}
     >
       <div className="size-9 rounded-lg bg-background/60 border border-border flex items-center justify-center shrink-0 mt-0.5">
-        {isMine ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
+        {isBusy ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold">{title}</div>

@@ -1368,6 +1368,7 @@ export const en = {
     "conflict.kindNotes": "Notes",
     "conflict.kindHighlights": "Highlights",
     "conflict.kindAchievements": "Achievements",
+    "conflict.errorGeneric": "Sync failed. Check your connection and try again.",
 
     /* Sync */
     "sync.title": "Progress Sync",

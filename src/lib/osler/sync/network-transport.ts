@@ -97,8 +97,10 @@ export class NetworkTransport {
 
   /** Data received but not yet accepted/rejected by the user. Held as a queue
    *  keyed by peer so a second push from another peer doesn't clobber the
-   *  first — the UI gets one card per peer. */
-  private pending: Map<string, { peerId: string; label: string; payload: SyncProtocol.SyncPayload }> = new Map();
+   *  first — the UI gets one card per peer. The summary is captured at
+   *  decode time so the UI never has to re-encode the payload to display
+   *  its size. */
+  private pending: Map<string, { peerId: string; label: string; payload: SyncProtocol.SyncPayload; summary: SyncPreviewSummary }> = new Map();
 
   /** Bound on unavailable-id retries so a PeerJS ID that collides twice in a
    *  row can't infinite-loop the start() recursion. */
@@ -158,10 +160,25 @@ export class NetworkTransport {
 
       const peer = this.peer;
 
+      // The retry-on-unavailable-id path calls `this.start()` again, which
+      // resolves a NEW promise with a NEW timeout. Without clearing the
+      // old timeout, both fire and the first promise's late reject becomes
+      // an unhandled rejection.
+      let settled = false;
+      const settleOnce = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        fn();
+      };
+      const timeoutId = setTimeout(() => {
+        if (!peer.open) settleOnce(() => reject(new Error("PeerJS connection timed out")));
+      }, 10000);
+
       peer.on("open", () => {
         this.unavailableRetries = 0;
         this.callbacks.onPeerId(this.localPeerId);
-        resolve();
+        settleOnce(resolve);
       });
 
       peer.on("connection", (conn) => {
@@ -172,7 +189,7 @@ export class NetworkTransport {
         if ((err as { type: string }).type === "unavailable-id") {
           this.unavailableRetries += 1;
           if (this.unavailableRetries > NetworkTransport.MAX_UNAVAILABLE_RETRIES) {
-            reject(new Error("PeerJS ID unavailable after multiple retries — please try again"));
+            settleOnce(() => reject(new Error("PeerJS ID unavailable after multiple retries — please try again")));
             return;
           }
           const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -181,15 +198,14 @@ export class NetworkTransport {
           this.callbacks.onStatusChanged("error", "ID taken, re-registering...");
           this.peer?.destroy();
           this.started = false;
-          this.start();
+          // Settle this attempt (so the new start's promise is independent),
+          // then kick the retry.
+          settleOnce(resolve);
+          void this.start();
           return;
         }
-        reject(err);
+        settleOnce(() => reject(err));
       });
-
-      setTimeout(() => {
-        if (!peer.open) reject(new Error("PeerJS connection timed out"));
-      }, 10000);
     });
   }
 
@@ -392,20 +408,21 @@ export class NetworkTransport {
     try {
       const payload = SyncProtocol.decode(raw);
       const summary = SyncProtocol.preview(raw);
-      // Hold the payload for user review — nothing touches storage until
-      // acceptIncoming() is called. A peer that connects and pushes
-      // uninvited can no longer mutate this device's data.
-      this.pending.set(conn.peer, { peerId: conn.peer, label: conn.peer, payload });
+      const previewSummary: SyncPreviewSummary = {
+        senderName: String(payload.senderName ?? "Unknown device"),
+        packCount: summary?.packCount ?? 0,
+        progressCount: summary?.progressCount ?? 0,
+      };
       this.callbacks.onIncomingRequest({
         peerId: conn.peer,
         label: this.connections.get(conn.peer)?.info.label ?? conn.peer,
-        preview: {
-          senderName: String(payload.senderName ?? "Unknown device"),
-          packCount: summary?.packCount ?? 0,
-          progressCount: summary?.progressCount ?? 0,
-        },
+        preview: previewSummary,
         receivedAt: Date.now(),
       });
+      // Store the payload AFTER notifying the UI. A callback throw (UI
+      // bug) would otherwise leave the offer orphaned in the pending map
+      // with no way for the user to act on it.
+      this.pending.set(conn.peer, { peerId: conn.peer, label: conn.peer, payload, summary: previewSummary });
       this.callbacks.onStatusChanged("connected", `Sync offer from ${payload.senderName || "device"} - review to accept`);
     } catch (err) {
       this.callbacks.onStatusChanged("error", `Import failed: ${(err as Error).message}`);
@@ -445,20 +462,10 @@ export class NetworkTransport {
   get pendingIncomingList(): IncomingSyncRequest[] {
     const out: IncomingSyncRequest[] = [];
     for (const entry of this.pending.values()) {
-      const summary = SyncProtocol.preview(
-        // Re-derive the wire form only if needed; the entry already carries
-        // senderName/packCount via the original onIncomingRequest callback,
-        // but that callback isn't accessible here, so we recompute.
-        JSON.stringify(entry.payload),
-      );
       out.push({
         peerId: entry.peerId,
         label: this.connections.get(entry.peerId)?.info.label ?? entry.label,
-        preview: {
-          senderName: String(entry.payload.senderName ?? "Unknown device"),
-          packCount: summary?.packCount ?? 0,
-          progressCount: summary?.progressCount ?? 0,
-        },
+        preview: entry.summary,
         receivedAt: 0,
       });
     }

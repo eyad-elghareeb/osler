@@ -9,6 +9,7 @@ import {
   consumeGoogleLogin,
   fetchRemoteDataSummary,
   getCloudSyncEnabled,
+  mergeNow,
   notifySyncStatus,
   pullAllFromCloud,
   pullSettingsFromCloud,
@@ -43,6 +44,10 @@ interface SessionContextType {
    *  /login redirect waits on this so a guest-upgrade prompt doesn't get
    *  lost to navigation. */
   conflictCheckPending: boolean;
+  /** True while a conflict resolution is in flight (push or pull). Stays
+   *  true until the network call resolves, so the /login redirect doesn't
+   *  fire mid-push and leave the device in a half-applied state. */
+  conflictResolving: boolean;
 }
 
 /** Snapshot of the local vs remote data shapes at the moment the conflict
@@ -338,6 +343,7 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
   // prompt.
   const [pendingConflict, setPendingConflict] = React.useState<PendingConflict | null>(null);
   const [conflictCheckPending, setConflictCheckPending] = React.useState(false);
+  const [conflictResolving, setConflictResolving] = React.useState(false);
   React.useEffect(() => {
     if (!cloudSession?.token) {
       setPendingConflict(null);
@@ -357,6 +363,12 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     setConflictCheckPending(true);
     void (async () => {
       try {
+        // Wait for IndexedDB hydration BEFORE reading the local summary —
+        // a fresh page load races the summary read against the hydration
+        // pass, and reading zeroed cache would silently skip the prompt
+        // for a guest who upgrades within the first few ms of page load.
+        await storage.ensureCacheHydrated();
+        if (cancelled) return;
         const local = storage.getLocalDataSummary();
         const remote = await fetchRemoteDataSummary(cloudSession);
         if (cancelled) return;
@@ -381,27 +393,77 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     async (resolution: ConflictResolution) => {
       const current = pendingConflict;
       if (!current) return;
-      setPendingConflict(null);
+      // Guard against double-clicks — the dialog disables its buttons while
+      // busy, but a stale event (or a programmatic call) could still get here.
+      if (conflictResolving) return;
+      // Guard against a stale snapshot: if the live session has been
+      // refreshed or expired since detection, the captured token in
+      // `current.cloudSession` may no longer work. The dialog's error UI
+      // surfaces this case so the user can retry.
+      const live = readCloudSession();
+      if (!live) {
+        // Signed out while the prompt was up — nothing left to resolve.
+        setPendingConflict(null);
+        return;
+      }
+      if (live.token !== current.cloudSession.token) {
+        // Live session has moved on (token rotated or re-authed) — re-fetch
+        // the remote summary so the dialog re-renders against the current
+        // state instead of trying to push/pull with a dead token.
+        setPendingConflict(null);
+        setConflictCheckPending(true);
+        void (async () => {
+          try {
+            await storage.ensureCacheHydrated();
+            const local = storage.getLocalDataSummary();
+            const remote = await fetchRemoteDataSummary(live);
+            if (hasConflict(local, remote)) {
+              setPendingConflict({ cloudSession: live, local, remote });
+            } else {
+              try { localStorage.setItem(LOCAL_ACCOUNT_KEY, live.user.id); } catch {}
+            }
+          } catch {
+            // Stale-session refetch failed (e.g. 401 after revocation) —
+            // leave the conflict cleared; the sync status surfaces the
+            // auth failure and the user can sign in again.
+          } finally {
+            setConflictCheckPending(false);
+          }
+        })();
+        return;
+      }
+      setConflictResolving(true);
       try {
         if (resolution === "keep-local") {
           await pushAllToCloud(current.cloudSession);
           notifySyncStatus("syncing");
         } else if (resolution === "keep-cloud") {
           await pullAllFromCloud(current.cloudSession);
+        } else {
+          // "merge" — actually merge (do the pull + push that the normal
+          // sync loop would do, but do it RIGHT NOW even if cloud sync is
+          // opt-in and disabled on this device). Without this the button
+          // was a no-op and the user assumed their cloud data would land
+          // on this device, which it wouldn't until they manually enabled
+          // sync in Settings.
+          await mergeNow(current.cloudSession);
         }
-        // "merge" is a no-op — the sync loop's normal pull/push cycle already
-        // performs the monotonic merge; we just dismiss the prompt.
         try {
           localStorage.setItem(LOCAL_ACCOUNT_KEY, current.cloudSession.user.id);
         } catch {}
+        // Only NOW is it safe to clear the conflict — the network call has
+        // either succeeded or thrown, and the dialog has surfaced the error.
+        setPendingConflict(null);
       } catch (err) {
         // Re-surface the conflict so the user can retry — silent failure
         // here would leave the device in a half-applied state.
         setPendingConflict(current);
         throw err;
+      } finally {
+        setConflictResolving(false);
       }
     },
-    [pendingConflict]
+    [pendingConflict, conflictResolving]
   );
 
   // Start cloud sync only when we have a real CloudSession with a token AND
@@ -499,12 +561,14 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     setUsername(null);
     setCloudSession(null);
     setPendingConflict(null);
+    setConflictResolving(false);
     persistLocalUsername(null);
-    // Clear the per-device last-user marker so the next sign-in re-checks
-    // for conflicts — switching accounts on the same device must always
-    // re-evaluate, but signing the same account out + back in (e.g.
-    // token rotation) keeps it suppressed.
-    try { localStorage.removeItem(LOCAL_ACCOUNT_KEY); } catch {}
+    // NOTE: do NOT clear `osler-last-cloud-user-id` here. The marker is
+    // intentionally preserved device-local state across logout (and the
+    // danger-zone reset, which keeps it in LOCALSTORAGE_PRESERVE) so the
+    // same user signing back into the same account on this device is
+    // recognised (no conflict prompt). A different account gets a
+    // different user.id and the check fires anyway.
     void logoutCloudAccount(currentSession);
     router.push("/login");
   }, [cloudSession, router, persistLocalUsername]);
@@ -520,6 +584,7 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
         pendingConflict,
         resolveConflict,
         conflictCheckPending,
+        conflictResolving,
       }}
     >
       {children}
