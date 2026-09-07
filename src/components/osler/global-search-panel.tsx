@@ -12,7 +12,7 @@
  */
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Search as SearchIcon,
   BookOpen,
@@ -137,13 +137,20 @@ export function GlobalSearchPanel({
   // Reset active index when the query changes.
   React.useEffect(() => { setActiveIdx(0); }, [query]);
 
+  // True when the last active-index change came from the keyboard. Hovering
+  // rows also moves the highlight (for mouse users) but must not yank the
+  // scroll position — only keyboard travel scrolls the list.
+  const keyNavRef = React.useRef(false);
+
   // Keyboard nav: ↑/↓ to move, Enter to select, Escape handled by parent.
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      keyNavRef.current = true;
       setActiveIdx((i) => Math.min(i + 1, Math.max(flat.length - 1, 0)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      keyNavRef.current = true;
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
@@ -157,6 +164,8 @@ export function GlobalSearchPanel({
 
   // Scroll the active row into view when it changes.
   React.useEffect(() => {
+    if (!keyNavRef.current) return;
+    keyNavRef.current = false;
     const list = listRef.current;
     if (!list) return;
     const el = list.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`);
@@ -263,8 +272,10 @@ export function GlobalSearchPanel({
             {t("search.noResults", { query })}
           </div>
         ) : (
+          // Groups are enter-only: an exit fade here flickered while typing
+          // (a group vanishing at one keystroke and rematching at the next
+          // faded out and back in instead of swapping cleanly).
           <div className="space-y-3">
-            <AnimatePresence initial={false}>
               {visibleGroups.map((group) => {
                 const Icon = KIND_ICON[group.kind];
                 return (
@@ -272,7 +283,6 @@ export function GlobalSearchPanel({
                     key={group.kind}
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
                     transition={MOTION_TRANSITION.fast}
                   >
                     <div className="text-[11px] uppercase tracking-wider text-muted-foreground px-2 py-1.5 flex items-center gap-1.5">
@@ -293,7 +303,10 @@ export function GlobalSearchPanel({
                               haptic("selection");
                               onSelect(r);
                             }}
-                            onMouseEnter={() => setActiveIdx(idx)}
+                            onMouseEnter={() => {
+                              keyNavRef.current = false;
+                              setActiveIdx(idx);
+                            }}
                             className={cn(
                               "relative w-full text-start px-2 rounded-lg transition-colors flex items-center gap-3",
                               isSheet ? "py-2.5" : "py-2",
@@ -334,7 +347,6 @@ export function GlobalSearchPanel({
                   </motion.div>
                 );
               })}
-            </AnimatePresence>
           </div>
         )}
       </div>
