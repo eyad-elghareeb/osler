@@ -4,7 +4,6 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Settings as SettingsIcon, Sparkles, AlertTriangle, Keyboard, Languages, Download, Smartphone, FileArchive, Vibrate, ArrowLeft, ChevronRight, Info, Palette, User, Loader2, LifeBuoy, MonitorSmartphone } from "lucide-react";
 import { storage } from "@/lib/osler/storage";
-import { SyncSettingsSection } from "@/components/osler/sync/sync-settings-section";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { type StringKey } from "@/lib/osler/i18n";
 import { cn } from "@/lib/utils";
@@ -75,6 +74,7 @@ const SupportSettingsSection = mkSection(() => import("@/components/osler/settin
 const AboutSettingsSection = mkSection(() => import("@/components/osler/settings/about-section").then((m) => ({ default: m.AboutSettingsSection })));
 const DangerZoneSection = mkSection(() => import("@/components/osler/settings/danger-section").then((m) => ({ default: m.DangerZoneSection })));
 const AccountSettingsSection = mkSection(() => import("@/components/osler/settings/account-section").then((m) => ({ default: m.AccountSettingsSection })));
+const SyncSettingsSection = mkSection(() => import("@/components/osler/sync/sync-settings-section").then((m) => ({ default: m.SyncSettingsSection })));
 const SessionsSettingsSection = mkSection(() => import("@/components/osler/settings/sessions-section").then((m) => ({ default: m.SessionsSettingsSection })));
 
 /** Warm a section's chunk (no-op for statically bundled sections). */
@@ -86,7 +86,7 @@ const SECTION_PRELOAD: Record<SettingsSection, () => void> = {
   ai: () => AiSettingsSection.preloadSection(),
   shortcuts: () => ShortcutsSettingsSection.preloadSection(),
   downloads: () => DownloadsSettingsSection.preloadSection(),
-  sync: () => {}, // statically imported — already in the bundle
+  sync: () => SyncSettingsSection.preloadSection(),
   native: () => NativeSettingsSection.preloadSection(),
   support: () => SupportSettingsSection.preloadSection(),
   backup: () => BackupSettingsSection.preloadSection(),

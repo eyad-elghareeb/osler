@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
@@ -61,7 +62,13 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { NotesPanel } from "./lazy-tools";
-import { SyncModal } from "./sync/sync-modal";
+// Split: the sync modal pulls PeerJS + MQTT (+QR) — ~160KB that has no
+// business parsing on profile open. Loads on first open instead; the open
+// animation covers the fetch, and the chunk stays cached afterwards.
+const SyncModal = dynamic(
+  () => import("./sync/sync-modal").then((m) => ({ default: m.SyncModal })),
+  { ssr: false, loading: () => null },
+);
 import { haptic } from "@/lib/osler/native";
 import {
   PageHeader,
@@ -326,14 +333,16 @@ export function Profile({
         <AchievementsSection unlockedIds={unlockedIds} />
       </div>
 
-      <SyncModal
-        open={syncOpen}
-        onClose={() => setSyncOpen(false)}
-        onOpenSettings={() => {
-          setSyncOpen(false);
-          onOpenSettingsSection?.("sync");
-        }}
-      />
+      {syncOpen && (
+        <SyncModal
+          open={syncOpen}
+          onClose={() => setSyncOpen(false)}
+          onOpenSettings={() => {
+            setSyncOpen(false);
+            onOpenSettingsSection?.("sync");
+          }}
+        />
+      )}
     </div>
   );
 }
