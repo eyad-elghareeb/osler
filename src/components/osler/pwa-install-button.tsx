@@ -23,6 +23,14 @@ function isIos() {
   return iosDevice && !("MSStream" in window);
 }
 
+/**
+ * Module-level dismiss-flag cache. The button remounts with its host bar on
+ * every view change — without this each remount re-read the IndexedDB flag
+ * and replayed the placeholder→button pop. First paint ever still reads
+ * async; every mount after that renders the final state immediately.
+ */
+let cachedDismiss: boolean | null = null;
+
 export function PwaInstallButton({ className }: { className?: string }) {
   const [deferred, setDeferred] = React.useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = React.useState(false);
@@ -46,14 +54,21 @@ export function PwaInstallButton({ className }: { className?: string }) {
   }, []);
 
   const { t } = useI18n();
-  const [dismissed, setDismissed] = React.useState(false);
-  const [checkingDismiss, setCheckingDismiss] = React.useState(true);
+  const [dismissed, setDismissed] = React.useState(() => cachedDismiss ?? false);
+  const [checkingDismiss, setCheckingDismiss] = React.useState(() => cachedDismiss === null);
 
   React.useEffect(() => {
+    if (cachedDismiss !== null) return;
     settings.getBool("dismiss-pwa-hint").then((val) => {
+      cachedDismiss = val;
       setDismissed(val);
       setCheckingDismiss(false);
     });
+  }, []);
+
+  const setDismissedCached = React.useCallback((next: boolean) => {
+    cachedDismiss = next;
+    setDismissed(next);
   }, []);
 
   if (installed) return null;
@@ -166,7 +181,7 @@ export function PwaInstallButton({ className }: { className?: string }) {
                 checked={dismissed}
                 onCheckedChange={(next) => {
                   const nextBool = next === true;
-                  setDismissed(nextBool);
+                  setDismissedCached(nextBool);
                   setHint(false);
                   if (nextBool) settings.set("dismiss-pwa-hint", "true");
                   else settings.set("dismiss-pwa-hint", "false");
