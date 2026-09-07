@@ -2,12 +2,11 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
-import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, FileText, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Check, X, Clock, Pause, Play, GraduationCap, RotateCcw, ListChecks, Timer, Sparkles, Calculator as CalcIcon, FlaskConical, BookOpen, NotebookPen, Sliders, Eye, Keyboard, Wrench, LogOut, MessageSquareWarning } from "lucide-react";
 import { ENGINE_META } from "@/lib/osler/content";
 import { toast } from "@/hooks/use-toast";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { sessions, type HighlightItem, type WrittenDraft } from "@/lib/osler/storage";
-import type { ArticleMeta } from "@/lib/osler/articles";
 import { HIGHLIGHT_COLOR_KEYS, ERASER_TOOL } from "@/lib/osler/highlight-palette";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,6 +36,7 @@ import { WrittenEngineView, WrittenEvaluationPanel } from "./written-engine";
 import { OsceEngineView } from "./osce-engine-view";
 import { ReportTicketDialog } from "@/components/osler/report-ticket-dialog";
 import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
+import { FolderTreeNav } from "@/components/osler/folder-tree-nav";
 
 
 
@@ -180,7 +180,7 @@ export function QuizView({
   quizSettingsOpen,
   notesOpen,
   navOpenMobile,
-  articleList,
+  articleTree,
   onToggleCalculator,
   onToggleLabValues,
   onToggleAiAssistant,
@@ -219,7 +219,7 @@ export function QuizView({
   quizSettingsOpen: boolean;
   notesOpen: boolean;
   navOpenMobile: boolean;
-  articleList: ArticleMeta[];
+  articleTree: ContentTreeNode[];
   onToggleCalculator: () => void;
   onToggleLabValues: () => void;
   onToggleAiAssistant: () => void;
@@ -256,7 +256,8 @@ export function QuizView({
   const q = session.questions[session.current];
   const isLast = session.current >= session.questions.length - 1;
   const readonly = !!session.isReview;
-  const submitted = readonly || session.revealed[session.current] || false;
+  const isExamMode = session.mode === "timed" && !readonly;
+  const submitted = readonly || (!isExamMode && session.revealed[session.current]) || false;
   const selected = session.answers[session.current];
   const isMCQ = q ? q.correct >= 0 : false;
   const qIsWritten = q ? (q.correct == null || q.correct < 0) && (!!q.rubric?.length || !!q.modelAnswer) : false;
@@ -424,6 +425,7 @@ export function QuizView({
 
   const handleWrittenAIGrade = React.useCallback(
     async (q: SessionQuestion, draft: WrittenDraft) => {
+      if (isExamMode) return;
       const apiKey = localStorage.getItem("osler_gemini_api_key");
       if (!apiKey) {
         toast({ title: t("qbank.written.noApiKey"), variant: "destructive" });
@@ -458,11 +460,12 @@ export function QuizView({
         writtenAbortRef.current = null;
       }
     },
-    [onWrittenDraftChange],
+    [isExamMode, onWrittenDraftChange],
   );
 
   const handleWrittenChildAIGrade = React.useCallback(
     async (q: SessionQuestion, draft: WrittenDraft, childIdx: number) => {
+      if (isExamMode) return;
       const apiKey = localStorage.getItem("osler_gemini_api_key");
       if (!apiKey) return;
       const child = q.children?.[childIdx];
@@ -488,7 +491,7 @@ export function QuizView({
         setWrittenChildGrading(null);
       }
     },
-    [onWrittenDraftChange],
+    [isExamMode, onWrittenDraftChange],
   );
 
   // Notes panel state — replaced sticky-note floating cards. Notes are
@@ -582,7 +585,7 @@ export function QuizView({
   const renderQuestionContent = (qIdx: number, interactive: boolean) => {
     const question = session.questions[qIdx];
     if (!question) return null;
-    const qSubmitted = readonly || session.revealed[qIdx] || false;
+    const qSubmitted = readonly || (!isExamMode && session.revealed[qIdx]) || false;
     const qSelected = session.answers[qIdx];
     const qIsMCQ = question.correct >= 0;
     // Per-question written detection: non-MCQ with rubric or modelAnswer
@@ -773,6 +776,7 @@ export function QuizView({
             contentDir={dirForContent(activeItem.lang)}
             question={question}
             draft={qWrittenDraft}
+            examMode={isExamMode}
             submitted={qSubmitted}
             grading={writtenAIGrading === question.id}
             onTextChange={(text) =>
@@ -1158,7 +1162,7 @@ export function QuizView({
       }
       // Plain Enter always submits — the standard form convention, even if the
       // configured submit binding is a modifier chord.
-      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !submitted) {
+      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !submitted && !isExamMode) {
         if (isMCQ ? selected !== undefined : true) {
           e.preventDefault();
           onSubmit();
@@ -1170,12 +1174,17 @@ export function QuizView({
         case "qbank.next": e.preventDefault(); goNext(); break;
         case "qbank.flag": e.preventDefault(); onToggleFlag(); break;
         case "qbank.submit":
-          if (!submitted && (isMCQ ? selected !== undefined : true)) {
+          if (!isExamMode && !submitted && (isMCQ ? selected !== undefined : true)) {
             e.preventDefault();
             onSubmit();
           }
           break;
-        case "qbank.aiAssistant": e.preventDefault(); onToggleAiAssistant(); break;
+        case "qbank.aiAssistant":
+          if (!isExamMode) {
+            e.preventDefault();
+            onToggleAiAssistant();
+          }
+          break;
         case "qbank.highlight": e.preventDefault(); setTool((t) => (t && t !== ERASER_TOOL ? null : color)); break;
         case "qbank.eraser": e.preventDefault(); setTool((t) => (t === ERASER_TOOL ? null : ERASER_TOOL)); break;
         case "qbank.notes": e.preventDefault(); onToggleNotes(); break;
@@ -1195,7 +1204,7 @@ export function QuizView({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [q, isMCQ, submitted, selected, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onNewNote, onToggleQuizSettings, setTool, readonly, bindings]);
+  }, [q, isMCQ, submitted, selected, isExamMode, onToggleFlag, goPrev, goNext, onSelect, onSubmit, onToggleAiAssistant, onToggleNotes, onNewNote, onToggleQuizSettings, setTool, readonly, bindings]);
 
   const currentHighlights = session.highlights?.[session.current] ?? [];
   const strikethroughs = session.strikethroughs[session.current] ?? [];
@@ -1583,7 +1592,7 @@ export function QuizView({
                             renderItem={(_item, idx) => {
                               const eq = session.questions[idx];
                               if (!eq) return null;
-                              const eqSubmitted = readonly || session.revealed[idx] || false;
+                              const eqSubmitted = readonly || (!isExamMode && session.revealed[idx]) || false;
                               const eqSelected = session.answers[idx];
                               const eqIsMCQ = eq.correct >= 0;
                               const eqIsWritten = !eqIsMCQ && (!!eq.rubric?.length || !!eq.modelAnswer);
@@ -1684,28 +1693,30 @@ export function QuizView({
                 <div className="flex items-center gap-1" data-walkthrough="qbank-tools">
                   <ToolButton onClick={onToggleCalculator} icon={CalcIcon} active={calculatorOpen} title={t("qbank.session.calculator")} />
                   <ToolButton onClick={onToggleLabValues} icon={FlaskConical} active={labValuesOpen} title={t("qbank.session.labValues")} />
-                  <ToolButton onClick={onToggleAiAssistant} icon={Sparkles} active={aiAssistantOpen} title={t("qbank.session.aiAssistant")} />
-                  {!isPhone && (
+                  {!isExamMode && (
+                    <ToolButton onClick={onToggleAiAssistant} icon={Sparkles} active={aiAssistantOpen} title={t("qbank.session.aiAssistant")} />
+                  )}
+                  {!isPhone && !isExamMode && (
                     <Popover open={articleSearchOpen} onOpenChange={setArticleSearchOpen}>
                       <PopoverTrigger asChild>
                         <ToolButton onClick={() => setArticleSearchOpen(true)} icon={BookOpen} title={t("qbank.session.openArticle")} />
                       </PopoverTrigger>
-                      <PopoverContent align="end" className="w-72 p-0 max-h-64 overflow-y-auto">
+                      <PopoverContent align="end" className="w-72 p-0 max-h-72 overflow-y-auto">
                         <div className="py-1">
                           <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border">{t("qbank.session.openArticle")}</div>
-                          {articleList.map((a) => (
-                            <button
-                              key={a.file}
-                              onClick={() => {
-                                onOpenArticle(a.file);
+                          {articleTree.length === 0 ? (
+                            <p className="px-4 py-3 text-sm text-muted-foreground">{t("qbank.session.noArticles")}</p>
+                          ) : (
+                            <FolderTreeNav
+                              tree={articleTree}
+                              onSelect={(node) => {
+                                haptic("light");
+                                onOpenArticle(node.uid);
                                 setArticleSearchOpen(false);
                               }}
-                              className="w-full text-left text-sm px-4 py-2.5 hover:bg-muted transition-colors flex items-center gap-2 border-b border-border last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                            >
-                              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{a.title}</span>
-                            </button>
-                          ))}
+                              className="p-1"
+                            />
+                          )}
                         </div>
                       </PopoverContent>
                     </Popover>
@@ -1738,12 +1749,12 @@ export function QuizView({
 
                 <div className="h-5 w-px bg-border mx-1 hidden sm:block" aria-hidden="true" />
 
-                {!submitted && isMCQ && (
+                {!isExamMode && !submitted && isMCQ && (
                   <Button size="sm" onClick={onSubmit} disabled={selected === undefined} className="h-9 rounded-lg">
                     {t("qbank.session.submitAnswer")}
                   </Button>
                 )}
-                {!submitted && !isMCQ && !qIsWritten && (
+                {!isExamMode && !submitted && !isMCQ && !qIsWritten && (
                   <Button size="sm" onClick={onSubmit} className="h-9 rounded-lg">
                     {session.engine === "flashcard" ? t("qbank.session.revealAnswer") : t("qbank.session.submitSelfGrade")}
                   </Button>
@@ -1852,12 +1863,14 @@ export function QuizView({
                         active={labValuesOpen}
                         onClick={() => { haptic("light"); setToolsOpen(false); onToggleLabValues(); }}
                       />
-                      <SessionToolRow
-                        icon={Sparkles}
-                        label={t("qbank.session.aiAssistant")}
-                        active={aiAssistantOpen}
-                        onClick={() => { haptic("light"); setToolsOpen(false); onToggleAiAssistant(); }}
-                      />
+                      {!isExamMode && (
+                        <SessionToolRow
+                          icon={Sparkles}
+                          label={t("qbank.session.aiAssistant")}
+                          active={aiAssistantOpen}
+                          onClick={() => { haptic("light"); setToolsOpen(false); onToggleAiAssistant(); }}
+                        />
+                      )}
                       <SessionToolRow
                         icon={NotebookPen}
                         label={t("qbank.notes.title")}
@@ -1872,31 +1885,26 @@ export function QuizView({
                         />
                       )}
 
-                      {/* Articles - inline, scrollable picker */}
-                      <div className="mt-1 border-t border-border pt-3 pb-1 px-1">
-                        <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                          <BookOpen className="size-3.5" />
-                          {t("qbank.session.openArticle")}
+                      {!isExamMode && (
+                        <div className="mt-1 border-t border-border pt-3 pb-1 px-1">
+                          <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                            <BookOpen className="size-3.5" />
+                            {t("qbank.session.openArticle")}
+                          </div>
+                          <div className="max-h-56 overflow-y-auto osler-scroll">
+                            {articleTree.length === 0 ? (
+                              <p className="px-2 py-2 text-sm text-muted-foreground">
+                                {t("qbank.session.noArticles")}
+                              </p>
+                            ) : (
+                              <FolderTreeNav
+                                tree={articleTree}
+                                onSelect={(node) => { haptic("light"); setToolsOpen(false); onOpenArticle(node.uid); }}
+                              />
+                            )}
+                          </div>
                         </div>
-                        <div className="max-h-48 overflow-y-auto osler-scroll">
-                          {articleList.length === 0 ? (
-                            <p className="px-2 py-2 text-sm text-muted-foreground">
-                              {t("qbank.session.noArticles")}
-                            </p>
-                          ) : (
-                            articleList.map((a) => (
-                              <button
-                                key={a.file}
-                                onClick={() => { haptic("light"); setToolsOpen(false); onOpenArticle(a.file); }}
-                                className="w-full text-start px-3 py-2 hover:bg-muted flex items-center gap-2 rounded-lg text-sm text-foreground"
-                              >
-                                <FileText className="size-4 shrink-0 text-muted-foreground" />
-                                <span className="truncate">{a.title}</span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </SwipeableSheetContent>
                 </Sheet>
@@ -1914,7 +1922,7 @@ export function QuizView({
                 {isLast ? t("qbank.review.exit") : t("common.next")}
                 <ChevronRight className="size-4 ms-1" />
               </Button>
-            ) : !submitted && isMCQ ? (
+            ) : !isExamMode && !submitted && isMCQ ? (
               <Button
                 size="sm" onClick={onSubmit} disabled={selected === undefined}
                 data-walkthrough="qbank-next"
@@ -1922,7 +1930,7 @@ export function QuizView({
               >
                 {t("qbank.session.submitAnswer")}
               </Button>
-            ) : !submitted && !isMCQ && !qIsWritten ? (
+            ) : !isExamMode && !submitted && !isMCQ && !qIsWritten ? (
               <Button
                 size="sm" onClick={onSubmit}
                 data-walkthrough="qbank-next"
@@ -1985,7 +1993,7 @@ export function QuizView({
                   ["qbank.answer4", "qbank.answer5", null, "qbank.session.shortcut.select"],
                   ["qbank.submit", null, null, "qbank.session.shortcut.submit"],
                   ["qbank.flag", null, null, "qbank.session.shortcut.flag"],
-                  ["qbank.aiAssistant", null, null, "qbank.session.shortcut.ai"],
+                  ...(!isExamMode ? [["qbank.aiAssistant", null, null, "qbank.session.shortcut.ai"] as [string, string | null, string | null, StringKey]] : []),
                   ["qbank.highlight", null, null, "qbank.session.shortcut.highlight"],
                   ["qbank.eraser", null, null, "qbank.session.shortcut.eraser"],
                   ["qbank.notes", null, null, "qbank.session.shortcut.notes"],

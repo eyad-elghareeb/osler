@@ -587,6 +587,7 @@ export function WrittenEngineView({
   question,
   draft,
   submitted,
+  examMode,
   onTextChange,
   onRubricToggle,
   onGradeAI,
@@ -604,6 +605,8 @@ export function WrittenEngineView({
   question: SessionQuestion;
   draft: WrittenDraft;
   submitted: boolean;
+  /** Timed exams allow answer entry but defer all grading and answer reveals. */
+  examMode?: boolean;
   onTextChange: (text: string) => void;
   onRubricToggle: (idx: number) => void;
   onGradeAI?: () => void;
@@ -638,17 +641,19 @@ export function WrittenEngineView({
   if (!submitted && !hasEvaluation) {
     return (
       <div className="mt-6 space-y-4">
-        <CameraModal
-          open={cameraOpen}
-          onClose={() => setCameraOpen(false)}
-          onTranscribed={(text) => {
-            setTranscribing(false);
-            const merged = draft.text.trim()
-              ? draft.text.trim() + "\n\n" + text
-              : text;
-            onTextChange(merged);
-          }}
-        />
+        {!examMode && (
+          <CameraModal
+            open={cameraOpen}
+            onClose={() => setCameraOpen(false)}
+            onTranscribed={(text) => {
+              setTranscribing(false);
+              const merged = draft.text.trim()
+                ? draft.text.trim() + "\n\n" + text
+                : text;
+              onTextChange(merged);
+            }}
+          />
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -682,42 +687,43 @@ export function WrittenEngineView({
           )}
         </div>
 
-        {/* Grade buttons */}
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={onGradeManual}
-            disabled={!hasContent}
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
-          >
-            {t("qbank.written.manualGrade")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCameraOpen(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors"
-          >
-            <span className="flex items-center gap-1.5">
-              <Camera className="size-3.5" />
-              {t("qbank.written.photo")}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={onGradeAI}
-            disabled={grading || !hasContent}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {grading ? (
-              <span className="flex items-center gap-2">
-                <ThinkingOrb state="solving" size={20} aria-hidden="true" />
-                {t("qbank.written.grading")}
+        {!examMode && (
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={onGradeManual}
+              disabled={!hasContent}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
+            >
+              {t("qbank.written.manualGrade")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCameraOpen(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-border hover:border-primary/40 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <Camera className="size-3.5" />
+                {t("qbank.written.photo")}
               </span>
-            ) : (
-              t("qbank.written.gradeWithAI")
-            )}
-          </button>
-        </div>
+            </button>
+            <button
+              type="button"
+              onClick={onGradeAI}
+              disabled={grading || !hasContent}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {grading ? (
+                <span className="flex items-center gap-2">
+                  <ThinkingOrb state="solving" size={20} aria-hidden="true" />
+                  {t("qbank.written.grading")}
+                </span>
+              ) : (
+                t("qbank.written.gradeWithAI")
+              )}
+            </button>
+          </div>
+        )}
 
         {grading && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
@@ -755,31 +761,33 @@ export function WrittenEngineView({
                     className="osler-written-area"
                     enableImageUpload={false}
                   />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onChildGradeManual?.(ci)}
-                      disabled={!childAns.trim()}
-                      className="px-3 py-1.5 rounded-md text-xs font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
-                    >
-                      {t("qbank.written.manualGrade")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onChildGradeAI?.(ci)}
-                      disabled={childGrading === ci || !childAns.trim()}
-                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-                    >
-                      {childGrading === ci ? (
-                        <span className="flex items-center gap-1.5">
-                          <ThinkingOrb state="solving" size={20} aria-hidden="true" />
-                          {t("qbank.written.grading")}
-                        </span>
-                      ) : (
-                        t("qbank.written.gradeWithAI")
-                      )}
-                    </button>
-                  </div>
+                  {!examMode && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onChildGradeManual?.(ci)}
+                        disabled={!childAns.trim()}
+                        className="px-3 py-1.5 rounded-md text-xs font-medium border border-border hover:border-primary/40 transition-colors disabled:opacity-50"
+                      >
+                        {t("qbank.written.manualGrade")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onChildGradeAI?.(ci)}
+                        disabled={childGrading === ci || !childAns.trim()}
+                        className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                      >
+                        {childGrading === ci ? (
+                          <span className="flex items-center gap-1.5">
+                            <ThinkingOrb state="solving" size={20} aria-hidden="true" />
+                            {t("qbank.written.grading")}
+                          </span>
+                        ) : (
+                          t("qbank.written.gradeWithAI")
+                        )}
+                      </button>
+                    </div>
+                  )}
                   {draft.childEvaluations?.[ci] && (
                     <div className="mt-2">
                       <WrittenEvaluationCard

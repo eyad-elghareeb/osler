@@ -519,6 +519,57 @@ export function articlesFromManifestTree(tree: ContentTreeNode[]): ArticleMeta[]
   return result;
 }
 
+/**
+ * Expand article files into selectable leaf nodes while preserving the
+ * manifest's folder hierarchy. The library hub and in-session picker both use
+ * this shape so folders never collapse into a flat article list.
+ */
+export function buildArticleDisplayTree(
+  tree: ContentTreeNode[],
+  articles: ArticleMeta[],
+): ContentTreeNode[] {
+  const metaByFile = new Map(articles.map((article) => [article.file, article]));
+
+  function enrich(nodes: ContentTreeNode[]): ContentTreeNode[] {
+    const out: ContentTreeNode[] = [];
+    for (const node of nodes) {
+      if (!node.path && (node.files?.length ?? 0) > 0) {
+        for (const file of node.files ?? []) {
+          const meta = metaByFile.get(file);
+          out.push({
+            uid: file,
+            title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
+            type: "library",
+            path: "",
+            items: [],
+          });
+        }
+        if (node.items.length > 0) out.push(...enrich(node.items));
+        continue;
+      }
+      if (node.items.length === 0 && (node.files?.length ?? 0) > 0) {
+        const fileChildren = (node.files ?? []).map((file) => {
+          const filePath = `${node.path}${file}`;
+          const meta = metaByFile.get(filePath);
+          return {
+            uid: filePath,
+            title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
+            type: "library" as const,
+            path: node.path,
+            items: [],
+          };
+        });
+        out.push({ ...node, items: fileChildren });
+        continue;
+      }
+      out.push(node.items.length > 0 ? { ...node, items: enrich(node.items) } : node);
+    }
+    return out;
+  }
+
+  return enrich(tree);
+}
+
 /** Return all articles across all library leaf nodes, with metadata only (no html). */
 export async function listAllArticles(): Promise<ArticleMeta[]> {
   if (leafArticleCache) {

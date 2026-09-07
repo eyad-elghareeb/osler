@@ -9,8 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { contentToQuestions as poolContentToQuestions, filterPoolByProgress, filterPoolByChapters, filterPoolByQuestionType, filterPoolByDifficulty, pickQuestions, type PoolQuestion, type OnlyMode } from "@/lib/osler/qbank-pool";
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { storage, sessions, quizSettings as quizSettingsStore, type SavedSession, type WrittenDraft, type HighlightItem } from "@/lib/osler/storage";
-import { listAllArticles } from "@/lib/osler/articles";
-import type { ArticleMeta } from "@/lib/osler/articles";
+import { buildArticleDisplayTree, listAllArticles, loadArticleTree } from "@/lib/osler/articles";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
@@ -627,19 +626,27 @@ export function QBankStudio({
   const [articleModalId, setArticleModalId] = React.useState<string | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = React.useState(false);
   const [quizSettingsOpen, setQuizSettingsOpen] = React.useState(false);
+  const timedExamActive = session?.mode === "timed" && !session.isReview;
+
+  React.useEffect(() => {
+    if (timedExamActive) {
+      setAiAssistantOpen(false);
+      setArticleModalId(null);
+    }
+  }, [timedExamActive]);
   const [notesOpen, setNotesOpen] = React.useState(false);
   // Incremented to request "create a note now" from the qbank.notesNew
   // shortcut — NotesPanel consumes it via its `createSignal` prop.
   const [notesCreateSeq, setNotesCreateSeq] = React.useState(0);
   const [exitConfirmOpen, setExitConfirmOpen] = React.useState(false);
   const [navOpenMobile, setNavOpenMobile] = React.useState(false);
-  const [articleList, setArticleList] = React.useState<ArticleMeta[]>([]);
+  const [articleTree, setArticleTree] = React.useState<ContentTreeNode[]>([]);
 
   React.useEffect(() => {
     (async () => {
       try {
-        const all = await listAllArticles();
-        setArticleList(all);
+        const [tree, all] = await Promise.all([loadArticleTree(), listAllArticles()]);
+        setArticleTree(buildArticleDisplayTree(tree, all));
       } catch {}
     })();
   }, []);
@@ -837,7 +844,15 @@ export function QBankStudio({
   const endSession = React.useCallback(() => {
     setSession((s) => {
       if (!s) return s;
-      const completed = { ...s, completedAt: Date.now() };
+      const completed = {
+        ...s,
+        completedAt: Date.now(),
+        // Timed exams keep every answer hidden during the attempt. Once the
+        // session is finished, the summary and read-only review may reveal it.
+        revealed: s.mode === "timed"
+          ? Object.fromEntries(s.questions.map((_, i) => [i, true]))
+          : s.revealed,
+      };
       // P3-1: don't persist review sessions — they're read-only replays.
       if (!s.isReview) {
         saveSession(completed);
@@ -1055,7 +1070,7 @@ export function QBankStudio({
           quizSettingsOpen={quizSettingsOpen}
           notesOpen={notesOpen}
           navOpenMobile={navOpenMobile}
-          articleList={articleList}
+          articleTree={articleTree}
           onToggleCalculator={() => setCalculatorOpen((o) => !o)}
           onToggleLabValues={() => setLabValuesOpen((o) => !o)}
           onToggleAiAssistant={() => setAiAssistantOpen((o) => !o)}
@@ -1116,6 +1131,8 @@ export function QBankStudio({
             });
           }}
           onSubmit={() => {
+            // Timed exams submit the whole attempt only when they finish.
+            if (session.mode === "timed" && !session.isReview) return;
             const q = session.questions[session.current];
             setSession((s) =>
               s
@@ -1150,6 +1167,9 @@ export function QBankStudio({
           onWrittenDraftChange={(qid, draft) => {
             setSession((s) => {
               if (!s) return s;
+              // Written exam answers may be edited during the attempt, but
+              // evaluation is deferred until the finished summary/review.
+              if (s.mode === "timed" && !s.isReview && draft.evaluation) return s;
               const drafts = { ...s.writtenDrafts, [qid]: draft };
               // Session-bound: drafts live only inside the session record —
               // the active-session autosave persists them locally (resume
@@ -1321,12 +1341,15 @@ export function QBankStudio({
             />
           )}
         </AnimatePresence>
-        <FloatingArticleModal
-          articleId={articleModalId}
-          onClose={() => setArticleModalId(null)}
-        />
-        <AiAssistant
-          open={aiAssistantOpen}
+        {!timedExamActive && (
+          <FloatingArticleModal
+            articleId={articleModalId}
+            onClose={() => setArticleModalId(null)}
+          />
+        )}
+        {!timedExamActive && (
+          <AiAssistant
+            open={aiAssistantOpen}
           onClose={() => setAiAssistantOpen(false)}
           questionContext={
             session.questions[session.current]
@@ -1339,7 +1362,8 @@ export function QBankStudio({
                 }
               : undefined
           }
-        />
+          />
+        )}
         <QuizSettingsPanel
           open={quizSettingsOpen}
           onClose={() => setQuizSettingsOpen(false)}

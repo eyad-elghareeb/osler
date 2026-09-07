@@ -31,6 +31,7 @@ import {
   loadArticleContent,
   listAllArticles,
   articlesFromManifestTree,
+  buildArticleDisplayTree,
   articleDirOf,
   type ArticleMeta,
   type Article,
@@ -254,54 +255,11 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     return () => window.removeEventListener("osler-content-invalidated", handler);
   }, [loadLibraryData]);
 
-  // Enrich tree: turn leaf nodes with files into branch nodes with virtual children
-  const displayTree = React.useMemo(() => {
-    function enrich(nodes: ContentTreeNode[]): ContentTreeNode[] {
-      const out: ContentTreeNode[] = [];
-      for (const node of nodes) {
-        // Cloud manifests group articles uploaded at the category ROOT into
-        // one catch-all node titled after the category ("library", path="")
-        // — explode it into individual article entries so nothing nests
-        // under a pseudo folder. Real subfolders stay top-level siblings.
-        if (!node.path && (node.files?.length ?? 0) > 0) {
-          for (const file of node.files ?? []) {
-            const meta = allArticles.find((a) => a.file === file);
-            out.push({
-              uid: file,
-              title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
-              type: "library" as const,
-              path: "",
-              items: [],
-            });
-          }
-          if (node.items.length > 0) out.push(...enrich(node.items));
-          continue;
-        }
-        if (node.items.length === 0 && (node.files?.length ?? 0) > 0) {
-          const fileChildren: ContentTreeNode[] = (node.files ?? []).map((file) => {
-            const filePath = `${node.path}${file}`;
-            const meta = allArticles.find((a) => a.file === filePath);
-            return {
-              uid: filePath,
-              title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
-              type: "library" as const,
-              path: node.path,
-              items: [],
-            };
-          });
-          out.push({ ...node, items: fileChildren });
-          continue;
-        }
-        if (node.items.length > 0) {
-          out.push({ ...node, items: enrich(node.items) });
-          continue;
-        }
-        out.push(node);
-      }
-      return out;
-    }
-    return enrich(tree);
-  }, [tree, allArticles]);
+  // Use the same folder-preserving shape as the in-session article picker.
+  const displayTree = React.useMemo(
+    () => buildArticleDisplayTree(tree, allArticles),
+    [tree, allArticles],
+  );
 
   // Load full article content when activeFile changes
   React.useEffect(() => {
