@@ -147,7 +147,6 @@ export function AppShell({ children }: AppShellProps) {
   const { navigate, prefetch } = useOslerRouter();
 
   const [searchOpen, setSearchOpen] = React.useState(false);
-  const [query, setQuery] = React.useState("");
   const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(() => sessionContextCloudSession || readCloudSession());
   const [syncStatus, setSyncStatus] = React.useState<"off" | "synced" | "syncing" | "offline">("off");
 
@@ -211,10 +210,6 @@ export function AppShell({ children }: AppShellProps) {
   );
 
   React.useEffect(() => {
-    if (!searchOpen) setQuery("");
-  }, [searchOpen]);
-
-  React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         // Let Ctrl+K reach the markdown editor (bold) and other inputs —
@@ -231,7 +226,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const handleSearchSelect = React.useCallback(async (r: SearchResult) => {
     setSearchOpen(false);
-    setQuery("");
+    // The panel owns its query and unmounts on close, so it resets itself.
     switch (r.payload.type) {
       case "article":
         navigate("library", { article: r.payload.file });
@@ -273,8 +268,8 @@ export function AppShell({ children }: AppShellProps) {
   const isLearnActive = LEARN_SUBVIEWS.has(view);
 
   // The search panel is rendered by GlobalSearchPanel — we just hand it
-  // the controlled query + a select callback. Both desktop popover and
-  // mobile sheet share the same component instance structure.
+  // a select callback. The query lives inside the panel (not shell state)
+  // so keystrokes never re-render the nav bars or the mounted view.
 
   return (
     <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
@@ -360,8 +355,6 @@ export function AppShell({ children }: AppShellProps) {
                 sideOffset={8}
               >
                 <GlobalSearchPanel
-                  query={query}
-                  onQueryChange={setQuery}
                   onSelect={handleSearchSelect}
                   view={view}
                 />
@@ -424,8 +417,6 @@ export function AppShell({ children }: AppShellProps) {
             <SheetDescription>{t("search.globalPlaceholder")}</SheetDescription>
           </SheetHeader>
           <GlobalSearchPanel
-            query={query}
-            onQueryChange={setQuery}
             onSelect={handleSearchSelect}
             view={view}
             variant="sheet"

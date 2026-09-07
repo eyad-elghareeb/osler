@@ -51,9 +51,6 @@ import { MOTION_TRANSITION } from "@/lib/osler/motion";
 const MAX_RESULTS_PER_GROUP = 8;
 
 interface GlobalSearchPanelProps {
-  /** Controlled query — parent persists it across open/close. */
-  query: string;
-  onQueryChange: (q: string) => void;
   /** Called when the user picks a result. Parent closes the panel. */
   onSelect: (r: SearchResult) => void;
   /** Current view — filters results to only kinds relevant to this view. */
@@ -75,14 +72,16 @@ const KIND_ICON: Record<SearchKind, LucideIcon> = {
 };
 
 export function GlobalSearchPanel({
-  query,
-  onQueryChange,
   onSelect,
   view,
   autoFocus = true,
   variant = "popover",
 }: GlobalSearchPanelProps) {
   const { t, lang, rtl } = useI18n();
+  // Owned here, not in AppShell: every keystroke used to re-render the
+  // entire shell (nav, bars, and the mounted view behind the panel). The
+  // popover/sheet unmounts on close, so the query resets naturally.
+  const [query, setQuery] = React.useState("");
   const [index, setIndex] = React.useState<SearchResult[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -191,7 +190,7 @@ export function GlobalSearchPanel({
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             aria-label={placeholder}
@@ -203,7 +202,7 @@ export function GlobalSearchPanel({
           {query ? (
             <button
               type="button"
-              onClick={() => onQueryChange("")}
+              onClick={() => setQuery("")}
               className="flex size-5 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground shrink-0 transition-colors"
               aria-label="Clear"
             >
@@ -254,7 +253,7 @@ export function GlobalSearchPanel({
                     <button
                       key={cat.kind}
                       type="button"
-                      onClick={() => onQueryChange(cat.label)}
+                      onClick={() => setQuery(cat.label)}
                       className="flex items-center gap-2.5 px-3 py-3 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-colors text-sm font-medium"
                     >
                       <span className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
