@@ -72,13 +72,6 @@ function resolveMarkdownImages(markdown: string, articleDir: string): string {
   return text;
 }
 
-/** Directory part of an article file path ("" when the file is root-level). */
-export function articleDirOf(filePath: string): string {
-  return filePath.includes("/")
-    ? filePath.slice(0, filePath.lastIndexOf("/") + 1)
-    : "";
-}
-
 /* ── Decorations: callouts + highlights ───────────────────────────────── */
 
 /** Per-segment DOM text lookup shared by the offset model. */

@@ -64,6 +64,13 @@ export function resolveArticleAsset(src: string, articleDir: string): string {
   return cacheBust(`${libraryBaseUrl()}${articleDir}${base}`);
 }
 
+/** Directory part of an article file path ("" when root-level). */
+export function articleDirOf(filePath: string): string {
+  return filePath.includes("/")
+    ? filePath.slice(0, filePath.lastIndexOf("/") + 1)
+    : "";
+}
+
 export interface ArticleMeta {
   /** Relative file path from library root (e.g. "cardiology/ischemic-syndrome/stemi.md") */
   file: string;

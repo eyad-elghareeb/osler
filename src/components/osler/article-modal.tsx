@@ -1,12 +1,28 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, X, Clock, ChevronRight, Bookmark, BookmarkCheck } from "lucide-react";
-import { loadArticleContent, listAllArticles, type Article, type ArticleMeta } from "@/lib/osler/articles";
+import { loadArticleContent, listAllArticles, articleDirOf, type Article, type ArticleMeta } from "@/lib/osler/articles";
 import { cn } from "@/lib/utils";
 import { useArticleHighlighter } from "@/hooks/use-article-highlighter";
-import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
+// Split with the library reader (see library.tsx) — shares the same chunk.
+const MilkdownArticleView = dynamic(
+  () => import("./milkdown-article-view").then((m) => ({ default: m.MilkdownArticleView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="library-article p-8 max-w-[920px] mx-auto flex flex-col gap-4">
+        <div className="osler-skeleton h-8 w-2/3" />
+        <div className="osler-skeleton h-4 w-1/3" />
+        <div className="osler-skeleton h-4 w-full" />
+        <div className="osler-skeleton h-4 w-full" />
+        <div className="osler-skeleton h-4 w-5/6" />
+      </div>
+    ),
+  },
+);
 import { PdfViewer } from "./pdf-viewer";
 import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
 import { routeFor } from "@/lib/osler/navigation";

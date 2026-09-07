@@ -25,11 +25,13 @@ import {
   Share2,
   Link2,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import {
   loadArticleTree,
   loadArticleContent,
   listAllArticles,
   articlesFromManifestTree,
+  articleDirOf,
   type ArticleMeta,
   type Article,
 } from "@/lib/osler/articles";
@@ -52,8 +54,28 @@ import { ContentCacheButton } from "./content-cache-button";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { NavigationStack } from "./navigation-stack";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
-import { MilkdownArticleView, articleDirOf } from "./milkdown-article-view";
 import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
+
+/**
+ * The read-only renderer carries the ~1MB Milkdown editor (Crepe +
+ * CodeMirror + LaTeX) — split it into its own chunk so the hub and every
+ * other library visit doesn't download/parse it. The shimmer fallback
+ * mirrors the article loading skeleton; the chunk stays cached after the
+ * first article open.
+ */
+const MilkdownArticleView = dynamic(
+  () => import("./milkdown-article-view").then((m) => ({ default: m.MilkdownArticleView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full">
+        <Skeleton className="h-8 w-2/3 mb-2" />
+        <Skeleton className="h-4 w-1/3 mb-6" />
+        <SkeletonText lines={6} />
+      </div>
+    ),
+  },
+);
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { useToast } from "@/hooks/use-toast";
