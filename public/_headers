@@ -57,7 +57,7 @@
   # (OSCE voice mode, written-answer photo capture). An empty allowlist ()
   # disables the feature for the whole origin, so getUserMedia fails with
   # NotAllowedError and Chrome never shows the permission prompt.
-  Permissions-Policy: camera=(self), microphone=(self), geolocation=(), browsing-topics=(), join-ad-interest-group=(), run-ad-auction=()
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
@@ -78,4 +78,4 @@
   #  · frame-src https:  — YouTube + Invidious video embeds (Invidious host is
   #    configurable via NEXT_PUBLIC_INVIDIOUS_HOST, so a scheme source is used).
   #    Tighten to your fixed hosts once they are stable.
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.workers.dev https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://challenges.cloudflare.com https://0.peerjs.com wss://0.peerjs.com wss://broker.emqx.io:8084; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.workers.dev wss://*.workers.dev https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://challenges.cloudflare.com https://0.peerjs.com wss://0.peerjs.com wss://broker.emqx.io:8084; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
