@@ -75,10 +75,12 @@ export function FlashcardStudio(props: FlashcardStudioProps = {}) {
   const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
   const walkthroughActions = React.useRef<((action: string) => void) | null>(null);
   // First-time interactive tour for new users. Hub only — a deep-linked
-  // deck (?uid) lands inside the study flow where a tour is noise.
+  // deck (?uid) lands inside the study flow where a tour is noise. Delayed
+  // so the hub entrance settles before the spotlight appears.
   React.useEffect(() => {
     if (!props.uid && !isWalkthroughCompleted("flashcards")) {
-      setWalkthroughOpen(true);
+      const t = setTimeout(() => setWalkthroughOpen(true), 1200);
+      return () => clearTimeout(t);
     }
   }, []); // mount-time check, mirroring the other hub tours
   return (

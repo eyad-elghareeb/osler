@@ -53,9 +53,11 @@ export function OsceStudio(props: OsceStudioProps = {}) {
   const walkthroughActions = React.useRef<((action: string) => void) | null>(null);
   // First-time interactive tour for new users. Hub only — deep links
   // (?uid) and externally-injected packs land mid-flow where a tour is noise.
+  // Delayed so the hub entrance settles before the spotlight appears.
   React.useEffect(() => {
     if (!props.uid && !props.activeItem && !isWalkthroughCompleted("osce")) {
-      setWalkthroughOpen(true);
+      const t = setTimeout(() => setWalkthroughOpen(true), 1200);
+      return () => clearTimeout(t);
     }
   }, []); // mount-time check, mirroring the other hub tours
   return (

@@ -91,10 +91,13 @@ export function HomeView({
   const [contextMenuNode, setContextMenuNode] = React.useState<ContentTreeNode | null>(null);
   const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
 
-  // First-time interactive tour for new users
+  // First-time interactive tour for new users — delayed so the hub
+  // entrance settles before the spotlight appears (same recipe as the
+  // dashboard tour); navigating away first cancels it.
   React.useEffect(() => {
     if (!isWalkthroughCompleted("qbank-hub")) {
-      setWalkthroughOpen(true);
+      const t = setTimeout(() => setWalkthroughOpen(true), 1200);
+      return () => clearTimeout(t);
     }
   }, []);
 

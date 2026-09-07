@@ -337,10 +337,12 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
   const [reportOpen, setReportOpen] = React.useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = React.useState(false);
 
-  // First-time interactive tour for new users
+  // First-time interactive tour for new users — delayed so the hub
+  // entrance settles before the spotlight appears.
   React.useEffect(() => {
     if (!isWalkthroughCompleted("library")) {
-      setWalkthroughOpen(true);
+      const t = setTimeout(() => setWalkthroughOpen(true), 1200);
+      return () => clearTimeout(t);
     }
   }, []);
 
