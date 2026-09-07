@@ -26,6 +26,13 @@ function easeOutQuart(t: number): number {
   return 1 - Math.pow(1 - t, 4);
 }
 
+/**
+ * Keys that already played their count-up this page load. Used by `onceKey`
+ * so hub stats animate on first reveal but snap instantly on revisits and
+ * background value updates instead of visibly resetting to zero.
+ */
+const playedOnceKeys = new Set<string>();
+
 interface CountUpOptions {
   /** Animation duration in ms. Default 500. */
   duration?: number;
@@ -37,6 +44,13 @@ interface CountUpOptions {
   prefix?: string;
   /** Suffix (e.g., "%", "h"). */
   suffix?: string;
+  /**
+   * When set, the tick animation runs only the first time this key mounts
+   * per page load; later mounts and value updates snap to the final value.
+   * Use for hub stats (dashboard tiles) that remount on every visit —
+   * one-time reveals (result screens) should omit it so they always play.
+   */
+  onceKey?: string;
 }
 
 export function useCountUp(
@@ -49,6 +63,7 @@ export function useCountUp(
     observe = false,
     prefix = "",
     suffix = "",
+    onceKey,
   } = options;
 
   const ref = useRef<HTMLElement>(null);
@@ -57,15 +72,23 @@ export function useCountUp(
   );
 
   useEffect(() => {
+    const format = (n: number) =>
+      `${prefix}${n.toFixed(decimals)}${suffix}`;
+
+    // Already played this page load (or a background update changed the
+    // value): snap instead of visibly resetting to zero and ticking again.
+    if (onceKey && playedOnceKeys.has(onceKey)) {
+      setDisplay(format(value));
+      return;
+    }
+    if (onceKey) playedOnceKeys.add(onceKey);
+
     if (prefersReducedMotion()) return;
 
     const el = ref.current;
     let startTime: number | null = null;
     let rafId: number;
     let observer: IntersectionObserver | null = null;
-
-    const format = (n: number) =>
-      `${prefix}${n.toFixed(decimals)}${suffix}`;
 
     const tick = (now: number) => {
       if (startTime === null) startTime = now;
@@ -106,7 +129,7 @@ export function useCountUp(
       cancelAnimationFrame(rafId);
       observer?.disconnect();
     };
-  }, [value, duration, decimals, observe]);
+  }, [value, duration, decimals, observe, prefix, suffix, onceKey]);
 
   return { ref, display };
 }

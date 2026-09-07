@@ -55,7 +55,14 @@ const SectionFallback = (
 );
 const mkSection = (
   loader: () => Promise<{ default: React.ComponentType<Record<string, unknown>> }>,
-) => dynamic(loader, { ssr: false, loading: () => SectionFallback });
+) => {
+  const Component = dynamic(loader, { ssr: false, loading: () => SectionFallback });
+  // Expose the chunk loader so hover/focus can warm it before the section
+  // opens — opening a warmed section never flashes the loading fallback.
+  return Object.assign(Component, {
+    preloadSection: () => { void loader().catch(() => {}); },
+  });
+};
 
 const ThemeSettingsSection = mkSection(() => import("@/components/osler/settings/theme-section").then((m) => ({ default: m.ThemeSettingsSection })));
 const LanguageSettingsSection = mkSection(() => import("@/components/osler/settings/language-section").then((m) => ({ default: m.LanguageSettingsSection })));
@@ -69,6 +76,23 @@ const AboutSettingsSection = mkSection(() => import("@/components/osler/settings
 const DangerZoneSection = mkSection(() => import("@/components/osler/settings/danger-section").then((m) => ({ default: m.DangerZoneSection })));
 const AccountSettingsSection = mkSection(() => import("@/components/osler/settings/account-section").then((m) => ({ default: m.AccountSettingsSection })));
 const SessionsSettingsSection = mkSection(() => import("@/components/osler/settings/sessions-section").then((m) => ({ default: m.SessionsSettingsSection })));
+
+/** Warm a section's chunk (no-op for statically bundled sections). */
+const SECTION_PRELOAD: Record<SettingsSection, () => void> = {
+  account: () => AccountSettingsSection.preloadSection(),
+  sessions: () => SessionsSettingsSection.preloadSection(),
+  appearance: () => ThemeSettingsSection.preloadSection(),
+  language: () => LanguageSettingsSection.preloadSection(),
+  ai: () => AiSettingsSection.preloadSection(),
+  shortcuts: () => ShortcutsSettingsSection.preloadSection(),
+  downloads: () => DownloadsSettingsSection.preloadSection(),
+  sync: () => {}, // statically imported — already in the bundle
+  native: () => NativeSettingsSection.preloadSection(),
+  support: () => SupportSettingsSection.preloadSection(),
+  backup: () => BackupSettingsSection.preloadSection(),
+  about: () => AboutSettingsSection.preloadSection(),
+  danger: () => DangerZoneSection.preloadSection(),
+};
 
 function renderSection(id: SettingsSection) {
   switch (id) {
@@ -217,6 +241,8 @@ export function Settings({
                     <button
                       key={s.id}
                       onClick={() => pickSection(s.id)}
+                      onTouchStart={() => SECTION_PRELOAD[s.id]()}
+                      onFocus={() => SECTION_PRELOAD[s.id]()}
                       className={cn(
                         "w-full text-start px-4 py-3 flex items-center gap-3 hover:bg-muted/60 transition-colors",
                         idx > 0 && "border-t border-border",
@@ -300,6 +326,8 @@ export function Settings({
                       <button
                         key={s.id}
                         onClick={() => pickSection(s.id)}
+                        onMouseEnter={() => SECTION_PRELOAD[s.id]()}
+                        onFocus={() => SECTION_PRELOAD[s.id]()}
                         className={cn(
                           "relative w-full text-start h-9 px-3 rounded-md text-sm font-medium flex items-center gap-2 transition-colors",
                           active

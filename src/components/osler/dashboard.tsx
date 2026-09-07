@@ -204,12 +204,13 @@ export function Dashboard({
   const accuracy = stats.attempted
     ? Math.round((stats.correct / stats.attempted) * 100)
     : 0;
-  // Stat values count up on arrival (reduced-motion safe) — the same data
-  // moment the results view uses for its score.
-  const packsCount = useCountUp(stats.packs ?? 0);
-  const attemptedCount = useCountUp(stats.attempted ?? 0);
-  const correctCount = useCountUp(stats.correct ?? 0);
-  const accuracyCount = useCountUp(accuracy, { suffix: "%" });
+  // Stat values count up on first arrival per page load (reduced-motion
+  // safe) — revisits and background sync updates snap instead of visibly
+  // resetting to zero and ticking again mid-read.
+  const packsCount = useCountUp(stats.packs ?? 0, { onceKey: "dash-packs" });
+  const attemptedCount = useCountUp(stats.attempted ?? 0, { onceKey: "dash-attempted" });
+  const correctCount = useCountUp(stats.correct ?? 0, { onceKey: "dash-correct" });
+  const accuracyCount = useCountUp(accuracy, { suffix: "%", onceKey: "dash-accuracy" });
 
   const [featuredArticles, setFeaturedArticles] = React.useState<ArticleMeta[]>([]);
   const [articleCount, setArticleCount] = React.useState(() => getCachedAllArticles()?.length ?? 0);
