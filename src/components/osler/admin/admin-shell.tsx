@@ -17,7 +17,6 @@ import {
   Sun,
   ShieldOff,
   Settings as SettingsIcon,
-  SlidersHorizontal,
   ChevronDown,
   PanelLeft,
   Home,
@@ -273,9 +272,6 @@ function AdminShellInner({ children }: AdminShellProps) {
       : []),
     ...(isAdmin
       ? [{ href: "/admin/email", icon: Mail, labelKey: "admin.nav.email" }]
-      : []),
-    ...(isAdmin
-      ? [{ href: "/admin/config", icon: SlidersHorizontal, labelKey: "admin.nav.config" }]
       : []),
     { href: "/admin/settings", icon: SettingsIcon, labelKey: "admin.settings.title" },
   ];

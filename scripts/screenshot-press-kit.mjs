@@ -421,7 +421,7 @@ async function seedProgress(context) {
   }
 }
 
-async function mockWorkerApi(route, demoConfig) {
+async function mockWorkerApi(route) {
   const req = route.request();
   const url = new URL(req.url());
   const p = url.pathname;
@@ -443,7 +443,6 @@ async function mockWorkerApi(route, demoConfig) {
     return route.fulfill(json({ items, total: adminTickets.length, openCount: 2, page: 1, limit: 50 }));
   }
   if (p === "/v1/admin/audit" && m === "GET") return route.fulfill(json({ items: auditEntries, total: auditEntries.length, page: 1, limit: 50 }));
-  if (p === "/v1/admin/config" && m === "GET") return route.fulfill(json(demoConfig));
   if (p === "/v1/admin/analytics/overview") return route.fulfill(json(buildOverview(url.searchParams.get("range") || "24h")));
   if (p === "/v1/admin/analytics/timeseries") return route.fulfill(json(buildTimeseries(url.searchParams.get("range") || "24h")));
   if (p === "/v1/admin/analytics/web-vitals") return route.fulfill(json(analyticsWebVitals));
@@ -531,7 +530,6 @@ const ADMIN_SURFACES = [
   { name: "admin-users", path: "/admin/users/" },
   { name: "admin-analytics", path: "/admin/analytics/" },
   { name: "admin-audit", path: "/admin/audit/" },
-  { name: "admin-config", path: "/admin/config/" },
   { name: "admin-settings", path: "/admin/settings/" },
 ];
 
@@ -577,7 +575,6 @@ async function settle(page, extraWaitMs = 2000) {
 }
 
 async function main() {
-  const demoConfig = await fetch(`${BASE}/osler.config.json`).then((r) => r.json());
   const browser = await chromium.launch({ channel: "chrome", headless: true });
 
   for (const form of FORMS) {
@@ -601,7 +598,7 @@ async function main() {
       await context.route("**/v1/**", (route) => {
         const p = new URL(route.request().url()).pathname;
         const mocked = ["/v1/admin/", "/v1/account/", "/v1/auth/", "/v1/analytics", "/v1/sync/", "/v1/tickets"].some((pre) => p.startsWith(pre));
-        return mocked ? mockWorkerApi(route, demoConfig) : route.fallback();
+        return mocked ? mockWorkerApi(route) : route.fallback();
       });
       // Turnstile widget: keep the login shot clean without a live challenge.
       await context.route("**/challenges.cloudflare.com/**", (route) =>

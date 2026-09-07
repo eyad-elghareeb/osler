@@ -343,10 +343,6 @@ export const adminApi = {
   uploadFile:      (key: string, body: string)   => req<{ ok: boolean; key: string }>("/v1/admin/content/upload-file", "POST", { key, body }),
 
   /** List raw R2 keys under content-files/<prefix>. */
-  // Config management
-  getConfig:       ()                            => req<Record<string, unknown>>("/v1/admin/config"),
-  updateConfig:    (config: Record<string, unknown>) => req<{ ok: boolean }>("/v1/admin/config", "PUT", config),
-
   listR2Keys:      (prefix: string, cursor?: string, scope?: "content-files" | "content-staging") =>
                                                     req<{ items: Array<{ key: string; size: number; uploaded: string | null }>; cursor: string | null }>(`/v1/admin/content/r2-keys?prefix=${encodeURIComponent(prefix)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}${scope && scope !== "content-files" ? `&scope=${scope}` : ""}`),
   /** Delete an R2 key (content-files/, content-staging/ and content-manifests/ allowed). */
