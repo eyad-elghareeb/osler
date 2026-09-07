@@ -18,7 +18,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
-export function AiMarkdown({ text, className, writing }: { text: string; className?: string; writing?: boolean }) {
+/**
+ * Memoized on props (all primitives): every streamed token re-renders the
+ * chat root, and without this each token re-parsed every settled message's
+ * markdown — O(n²) over the stream. Unchanged messages now bail out here.
+ */
+export const AiMarkdown = React.memo(function AiMarkdown({ text, className, writing }: { text: string; className?: string; writing?: boolean }) {
   return (
     <div className={cn("ai-chat-msg", writing && "is-writing", className)}>
       <ReactMarkdown
@@ -37,4 +42,4 @@ export function AiMarkdown({ text, className, writing }: { text: string; classNa
       </ReactMarkdown>
     </div>
   );
-}
+});

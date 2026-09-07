@@ -168,19 +168,42 @@ export function AiAssistant({
     setMaxWait(localStorage.getItem(STORAGE_KEYS.maxWait) || "30");
   }, []);
 
-  // Persist
+  // Persist (trailing-throttled): every streamed token updates `messages`,
+  // and a synchronous JSON write per token main-thread-hitches the stream.
+  // Writes land 1.2s after the last change instead.
+  const lastPersistAt = React.useRef(0);
+  const persistTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    const snapshot = messages;
+    const write = () => {
+      persistTimer.current = null;
+      lastPersistAt.current = Date.now();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      } catch {
+        // ignore quota errors
+      }
+    };
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    if (Date.now() - lastPersistAt.current > 2000) write();
+    else persistTimer.current = setTimeout(write, 1200);
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+    };
   }, [messages]);
 
-  // Auto-scroll
+  // Auto-scroll: instant while streaming (a smooth scroll re-triggered per
+  // token chases its own tail and lags behind the growing bubble), smooth
+  // for discrete sends.
   React.useEffect(() => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    const el = scrollRef.current;
+    if (!el) return;
+    if (loading) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, loading]);
 
   // Initialize welcome message on open / question change
@@ -678,7 +701,13 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
   );
 }
 
-function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean }) {
+/**
+ * Memoized: every streamed token re-renders the message list, and settled
+ * bubbles keep stable `msg` identity (the updater maps over the array and
+ * replaces only the growing message) — so they bail out here instead of
+ * re-running markdown + reveal on every token.
+ */
+const ChatBubble = React.memo(function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean }) {
   const { t } = useI18n();
   const isUser = msg.role === "user";
   // Only messages that arrived live get the streaming-word reveal
@@ -720,7 +749,7 @@ function ChatBubble({ msg, isStreaming }: { msg: Message; isStreaming?: boolean 
       </div>
     </motion.div>
   );
-}
+});
 
 function loadChat(): Message[] {
   if (typeof window === "undefined") return [];

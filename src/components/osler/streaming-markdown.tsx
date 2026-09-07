@@ -79,7 +79,12 @@ function useWordReveal(total: number, enabled: boolean): number {
   return visible;
 }
 
-export function StreamingMarkdown({
+/**
+ * Memoized on props: settled bubbles keep stable text, so parent re-renders
+ * during a stream skip them entirely instead of re-walking their markdown.
+ * The live bubble's text changes per token and still updates normally.
+ */
+export const StreamingMarkdown = React.memo(function StreamingMarkdown({
   text,
   animate,
 }: {
@@ -176,4 +181,4 @@ export function StreamingMarkdown({
       </ReactMarkdown>
     </div>
   );
-}
+});
