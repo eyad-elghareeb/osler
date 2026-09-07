@@ -1264,6 +1264,29 @@ curl -s https://osler-cloud.example.workers.dev/v1/sync \
 
 If the user has never synced, both documents return `{records:{}, updatedAt:0}`.
 
+#### Head mode (`?head=true`)
+
+A cheap per-kind summary without returning the documents. `timestamps` holds
+each kind's latest `updatedAt` (0 when never synced), `counts` holds the
+number of live records per kind, and `quota` reports the storage budget. Used
+by the push cycle's optimistic-concurrency check and by the client's
+account-conflict detection.
+
+```bash
+curl -s "https://osler-cloud.example.workers.dev/v1/sync?head=true" \
+  -H "authorization: Bearer eyJhbGciOiJIUzI1NiJ9...."
+```
+
+```json
+{
+  "timestamps": { "qbank": 1735000100000, "flashcards": 1735000050000 },
+  "counts": { "qbank": 2, "flashcards": 1 },
+  "quota": { "usedBytes": 1234, "limitBytes": 26214400 }
+}
+```
+
+All eight sync kinds are present in both maps; kinds never synced read `0`.
+
 #### Example error responses
 
 Missing or invalid token — `401`:

@@ -3,7 +3,6 @@ import {
   storage,
   settings,
   SYNC_KINDS,
-  EMPTY_DATA_SUMMARY,
   type SyncKind,
   type DataSummary,
   type DataSummaryKind,
@@ -465,8 +464,11 @@ export async function pullSettingsFromCloud(sessionOverride?: CloudSession): Pro
 /** The cloud's per-kind record counts + max updatedAt — fetched cheaply via
  *  GET /v1/sync?head=true (the worker's HEAD-style summary endpoint). Used
  *  by the conflict-detection logic so the UI can decide whether to prompt
- *  the user before merging local data into a fresh account. */
-export async function fetchRemoteDataSummary(session: CloudSession): Promise<DataSummary> {
+ *  the user before merging local data into a fresh account. Returns `null`
+ *  when the fetch fails (offline / 5xx) — the caller must distinguish
+ *  "remote is empty" (safe to proceed) from "remote is unknown" (defer the
+ *  decision so a real conflict isn't silently swallowed). */
+export async function fetchRemoteDataSummary(session: CloudSession): Promise<DataSummary | null> {
   try {
     const head = await request<{
       timestamps?: Record<string, number>;
@@ -487,9 +489,7 @@ export async function fetchRemoteDataSummary(session: CloudSession): Promise<Dat
       achievements: pick("achievements"),
     };
   } catch {
-    // Offline / 5xx — assume empty so the caller falls through to "no conflict"
-    // and the merge happens normally when the user retries.
-    return { ...EMPTY_DATA_SUMMARY };
+    return null;
   }
 }
 

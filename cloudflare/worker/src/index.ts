@@ -385,6 +385,18 @@ const SHARD_SCHEMA_SQL: Record<"sync" | "telemetry", string[]> = {
   ],
 };
 
+const SHARD_SCHEMA_MIGRATIONS: Record<"sync" | "telemetry", string[]> = {
+  // Best-effort ALTERs that bring shard tables created by the CREATE block
+  // (or by an older worker build) up to the current shape. SQLite has no
+  // `ADD COLUMN IF NOT EXISTS`, so these are run OUTSIDE the main batch with
+  // failures swallowed — a "duplicate column" error means the migration
+  // already applied (migrations remain the source of truth); any other
+  // failure surfaces on the real query. Keep byte-identical with
+  // migrations-sync/ + migrations/.
+  sync: ["ALTER TABLE progress_documents ADD COLUMN record_count INTEGER NOT NULL DEFAULT 0"],
+  telemetry: [],
+};
+
 const shardSchemaReady: Partial<Record<string, Promise<void>>> = {};
 
 /** Idempotently create the shard's tables if missing (once per isolate).
@@ -397,7 +409,10 @@ function ensureShardSchema(env: Env, kind: "sync" | "telemetry", index = 1): Pro
   const cached = shardSchemaReady[key];
   if (cached) return cached;
   const db = kind === "sync" ? syncDb(env, index) : telemetryDb(env);
-  const run = db.batch(SHARD_SCHEMA_SQL[kind].map((sql) => db.prepare(sql))).then(() => undefined);
+  const alters = SHARD_SCHEMA_MIGRATIONS[kind].map((sql) =>
+    db.prepare(sql).run().catch(() => undefined),
+  );
+  const run = Promise.all([db.batch(SHARD_SCHEMA_SQL[kind].map((sql) => db.prepare(sql))), ...alters]).then(() => undefined);
   shardSchemaReady[key] = run;
   // A failed bootstrap is never cached — the next request retries, so a
   // transient D1 blip can't wedge the isolate until recycle.
@@ -1026,22 +1041,40 @@ async function getSelectedDocuments(env: Env, user: SyncUser, kinds: string[]): 
   return docs;
 }
 
-async function getSyncHead(env: Env, user: SyncUser): Promise<{ timestamps: Record<string, number>; usedBytes: number }> {
+async function getSyncHead(env: Env, user: SyncUser): Promise<{ timestamps: Record<string, number>; counts: Record<string, number>; usedBytes: number }> {
   const shard = userSyncShard(user);
   await ensureShardSchema(env, "sync", shard);
-  const rows = await syncDb(env, shard).prepare("SELECT kind, updated_at, raw_bytes FROM progress_documents WHERE user_id = ?").bind(user.id).all<{ kind: string; updated_at: number; raw_bytes: number }>();
+  const db = syncDb(env, shard);
+  const rows = await db.prepare("SELECT kind, payload, compressed, raw_bytes, record_count, updated_at FROM progress_documents WHERE user_id = ?").bind(user.id).all<{ kind: string; payload: string; compressed: number; raw_bytes: number; record_count: number; updated_at: number }>();
   const timestamps: Record<string, number> = {};
-  for (const k of SYNC_KINDS) timestamps[k] = 0;
+  const counts: Record<string, number> = {};
+  for (const k of SYNC_KINDS) { timestamps[k] = 0; counts[k] = 0; }
   let usedBytes = 0;
+  const backfills: D1PreparedStatement[] = [];
   for (const row of rows.results || []) {
     usedBytes += Number(row.raw_bytes || 0);
+    // Lazy backfill: rows written before record_count existed carry 0. Parse
+    // once, cache the count in the row — later head requests are pure SQL.
+    // A trivially-empty doc (`{}`, 2 raw bytes) is skipped so emptied kinds
+    // never re-parse.
+    let count = Number(row.record_count ?? 0);
+    if (!count && Number(row.raw_bytes || 0) > 2 && row.payload) {
+      try {
+        const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
+        const parsed = JSON.parse(json);
+        count = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed).length : 0;
+        backfills.push(db.prepare("UPDATE progress_documents SET record_count = ? WHERE user_id = ? AND kind = ?").bind(count, user.id, row.kind));
+      } catch { count = 0; }
+    }
     // Segment rows fold into their logical kind (its timestamp is the newest
-    // segment), so clients see the same per-kind view as before.
-    if (typeof row.updated_at !== "number") continue;
+    // segment and its count the sum of segments), so clients see the same
+    // per-kind view as before.
     const base = baseKindOfRow(row.kind ?? "");
-    timestamps[base] = Math.max(timestamps[base] ?? 0, row.updated_at);
+    if (typeof row.updated_at === "number") timestamps[base] = Math.max(timestamps[base] ?? 0, row.updated_at);
+    counts[base] = (counts[base] ?? 0) + count;
   }
-  return { timestamps, usedBytes };
+  if (backfills.length) await db.batch(backfills);
+  return { timestamps, counts, usedBytes };
 }
 
 /** Whole-pool progress_documents totals for the quota panel: one COUNT/SUM
@@ -6170,8 +6203,8 @@ export default {
         const syncShard = userSyncShard(session.user);
         const isHead = url.searchParams.get("head") === "true" || url.searchParams.get("head") === "1";
         if (isHead) {
-          const { timestamps, usedBytes } = await getSyncHead(env, session.user);
-          return json({ timestamps, quota: { usedBytes, limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
+          const { timestamps, counts, usedBytes } = await getSyncHead(env, session.user);
+          return json({ timestamps, counts, quota: { usedBytes, limitBytes: MAX_USER_STORAGE_BYTES } }, 200, origin, log);
         }
         const requestedKinds = url.searchParams.get("kinds")?.split(",").map(k => k.trim()).filter(Boolean);
         const docs = requestedKinds && requestedKinds.length > 0
@@ -6255,7 +6288,7 @@ export default {
               if (storedBytes > MAX_STORED_PAYLOAD_BYTES) return json({ error: "Progress document is too large to store" }, 400, origin, log);
               const segmentBytes = encoder.encode(segment.json).length;
               projectedBytes += segmentBytes;
-              statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, segment.kind, compressedB64, segmentBytes, updatedAt));
+              statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, record_count, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, record_count = excluded.record_count, updated_at = excluded.updated_at").bind(session.user.id, segment.kind, compressedB64, segmentBytes, Object.keys(segment.records).length, updatedAt));
             }
           } else {
             const mergedBytes = encoder.encode(merged.json).length;
@@ -6268,7 +6301,7 @@ export default {
             const storedBytes = encoder.encode(compressedB64).length;
             if (storedBytes > MAX_STORED_PAYLOAD_BYTES) return json({ error: "Progress document is too large to store" }, 400, origin, log);
             projectedBytes += mergedBytes;
-            statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, updated_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, updatedAt));
+            statements.push(syncDb(env, syncShard).prepare("INSERT INTO progress_documents (user_id, kind, payload, compressed, raw_bytes, record_count, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?) ON CONFLICT(user_id, kind) DO UPDATE SET payload = excluded.payload, compressed = 1, raw_bytes = excluded.raw_bytes, record_count = excluded.record_count, updated_at = excluded.updated_at").bind(session.user.id, kind, compressedB64, mergedBytes, Object.keys(merged.records).length, updatedAt));
           }
           if (projectedBytes > MAX_USER_STORAGE_BYTES) return json({ error: "Sync storage limit exceeded (25MB per user). Remove old progress to free space.", limit: MAX_USER_STORAGE_BYTES }, 413, origin, log);
         }

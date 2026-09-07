@@ -372,6 +372,13 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
         const local = storage.getLocalDataSummary();
         const remote = await fetchRemoteDataSummary(cloudSession);
         if (cancelled) return;
+        if (!remote) {
+          // Remote unknown (offline / 5xx): don't prompt AND don't record the
+          // last-user marker — recording it would suppress the check forever,
+          // while leaving it unset re-runs the check on the next session so
+          // a real conflict surfaces once connectivity returns.
+          return;
+        }
         if (hasConflict(local, remote)) {
           setPendingConflict({ cloudSession, local, remote });
         } else {
@@ -417,6 +424,11 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
             await storage.ensureCacheHydrated();
             const local = storage.getLocalDataSummary();
             const remote = await fetchRemoteDataSummary(live);
+            if (!remote) {
+              // Remote unknown — leave the marker unset so the check re-runs
+              // on the next session instead of suppressing a real conflict.
+              return;
+            }
             if (hasConflict(local, remote)) {
               setPendingConflict({ cloudSession: live, local, remote });
             } else {

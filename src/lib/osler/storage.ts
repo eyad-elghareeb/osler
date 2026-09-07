@@ -1328,9 +1328,9 @@ export const storage = {
    * Cheap snapshot of the local data: per-kind record counts + max
    * timestamp. Used by the account-switch / guest-upgrade conflict
    * detection so the UI can decide whether to prompt the user.
-   *
-   * Bookmarks are localStorage-backed (not IndexedDB) so they live in
-   * the `bookmarks` kind with their own counters.
+   * (Bookmarks are localStorage-backed and merge by union on both the P2P
+   * and cloud paths, so they can never surprise-merge — they're excluded
+   * from the conflict heuristic.)
    */
   getLocalDataSummary(): DataSummary {
     let qbank = 0;
