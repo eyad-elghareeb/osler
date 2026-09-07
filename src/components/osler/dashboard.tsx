@@ -436,6 +436,7 @@ export function Dashboard({
             value={packsCount.display}
             icon={LibraryIcon}
             color="primary"
+            playOnceKey="dash-tile-packs"
             onClick={() => onViewChange("qbank")}
           />
           <StatTile
@@ -443,6 +444,7 @@ export function Dashboard({
             value={attemptedCount.display}
             icon={Activity}
             color="primary"
+            playOnceKey="dash-tile-attempted"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
@@ -450,6 +452,7 @@ export function Dashboard({
             value={correctCount.display}
             icon={CheckCircle2}
             color="success"
+            playOnceKey="dash-tile-correct"
             onClick={() => onViewChange("profile")}
           />
           <StatTile
@@ -457,6 +460,7 @@ export function Dashboard({
             value={accuracyCount.display}
             icon={Sparkles}
             color="warning"
+            playOnceKey="dash-tile-accuracy"
             onClick={() => onViewChange("profile")}
           />
         </div>
@@ -638,12 +642,14 @@ function StatTile({
   icon: Icon,
   color = "primary",
   onClick,
+  playOnceKey,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   color?: StatTileProps["color"];
   onClick?: () => void;
+  playOnceKey?: string;
 }) {
   // Local wrapper kept for backwards-compat with the rest of this file —
   // delegates to the shared primitive so visual style stays in sync.
@@ -654,6 +660,7 @@ function StatTile({
       icon={Icon as any}
       color={color}
       onClick={onClick}
+      playOnceKey={playOnceKey}
     />
   );
 }

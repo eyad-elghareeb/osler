@@ -311,7 +311,13 @@ export function ReviewQueue() {
     setPreview({ kind: "stagedGroup", group, fileKey: group.keys[0]?.key ?? "" });
   }
 
-  if (loading) return <LoadingState label={t("common.loading")} />;
+  // Stale-while-revalidate: the full spinner shows only before the first
+  // payload lands. Reloads (staged publish/discard refresh the staged list,
+  // actions patch items locally) keep the committed rows mounted instead of
+  // blanking the whole queue on every fetch.
+  if (loading && items.length === 0 && stagedGroups.length === 0) {
+    return <LoadingState label={t("common.loading")} />;
+  }
 
   const empty = items.length === 0 && !stagedLoading && stagedGroups.length === 0;
   if (empty) {

@@ -111,7 +111,16 @@ export function Profile({
   const [hydrated, setHydrated] = React.useState(() => storage.isHydrated());
   React.useEffect(() => storage.onHydrated(() => setHydrated(true)), []);
   const [progress, setProgress] = React.useState(storage.allProgress());
-  const [unlockedAchievements, setUnlockedAchievements] = React.useState<Record<string, AchievementRecord>>({});
+  // Seed from the synchronous store (warm once hydrated, which the gate
+  // above guarantees) instead of an empty map that pops to real unlocks a
+  // beat after paint.
+  const [unlockedAchievements, setUnlockedAchievements] = React.useState<Record<string, AchievementRecord>>(() => {
+    try {
+      return achievementsStore.getAll();
+    } catch {
+      return {};
+    }
+  });
   const [, force] = React.useReducer((x) => x + 1, 0);
 
   React.useEffect(() => {
@@ -293,24 +302,28 @@ export function Profile({
             value={attemptedTotal}
             icon={Target}
             color="primary"
+            playOnceKey="profile-tile-attempted"
           />
           <StatTile
             label={t("dash.correctLabel")}
             value={correctTotal}
             icon={Award}
             color="success"
+            playOnceKey="profile-tile-correct"
           />
           <StatTile
             label={t("profile.wrongLabel")}
             value={wrongTotal}
             icon={TrendingUp}
             color="destructive"
+            playOnceKey="profile-tile-wrong"
           />
           <StatTile
             label={t("dash.accuracy")}
             value={`${accuracy}%`}
             icon={Zap}
             color="warning"
+            playOnceKey="profile-tile-accuracy"
             trend={
               accuracyTrend.length >= 2 ? (
                 <SparkTrend data={accuracyTrend} tone="auto" showDelta />
@@ -630,12 +643,14 @@ const PerformanceInsights = React.memo(function PerformanceInsights({ metrics }:
               value={metrics.firstTryAccuracy != null ? `${metrics.firstTryAccuracy}%` : "—"}
               icon={Gauge}
               color="primary"
+              playOnceKey="profile-tile-first-try"
             />
             <StatTile
               label={t("profile.insights.avgTime")}
               value={metrics.avgTimeMs != null ? formatDurationShort(metrics.avgTimeMs) : "—"}
               icon={Timer}
               color="info"
+              playOnceKey="profile-tile-avg-time"
             />
             <StatTile
               label={t("profile.insights.reviewGain")}
@@ -645,6 +660,7 @@ const PerformanceInsights = React.memo(function PerformanceInsights({ metrics }:
                   : "—"
               }
               icon={Repeat2}
+              playOnceKey="profile-tile-review-gain"
               color={
                 metrics.repeatGain == null
                   ? "info"
@@ -658,6 +674,7 @@ const PerformanceInsights = React.memo(function PerformanceInsights({ metrics }:
               value={metrics.totalStudyMs > 0 ? formatStudyTime(metrics.totalStudyMs) : "—"}
               icon={Clock}
               color="warning"
+              playOnceKey="profile-tile-study-time"
               trend={
                 metrics.byDay.some((d) => d.minutes > 0) ? (
                   <SparkTrend data={metrics.byDay.map((d) => d.minutes)} tone="neutral" />
@@ -1084,12 +1101,14 @@ function StatTile({
   icon: Icon,
   color = "primary",
   trend,
+  playOnceKey,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   color?: StatTileProps["color"];
   trend?: React.ReactNode;
+  playOnceKey?: string;
 }) {
   return (
     <SharedStatTile
@@ -1098,6 +1117,7 @@ function StatTile({
       icon={Icon as any}
       color={color}
       trend={trend}
+      playOnceKey={playOnceKey}
     />
   );
 }
@@ -1261,12 +1281,17 @@ function ProfileNotesSection({
 }) {
   const { t } = useI18n();
   const [allNotes, setAllNotes] = React.useState<NoteRecord[]>([]);
+  // Tracks the initial load separately from the list itself: while false
+  // the section shows a shimmer instead of the empty state, so users with
+  // notes never see "no notes" flash before their list lands.
+  const [notesLoaded, setNotesLoaded] = React.useState(false);
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
     const list = await notesStore.list();
     setAllNotes(list);
+    setNotesLoaded(true);
   }, []);
 
   React.useEffect(() => {
@@ -1305,8 +1330,19 @@ function ProfileNotesSection({
           </Button>
         </div>
 
-        {/* Notes list */}
-        {visibleNotes.length === 0 ? (
+        {/* Notes list — shimmer until the first load resolves so the
+            empty state never flashes for users who have notes. */}
+        {!notesLoaded ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" aria-busy="true">
+            {[0, 1].map((i) => (
+              <div key={i} className="rounded-xl border border-border bg-card p-3 space-y-2">
+                <div className="osler-skeleton h-4 w-2/3" />
+                <div className="osler-skeleton h-3 w-full" />
+                <div className="osler-skeleton h-3 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : visibleNotes.length === 0 ? (
           <div className="py-10 text-center">
             <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
               <NotebookPen className="size-6" />

@@ -360,7 +360,17 @@ export interface StatTileProps {
   footer?: React.ReactNode;
   onClick?: () => void;
   className?: string;
+  /**
+   * When set, the enter animation plays only the first time this key mounts
+   * per page load; revisits mount settled. Use for hub stat grids that
+   * remount on every tab switch — replaying the fade on each visit reads
+   * as flashing. One-time reveals omit it and always play.
+   */
+  playOnceKey?: string;
 }
+
+/** Keys whose tile entrance already played this page load. */
+const playedTileKeys = new Set<string>();
 
 const STAT_TILE_COLOR: Record<NonNullable<StatTileProps["color"]>, string> = {
   primary: "text-primary",
@@ -380,13 +390,19 @@ export function StatTile({
   footer,
   onClick,
   className,
+  playOnceKey,
 }: StatTileProps) {
   const Container = onClick ? motion.button : motion.div;
+  let played = false;
+  if (playOnceKey) {
+    played = playedTileKeys.has(playOnceKey);
+    playedTileKeys.add(playOnceKey);
+  }
   return (
     <Container
       type={onClick ? "button" : undefined}
       onClick={onClick}
-      initial={{ opacity: 0, y: 4 }}
+      initial={played ? false : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={MOTION_TRANSITION.base}
       whileHover="hover"

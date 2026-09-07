@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical, ShieldCheck, Trash2, UserRound, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,7 +155,10 @@ export function UsersTable() {
             aria-label={t("admin.users.search")}
           />
         </div>
-        <span className="text-sm text-muted-foreground tabular-nums">
+        <span className="text-sm text-muted-foreground tabular-nums flex items-center gap-1.5">
+          {loading && users.length > 0 && (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          )}
           {t("admin.users.total", { n: String(total) })}
           {guestTotal > 0 && (
             <span className="ms-2">· {t("admin.users.guestsCount", { n: String(guestTotal) })}</span>
@@ -163,7 +166,7 @@ export function UsersTable() {
         </span>
       </div>
 
-      {loading ? (
+      {loading && users.length === 0 ? (
         <div className="space-y-2" aria-busy="true">
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="rounded-xl border border-border bg-card p-3 flex items-center gap-3">
