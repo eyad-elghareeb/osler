@@ -39,7 +39,7 @@ export default function SettingsPage() {
 function SettingsView() {
   const params = useSearchParams();
   const section = params.get("section");
-  if (!section) return <Settings initialSection="language" />;
+  if (!section) return <Settings initialSection="account" />;
   return <SettingsSectionView section={section} />;
 }
 

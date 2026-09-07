@@ -100,7 +100,7 @@ function renderSection(id: SettingsSection) {
  * slides the sub-page in from the inline-end side for a native push feel.
  */
 export function Settings({
-  initialSection = "language",
+  initialSection = "account",
 }: {
   initialSection?: SettingsSection;
 }) {
@@ -131,7 +131,7 @@ export function Settings({
   // mobileHome on the initial mount.
   const [mobileHome, setMobileHome] = React.useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return window.innerWidth < 768 && initialSection === "language";
+    return window.innerWidth < 768 && initialSection === "account";
   });
 
   // Handle form-factor transitions (desktop ↔ mobile resize). We skip the
@@ -145,7 +145,7 @@ export function Settings({
     if (isMobile) {
       // Transitioned to mobile — show home list unless a specific section
       // was explicitly requested.
-      setMobileHome(initialSection === "language");
+      setMobileHome(initialSection === "account");
     } else {
       // Transitioned to desktop — reset (desktop doesn't use mobileHome).
       setMobileHome(false);
