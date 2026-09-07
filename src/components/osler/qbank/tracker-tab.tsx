@@ -451,22 +451,6 @@ export function TrackerTab({
     return transform(qbankTree);
   }, [recordsByUid, data]);
 
-  // Expand every branch on first mount so the tracker reads like the full
-  // folder structure instead of a collapsed outline.
-  const defaultExpanded = React.useMemo(() => {
-    const out: string[] = [];
-    const walk = (list: TrackerTreeNode[]) => {
-      for (const n of list) {
-        if (!n.isPack) {
-          out.push(n.uid);
-          walk(n.children);
-        }
-      }
-    };
-    walk(trackerTree);
-    return out;
-  }, [trackerTree]);
-
   // Preview-sheet data: the resolved pack + its entry in the content list.
   const previewPack = React.useMemo(() => {
     if (!previewUid || !data) return null;
@@ -1143,7 +1127,6 @@ export function TrackerTab({
             <TrackerTree
               nodes={trackerTree}
               label={t("qbank.tracker.wrongAndFlagged")}
-              defaultExpanded={defaultExpanded}
               selectedUid={previewUid}
               onOpenPack={(node) => {
                 setPreviewUid(node.uid);

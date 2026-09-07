@@ -7,16 +7,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
-  Flag,
   Folder,
   History,
-  ListChecks,
   PenTool,
-  X,
 } from "lucide-react";
 import type { EngineType } from "@/lib/osler/types";
 import { ENGINE_META } from "@/lib/osler/content";
-import { disclosureVariants, MOTION_TRANSITION } from "@/lib/osler/motion";
+import {
+  MOTION_SPRING,
+  MOTION_TRANSITION,
+  pressFeedback,
+} from "@/lib/osler/motion";
 import { useI18n } from "./i18n-provider";
 import { cn } from "@/lib/utils";
 
@@ -34,29 +35,14 @@ export interface TrackerTreeNode {
   lastSessionAt?: number;
 }
 
-const PACK_ICONS: Record<EngineType, React.ComponentType<{ className?: string }>> = {
-  quiz: ClipboardCheck,
-  bank: BookOpen,
-  written: PenTool,
-  flashcard: BookOpen,
-  osce: ClipboardCheck,
-  library: BookOpen,
-  video: BookOpen,
-  mixed: BookOpen,
-};
 
-function CountChip({ count, kind }: { count: number; kind: "wrong" | "flagged" }) {
-  if (count <= 0) return null;
-  const Icon = kind === "wrong" ? X : Flag;
+
+function NeutralCountChip({ wrong, flagged }: { wrong: number; flagged: number }) {
+  const total = wrong + flagged;
+  if (total <= 0) return null;
   return (
-    <span
-      className={cn(
-        "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums",
-        kind === "wrong" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning",
-      )}
-    >
-      <Icon className="size-2.5" />
-      {count}
+    <span className="rounded-md bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+      {wrong > 0 && flagged > 0 ? `${wrong} · ${flagged}` : wrong > 0 ? wrong : flagged}
     </span>
   );
 }
@@ -65,13 +51,8 @@ function CountChip({ count, kind }: { count: number; kind: "wrong" | "flagged" }
 function SessionsChip({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span
-      className={cn(
-        "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums",
-        "bg-primary/10 text-primary",
-      )}
-    >
-      <History className="size-2.5" />
+    <span className="flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-foreground">
+      <History className="size-3" />
       {count}
     </span>
   );
@@ -83,11 +64,11 @@ const Caret = React.memo(function Caret({ open, rtl }: { open: boolean; rtl: boo
     <motion.div
       initial={false}
       animate={{ rotate: open ? (rtl ? -90 : 90) : 0 }}
-      transition={MOTION_TRANSITION.quick}
-      className="size-4 shrink-0 text-muted-foreground"
+      transition={MOTION_SPRING.snappy}
+      className="size-3.5 shrink-0 text-muted-foreground/70"
       aria-hidden="true"
     >
-      <Icon className="size-4" />
+      <Icon className="size-3.5" />
     </motion.div>
   );
 });
@@ -263,10 +244,9 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
       const isOpen = openIds.has(node.uid);
       const isSelected = selectedUid === node.uid;
       const meta = ENGINE_META[node.type] ?? ENGINE_META.quiz;
-      const PackIcon = PACK_ICONS[node.type] ?? ListChecks;
 
       const row = (
-        <div
+        <motion.div
           role="treeitem"
           aria-expanded={isBranch ? isOpen : undefined}
           aria-level={depth + 1}
@@ -277,82 +257,90 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
           onClick={() => handleRowClick(node)}
           onKeyDown={(e) => handleKey(e, node.uid)}
           onFocus={() => setActiveId(node.uid)}
+          variants={pressFeedback}
+          initial="rest"
+          whileTap="press"
           className={cn(
-            "flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-2 py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40",
-            isSelected ? "bg-primary/10 font-medium text-primary" : "text-foreground hover:bg-muted/60",
+            "group flex w-full cursor-pointer select-none items-center gap-1.5 rounded-md px-2 text-[13px] leading-tight outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40",
+            "h-7",
+            isSelected
+              ? "bg-primary/10 font-medium text-primary"
+              : "text-foreground hover:bg-muted/40",
+            !isSelected && isBranch && "font-medium",
+            !isSelected && !isBranch && "text-muted-foreground group-hover:text-foreground",
           )}
         >
           {isBranch ? (
             <>
               <Caret open={isOpen} rtl={rtl} />
-              <Folder className="size-4 shrink-0 text-muted-foreground" />
+              <Folder className="size-3.5 shrink-0 text-muted-foreground/70" />
               <span className="min-w-0 flex-1 truncate">{node.title}</span>
+              {!isOpen && (
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
+                  {node.children.length > 0 ? `+${node.children.length}` : ""}
+                </span>
+              )}
               <span className="flex shrink-0 items-center gap-1.5">
                 {mode === "sessions" ? (
                   <SessionsChip count={node.sessions ?? 0} />
                 ) : (
-                  <>
-                    <CountChip count={node.wrong} kind="wrong" />
-                    <CountChip count={node.flagged} kind="flagged" />
-                  </>
+                  <NeutralCountChip wrong={node.wrong} flagged={node.flagged} />
                 )}
               </span>
             </>
           ) : (
             <>
-              <span className="w-4 shrink-0" aria-hidden="true" />
-              <div
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg"
-                style={{
-                  backgroundColor: `color-mix(in oklch, ${meta.color} 12%, transparent)`,
-                  color: meta.color,
-                }}
-              >
-                <PackIcon className="size-3.5" />
-              </div>
+              <span className="w-3.5 shrink-0" aria-hidden="true" />
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: meta.color }}
+                aria-hidden="true"
+              />
               <span className="min-w-0 flex-1 truncate">{node.title}</span>
               <span className="flex shrink-0 items-center gap-1.5">
                 {mode === "sessions" ? (
                   <SessionsChip count={node.sessions ?? 0} />
                 ) : (
-                  <>
-                    <CountChip count={node.wrong} kind="wrong" />
-                    <CountChip count={node.flagged} kind="flagged" />
-                  </>
+                  <NeutralCountChip wrong={node.wrong} flagged={node.flagged} />
                 )}
                 {rtl ? (
-                  <ChevronLeft className="size-3.5 text-muted-foreground/40" aria-hidden="true" />
+                  <ChevronLeft className="size-3 text-muted-foreground/40 rtl-flip-x" aria-hidden="true" />
                 ) : (
-                  <ChevronRight className="size-3.5 text-muted-foreground/40" aria-hidden="true" />
+                  <ChevronRight className="size-3 text-muted-foreground/40 rtl-flip-x" aria-hidden="true" />
                 )}
               </span>
             </>
           )}
-        </div>
+        </motion.div>
       );
 
       if (!isBranch) return <div key={node.uid}>{row}</div>;
 
       return (
-        <div key={node.uid}>
+        <div key={node.uid} className="relative">
           {row}
           <AnimatePresence initial={false}>
             {isOpen && (
               <motion.div
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                variants={disclosureVariants}
-                transition={reduced ? { duration: 0 } : undefined}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { height: MOTION_TRANSITION.quick, opacity: MOTION_TRANSITION.fast }
+                }
                 className="overflow-hidden"
               >
                 <div
                   className={cn(
-                    "flex flex-col gap-0.5 py-0.5",
-                    depth < 3 && "ms-4 border-s ps-1.5 border-border",
+                    "relative flex py-0.5",
+                    depth < 3 && "ms-[14px] border-s border-border/40",
                   )}
                 >
-                  {renderNodes(node.children, depth + 1)}
+                  <div className="flex w-full flex-col gap-px">
+                    {renderNodes(node.children, depth + 1)}
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -362,7 +350,7 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
     });
 
   return (
-    <div role="tree" aria-label={label} aria-multiselectable="false" className="flex flex-col gap-0.5">
+    <div role="tree" aria-label={label} aria-multiselectable="false" className="flex flex-col gap-px">
       {renderNodes(nodes, 0)}
     </div>
   );

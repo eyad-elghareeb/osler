@@ -241,21 +241,6 @@ export function SessionHistoryView() {
     return tree;
   }, [packs, sessionsByUid, t]);
 
-  // Expand every branch on mount so the file tree reads at a glance.
-  const defaultExpanded = React.useMemo(() => {
-    const out: string[] = [];
-    const walk = (list: TrackerTreeNode[]) => {
-      for (const n of list) {
-        if (!n.isPack) {
-          out.push(n.uid);
-          walk(n.children);
-        }
-      }
-    };
-    walk(historyTree);
-    return out;
-  }, [historyTree]);
-
   // Pack whose sessions sheet is currently open.
   const [previewUid, setPreviewUid] = React.useState<string | null>(null);
 
@@ -464,7 +449,6 @@ export function SessionHistoryView() {
             <TrackerTree
               nodes={historyTree}
               label={t("qbank.history.byFile")}
-              defaultExpanded={defaultExpanded}
               selectedUid={previewUid}
               mode="sessions"
               onOpenPack={(node) => {
