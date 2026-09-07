@@ -145,11 +145,22 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
 
   React.useEffect(() => {
     const sitekey = getConfig().cloud.turnstileSiteKey;
-    const container = guestTurnstileRef.current;
-    if (!guestDialogOpen || !guestTurnstileEnabled || !sitekey || !container) return;
+    if (!guestDialogOpen || !guestTurnstileEnabled || !sitekey) return;
 
+    let cancelled = false;
+    let retryId = 0;
     const render = () => {
-      if (!window.turnstile || !container.isConnected) return;
+      if (cancelled) return;
+      const container = guestTurnstileRef.current;
+      // The dialog content mounts asynchronously (portal + animation), so the
+      // container may not exist on the first pass — retry briefly instead of
+      // giving up and leaving the Continue button permanently disabled.
+      if (!container || !container.isConnected) {
+        if (retryId < 40) retryId = window.setTimeout(render, 50);
+        return;
+      }
+      if (!window.turnstile) return;
+      if (guestTurnstileWidgetId.current) return;
       container.replaceChildren();
       guestTurnstileWidgetId.current = window.turnstile.render(container, {
         sitekey,
@@ -173,6 +184,8 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
       document.head.appendChild(script);
     }
     return () => {
+      cancelled = true;
+      window.clearTimeout(retryId);
       const widgetId = guestTurnstileWidgetId.current;
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
       guestTurnstileWidgetId.current = "";
@@ -196,7 +209,11 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
     const name = guestName.trim();
     if (!name || guestVerifying) return;
     if (guestTurnstileEnabled) {
-      if (!guestTurnstileToken) return;
+      if (!guestTurnstileToken) {
+        setGuestError(t("login.guestTurnstileRequired"));
+        haptic("error");
+        return;
+      }
       setGuestVerifying(true);
       setGuestError("");
       try {
@@ -850,7 +867,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                 type="button"
                 size="lg"
                 onClick={handleGuestContinue}
-                disabled={guestVerifying || !guestName.trim() || (guestTurnstileEnabled && !guestTurnstileToken)}
+                disabled={guestVerifying || !guestName.trim()}
                 className="w-full gap-2"
               >
                 {guestVerifying && <Loader2 className="size-4 animate-spin" />}

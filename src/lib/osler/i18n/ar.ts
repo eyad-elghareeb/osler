@@ -95,6 +95,7 @@ export const ar = {
     "login.guestContinue": "متابعة",
     "login.guestVerifyError": "الفحص الأمني غير متاح. تحقق من اتصالك وحاول مرة أخرى.",
     "login.guestTurnstileFailed": "فشل الفحص الأمني. حاول مرة أخرى.",
+    "login.guestTurnstileRequired": "أكمل الفحص الأمني للمتابعة.",
     "login.footer": "أوسلر الإصدار 1",
     "login.identifier": "اسم المستخدم أو البريد الإلكتروني",
     "login.identifierPlaceholder": "اسم المستخدم أو البريد الإلكتروني",

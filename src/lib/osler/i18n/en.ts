@@ -94,6 +94,7 @@ export const en = {
     "login.guestContinue": "Continue",
     "login.guestVerifyError": "Security check unavailable. Check your connection and try again.",
     "login.guestTurnstileFailed": "Security check failed. Try again.",
+    "login.guestTurnstileRequired": "Complete the security check to continue.",
     "login.footer": "Osler v1",
     "login.identifier": "Username or email",
     "login.identifierPlaceholder": "Username or email address",
