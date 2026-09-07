@@ -1560,6 +1560,7 @@ export const ar = {
     "search.noResults": "لا نتائج لـ \"{query}\".",
     "search.searching": "جارٍ البحث…",
     "search.countResults": "{n} نتيجة",
+    "search.moreInGroup": "+{n} المزيد — واصل الكتابة لتضييق النتائج",
     "search.openInLibrary": "افتح في المكتبة",
     "search.startSession": "ابدأ جلسة",
     "search.openVideo": "افتح الفيديو",

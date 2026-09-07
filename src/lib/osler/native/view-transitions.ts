@@ -20,9 +20,30 @@
  *    roundtrip entirely and just call the callback synchronously.
  */
 
+import { isAnimationsEnabled } from "@/lib/osler/motion";
+
 export type ViewTransitionDirection = "forward" | "backward" | "none";
 
 const VT_DIR_ATTR = "data-vt-direction";
+
+/**
+ * Whether the route swap should run bare, with no snapshot roundtrip.
+ * Beyond OS reduced-motion and missing API support, two Osler-specific
+ * cases skip: the user disabling UI animations in Settings (previously the
+ * toggle silenced framer-motion but every navigation still slid), and
+ * low-perf devices (AnimationsProvider flags `<html data-perf="low">`),
+ * where the full-page snapshot animation itself janks.
+ */
+function shouldSkipTransition(): boolean {
+  if (prefersReducedMotion() || !isViewTransitionsSupported() || vtInFlight) return true;
+  try {
+    if (!isAnimationsEnabled()) return true;
+    if (typeof document !== "undefined" && document.documentElement.getAttribute("data-perf") === "low") return true;
+  } catch {
+    // ignore — fall through to transitioning
+  }
+  return false;
+}
 
 /**
  * True while a view transition is capturing/animating. A newer
@@ -65,9 +86,9 @@ export function withViewTransition<T>(
   cb: () => T | Promise<T>,
   direction: ViewTransitionDirection = "none",
 ): void {
-  // Reduced motion / unsupported / transition already settling: run
-  // directly, no snapshot roundtrip.
-  if (prefersReducedMotion() || !isViewTransitionsSupported() || vtInFlight) {
+  // Reduced motion / animations off / low-perf / unsupported / transition
+  // already settling: run directly, no snapshot roundtrip.
+  if (shouldSkipTransition()) {
     void Promise.resolve(cb());
     return;
   }

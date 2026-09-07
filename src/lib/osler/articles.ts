@@ -10,7 +10,36 @@ import { CALLOUT_DEFAULT_TITLES, parseCalloutMarker } from "./callouts";
 import { loadCategoryTree, fetchWithLocalFallback } from "./content";
 import { contentFileUrl, localContentUrl, cacheBust } from "./content-url";
 import { loadConfig } from "./config";
+import { currentContentVersion } from "./content-version";
 import type { ContentTreeNode, ContentLang } from "./types";
+
+/**
+ * Bounded cache of fully parsed articles by content-version + path. Opening
+ * an article otherwise re-runs the whole unified pipeline (remark-gfm +
+ * sanitize) on the main thread every time — a visible hitch on long reads
+ * and on every revisit. The version stamp in the key retires entries
+ * automatically whenever content is published; the Map evicts oldest-first
+ * past the cap.
+ */
+const ARTICLE_HTML_CACHE_MAX = 25;
+const articleHtmlCache = new Map<string, Article>();
+
+function articleCacheKey(filePath: string): string {
+  try {
+    return `${currentContentVersion() ?? ""}::${filePath}`;
+  } catch {
+    return filePath;
+  }
+}
+
+function cacheParsedArticle(key: string, article: Article): Article {
+  articleHtmlCache.set(key, article);
+  if (articleHtmlCache.size > ARTICLE_HTML_CACHE_MAX) {
+    const oldest = articleHtmlCache.keys().next();
+    if (!oldest.done) articleHtmlCache.delete(oldest.value);
+  }
+  return article;
+}
 
 /** Base URL for library article files. */
 function libraryBaseUrl(): string {
@@ -142,6 +171,7 @@ export function clearArticlesCache(): void {
   treeCache = null;
   leafArticleCache = null;
   sidecarCache.clear();
+  articleHtmlCache.clear();
 }
 
 export interface Article extends ArticleMeta {
@@ -504,13 +534,19 @@ export function getCachedAllArticles(): ArticleMeta[] | null {
   return Array.from(leafArticleCache.values()).flat();
 }
 
-/** Fetch and parse a single file into an Article (with html). */
+/** Fetch and parse a single file into an Article (with html). Parsed bodies
+ *  are cached (see articleHtmlCache) so revisits skip the fetch + unified
+ *  parse entirely. */
 export async function loadArticleContent(filePath: string): Promise<Article | null> {
+  const key = articleCacheKey(filePath);
+  const hit = articleHtmlCache.get(key);
+  if (hit) return hit;
+
   await loadConfig();
   const ext = extOf(filePath);
 
   if (ext === "pdf") {
-    return {
+    return cacheParsedArticle(key, {
       file: filePath.split("/").pop() ?? "",
       title: (filePath.split("/").pop() ?? "").replace(/\.pdf$/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       content: "",
@@ -518,7 +554,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
       fileUrl: `${libraryBaseUrl()}${filePath}`,
       lang: "en",
       contentType: "pdf",
-    };
+    });
   }
 
   if (ext === "html") {
@@ -526,7 +562,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
     if (!res.ok) return null;
     const text = await res.text();
     const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
-    return {
+    return cacheParsedArticle(key, {
       file: filePath.split("/").pop() ?? "",
       title: titleMatch?.[1]?.trim() ?? (filePath.split("/").pop() ?? "").replace(/\.html$/, "").replace(/-/g, " "),
       content: text,
@@ -534,7 +570,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
       fileUrl: `${libraryBaseUrl()}${filePath}`,
       lang: "en",
       contentType: "html",
-    };
+    });
   }
 
   // Default: markdown
@@ -562,7 +598,7 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
     contentType: "md",
   };
   applySidecarMeta(article, await fetchSidecarMeta(filePath));
-  return article;
+  return cacheParsedArticle(key, article);
 }
 
 /** Best-effort lookup of a content node's `lang` for a given article path. */
@@ -601,4 +637,5 @@ export function clearArticleCache(): void {
   treeCache = null;
   leafArticleCache = null;
   sidecarCache.clear();
+  articleHtmlCache.clear();
 }

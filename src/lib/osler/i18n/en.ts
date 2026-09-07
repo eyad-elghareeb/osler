@@ -1565,6 +1565,7 @@ export const en = {
     "search.noResults": "No results for \"{query}\".",
     "search.searching": "Searching…",
     "search.countResults": "{n} result(s)",
+    "search.moreInGroup": "+{n} more — keep typing to narrow down",
     "search.openInLibrary": "Open in Library",
     "search.startSession": "Start session",
     "search.openVideo": "Open video",

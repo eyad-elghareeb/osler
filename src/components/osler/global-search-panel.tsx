@@ -44,6 +44,12 @@ import { haptic } from "@/lib/osler/native";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
 
+/**
+ * Max rows rendered per result group. Ultra-short queries can match hundreds
+ * of items; mounting them all in one frame hitches the panel open/update.
+ */
+const MAX_RESULTS_PER_GROUP = 8;
+
 interface GlobalSearchPanelProps {
   /** Controlled query — parent persists it across open/close. */
   query: string;
@@ -112,8 +118,21 @@ export function GlobalSearchPanel({
 
   const grouped = React.useMemo(() => groupResults(results), [results]);
 
+  // Cap rows per group: an ultra-short query can otherwise match hundreds of
+  // items and mount them all in one frame (visible hitch when the panel
+  // opens/updates). The overflow line tells the user to keep typing.
+  const visibleGroups = React.useMemo(
+    () =>
+      grouped.map((g) => ({
+        ...g,
+        items: g.items.slice(0, MAX_RESULTS_PER_GROUP),
+        hidden: Math.max(0, g.items.length - MAX_RESULTS_PER_GROUP),
+      })),
+    [grouped],
+  );
+
   // Flat list of results for keyboard navigation (preserves group order).
-  const flat = React.useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
+  const flat = React.useMemo(() => visibleGroups.flatMap((g) => g.items), [visibleGroups]);
 
   // Reset active index when the query changes.
   React.useEffect(() => { setActiveIdx(0); }, [query]);
@@ -246,7 +265,7 @@ export function GlobalSearchPanel({
         ) : (
           <div className="space-y-3">
             <AnimatePresence initial={false}>
-              {grouped.map((group) => {
+              {visibleGroups.map((group) => {
                 const Icon = KIND_ICON[group.kind];
                 return (
                   <motion.div
@@ -306,6 +325,11 @@ export function GlobalSearchPanel({
                           </button>
                         );
                       })}
+                      {group.hidden > 0 && (
+                        <div className="px-2 py-1 text-[11px] text-muted-foreground">
+                          {t("search.moreInGroup", { n: group.hidden })}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -315,7 +339,9 @@ export function GlobalSearchPanel({
         )}
       </div>
 
-      {/* Keyboard footer — desktop only (hidden on mobile sheet) */}
+      {/* Keyboard footer — desktop only (hidden on mobile sheet). The count
+          reflects total matches across groups, which can exceed the capped
+          rows rendered above. */}
       {flat.length > 0 && !isSheet && (
         <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground flex items-center gap-3">
           <span className="flex items-center gap-1">
@@ -327,7 +353,7 @@ export function GlobalSearchPanel({
             <kbd className="px-1 py-0.5 rounded border border-border">↵</kbd>
             {t("common.confirm")}
           </span>
-          <span className="ms-auto">{t("search.countResults", { n: flat.length })}</span>
+          <span className="ms-auto">{t("search.countResults", { n: results.length })}</span>
         </div>
       )}
     </div>

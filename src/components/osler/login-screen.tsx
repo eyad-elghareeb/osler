@@ -742,7 +742,9 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
               </span>
             </div>
           )}
-          {cloudActive && getConfig().cloud.turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center" />}
+          {/* min-h reserves the widget's height so the form doesn't jump when
+              the challenge iframe loads a beat after the form paints. */}
+          {cloudActive && getConfig().cloud.turnstileSiteKey && <div ref={turnstileRef} className="flex justify-center min-h-[65px]" />}
 
           <Button type="submit" size="lg" disabled={cloudBusy || coolingLink} className="w-full gap-2">
             {cloudBusy ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -858,7 +860,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                 />
               </div>
               {guestTurnstileEnabled && (
-                <div ref={guestTurnstileRef} className="flex justify-center" />
+                <div ref={guestTurnstileRef} className="flex justify-center min-h-[65px]" />
               )}
               {guestError && <p className="text-xs text-destructive">{guestError}</p>}
             </div>
