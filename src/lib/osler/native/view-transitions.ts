@@ -11,8 +11,9 @@
  *    cue for the user. With it, navigating between Dashboard / Library /
  *    QBank / Videos feels like a native push-navigation transition.
  *  - The API is `document.startViewTransition(cb)` on Chrome/Edge/Safari
- *    (recent versions). Firefox support is still partial — we feature-detect
- *    and fall back to instant update when unavailable.
+ *    (recent versions). Firefox now exposes it too, but its snapshot
+ *    compositing tears visibly on dense pages — quarantined below, we
+ *    feature-detect AND engine-detect, falling back to instant update.
  *  - Direction (slide left vs slide right) is signaled by setting
  *    `data-vt-direction` on <html> before calling startViewTransition.
  *    The matching CSS lives in globals.css under `@view-transition`.
@@ -27,14 +28,35 @@ export type ViewTransitionDirection = "forward" | "backward" | "none";
 const VT_DIR_ATTR = "data-vt-direction";
 
 /**
+ * Firefox exposes `document.startViewTransition`, but its snapshot
+ * compositing is software-rendered and tears visibly on dense pages (hub
+ * grids, admin tables) — every navigation freezes, then flashes. Chrome's
+ * GPU path stays smooth, which is exactly the reported
+ * "fine in Chrome, flashing in Firefox" split. Quarantined by engine until
+ * the implementation matures; harmless where VT is absent (already skipped)
+ * and on FxiOS (WebKit, no VT to skip).
+ */
+function isFirefoxEngine(): boolean {
+  try {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    return ua.includes("Firefox/") || ua.includes("FxiOS/");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether the route swap should run bare, with no snapshot roundtrip.
- * Beyond OS reduced-motion and missing API support, two Osler-specific
+ * Beyond OS reduced-motion and missing API support, three Osler-specific
  * cases skip: the user disabling UI animations in Settings (previously the
- * toggle silenced framer-motion but every navigation still slid), and
+ * toggle silenced framer-motion but every navigation still slid),
  * low-perf devices (AnimationsProvider flags `<html data-perf="low">`),
- * where the full-page snapshot animation itself janks.
+ * where the full-page snapshot animation itself janks, and Firefox (see
+ * `isFirefoxEngine` — software snapshots tear).
  */
 function shouldSkipTransition(): boolean {
+  if (isFirefoxEngine()) return true;
   if (prefersReducedMotion() || !isViewTransitionsSupported() || vtInFlight) return true;
   try {
     if (!isAnimationsEnabled()) return true;
