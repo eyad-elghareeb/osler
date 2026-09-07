@@ -65,6 +65,16 @@ const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Alternative YouTube frontend host (set via NEXT_PUBLIC_INVIDIOUS_HOST in .env.local). */
 const INVIDIOUS_HOST = process.env.NEXT_PUBLIC_INVIDIOUS_HOST;
 
+/**
+ * Module-level player-pref cache. The stored prefs arrive async, but the
+ * player boot effect keys off them — without this cache every open boots
+ * the default player, then tears it down and reboots when the stored pref
+ * lands (visible player flash + double API load whenever the pref differs
+ * from the build default).
+ */
+let cachedAltHost: boolean | null = null;
+let cachedAutoplay: boolean | null = null;
+
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
 function fmtTime(s: number): string {
@@ -570,10 +580,15 @@ function VideoPlayerView({
   const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(Boolean(INVIDIOUS_HOST));
+  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(() => cachedAltHost ?? Boolean(INVIDIOUS_HOST));
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
-  const [autoplay, setAutoplay] = React.useState(true);
+  const [autoplay, setAutoplay] = React.useState<boolean>(() => cachedAutoplay ?? true);
+  // Gates player boot until the stored prefs resolve, so the first (and
+  // only) boot uses the right player. Seeded from the module cache above,
+  // so only the first open per page load waits (a microtask or two — the
+  // stage is a black box meanwhile, indistinguishable from player load).
+  const [prefsReady, setPrefsReady] = React.useState<boolean>(() => cachedAltHost !== null && cachedAutoplay !== null);
 
   // Latest auto-advance behavior for the player event callbacks (which are
   // bound once at player init and would otherwise capture stale props).
@@ -583,23 +598,48 @@ function VideoPlayerView({
   };
 
   React.useEffect(() => {
+    if (cachedAltHost !== null && cachedAutoplay !== null) return;
     let cancelled = false;
-    settings.get("video-alt-host").then((val) => {
-      if (cancelled || val == null) return;
-      setInvidiousMode(val === "true");
-    });
-    settings.get("video-autoplay").then((val) => {
-      if (cancelled || val == null) return;
-      setAutoplay(val === "true");
-    });
+    // Never hold the player hostage on a wedged settings read — resolve
+    // the gate on completion OR after a short fallback either way.
+    const fallback = setTimeout(() => {
+      if (!cancelled) {
+        cachedAltHost ??= Boolean(INVIDIOUS_HOST);
+        cachedAutoplay ??= true;
+        setPrefsReady(true);
+      }
+    }, 800);
+    void Promise.all([
+      settings.get("video-alt-host").then((val) => {
+        if (cancelled) return;
+        cachedAltHost = val == null ? Boolean(INVIDIOUS_HOST) : val === "true";
+        setInvidiousMode(cachedAltHost);
+      }),
+      settings.get("video-autoplay").then((val) => {
+        if (cancelled) return;
+        cachedAutoplay = val == null ? true : val === "true";
+        setAutoplay(cachedAutoplay);
+      }),
+    ])
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(fallback);
+        if (!cancelled) {
+          cachedAltHost ??= Boolean(INVIDIOUS_HOST);
+          cachedAutoplay ??= true;
+          setPrefsReady(true);
+        }
+      });
     return () => {
       cancelled = true;
+      clearTimeout(fallback);
     };
   }, []);
 
   const toggleAutoplay = () => {
     haptic("selection");
     const next = !autoplay;
+    cachedAutoplay = next;
     setAutoplay(next);
     void settings.set("video-autoplay", String(next));
   };
@@ -629,8 +669,10 @@ function VideoPlayerView({
   };
 
   // ── Initialise player: YouTube IFrame API or Plyr ──
+  // Gated on prefsReady so the single boot uses the stored player choice
+  // instead of booting the default and rebooting when prefs land.
   React.useEffect(() => {
-    if (!containerRef.current || invidiousMode) return;
+    if (!prefsReady || !containerRef.current || invidiousMode) return;
 
     containerRef.current.innerHTML = "";
 
@@ -758,7 +800,7 @@ function VideoPlayerView({
         plyrRef.current = null;
       };
     }
-  }, [isYouTube, videoId, video.source.url, invidiousMode]);
+  }, [isYouTube, videoId, video.source.url, invidiousMode, prefsReady]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {
@@ -870,6 +912,7 @@ function VideoPlayerView({
               haptic("selection");
               setInvidiousStart(undefined);
               const next = !invidiousMode;
+              cachedAltHost = next;
               setInvidiousMode(next);
               void settings.set("video-alt-host", String(next));
             }}
@@ -891,9 +934,11 @@ function VideoPlayerView({
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
         {/* Main Stage Column */}
         <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
-          {/* Video Player Container */}
+          {/* Video Player Container — while prefs resolve the stage stays a
+              black box (indistinguishable from player load) instead of
+              mounting the default player and swapping it a beat later. */}
           <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-e3 border border-border shrink-0">
-            {invidiousMode && videoId ? (
+            {!prefsReady ? null : invidiousMode && videoId ? (
               <iframe
                 src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}`}
                 className="absolute inset-0 w-full h-full"
