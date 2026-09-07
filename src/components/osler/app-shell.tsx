@@ -375,10 +375,11 @@ export function AppShell({ children }: AppShellProps) {
              * Access itself is enforced by the admin route guard + the
              * Worker's role checks on every /v1/admin endpoint; this button
              * merely hides the entrance for normal users. */}
+            {/* Default Link prefetching warms the admin chunks on hover,
+                so entering /admin doesn't cold-load them mid-transition. */}
             {isAdminUser && (
               <Link
                 href="/admin"
-                prefetch={false}
                 onClick={() => haptic("selection")}
                 aria-label={t("nav.adminPanel")}
                 title={t("nav.adminPanel")}
@@ -648,6 +649,10 @@ function MobileScrollAwayBar({
 
   return (
     <motion.div
+      // Remount per view so the bar is always freshly expanded on arrival.
+      // Without this, navigating while hidden played the 200ms expand tween
+      // mid-transition, shifting the incoming page's layout as it painted.
+      key={view}
       initial={false}
       animate={{
         height: hidden || immersive ? 0 : "auto",
@@ -714,7 +719,6 @@ function MobileScrollAwayBar({
         {isAdminUser && (
           <Link
             href="/admin"
-            prefetch={false}
             onClick={() => haptic("selection")}
             aria-label={t("nav.adminPanel")}
             title={t("nav.adminPanel")}

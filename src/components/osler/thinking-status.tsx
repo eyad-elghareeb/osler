@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ThinkingOrb, type OrbSize, type OrbState } from "thinking-orbs";
 import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
@@ -37,18 +37,19 @@ export function ThinkingStatus({
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <ThinkingOrb state={active.state} size={size} aria-hidden="true" />
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.span
-          key={idx}
-          initial={reduce ? false : { opacity: 0, y: 3 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={reduce ? undefined : { opacity: 0, y: -3 }}
-          transition={MOTION_TRANSITION.quick}
-          className={cn("text-muted-foreground", labelClassName)}
-        >
-          {active.label}
-        </motion.span>
-      </AnimatePresence>
+      {/* Enter-only label rotation: mode="wait" faded the old label out
+          before fading the new one in, leaving a visible text gap every
+          interval tick while the orb kept pulsing. The swap is instant and
+          only the incoming label fades. */}
+      <motion.span
+        key={idx}
+        initial={reduce ? false : { opacity: 0, y: 3 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={MOTION_TRANSITION.quick}
+        className={cn("text-muted-foreground", labelClassName)}
+      >
+        {active.label}
+      </motion.span>
     </span>
   );
 }

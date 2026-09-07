@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Lightbulb, MousePointerClick, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -403,9 +403,10 @@ export function SpotlightWalkthrough({
         </motion.div>
       )}
 
-      {/* ── Coach mark card ── */}
-      <AnimatePresence mode="wait">
-        <motion.div
+      {/* ── Coach mark card ──
+          Enter-only: mode="wait" blanked the card between tour steps while
+          the spotlight ring stayed put, reading as a flicker. */}
+      <motion.div
           key={index}
           ref={attachCard}
           data-walkthrough-card
@@ -413,7 +414,6 @@ export function SpotlightWalkthrough({
           aria-live="polite"
           initial={{ opacity: 0, y: 8, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1, top: cardPosition.top, left: cardPosition.left, width: cardPosition.cardWidth }}
-          exit={{ opacity: 0, y: -4, scale: 0.96 }}
           transition={MOTION_TRANSITION.normal}
           className="absolute z-30 pointer-events-auto rounded-xl border border-border/70 bg-card/95 backdrop-blur-sm shadow-e3 px-4 py-3 flex flex-col gap-2"
           onClick={(e) => e.stopPropagation()}
@@ -522,11 +522,11 @@ export function SpotlightWalkthrough({
                 : <ArrowRight className={cn("size-3.5", rtl && "rtl-flip-x")} />}
             </Button>
           </div>
-        </motion.div>
-      </AnimatePresence>
+      </motion.div>
     </div>,
     document.body,
   );
+  
 }
 
 // Backwards-compatible alias so existing components continue to work

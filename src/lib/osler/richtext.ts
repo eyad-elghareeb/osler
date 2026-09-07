@@ -80,7 +80,9 @@ export function renderRichText(
       const resolved = resolveContentAsset(checked, category, packPath);
       const finalSrc = escapeAttr(imageSrc ? imageSrc(resolved) : resolved);
       const altAttr = escapeAttr(alt ?? "");
-      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy" class="max-h-96 w-auto rounded-lg mx-auto my-2 cursor-zoom-in">`);
+      // decoding="async" keeps image decode off the critical path so long
+      // question/article bodies don't hitch mid-scroll when images settle.
+      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy" decoding="async" class="max-h-96 w-auto rounded-lg mx-auto my-2 cursor-zoom-in">`);
       return `\u0000IMG${imgTokens.length - 1}\u0000`;
     },
   );
@@ -94,7 +96,7 @@ export function renderRichText(
       const finalSrc = escapeAttr(imageSrc ? imageSrc(resolved) : resolved);
       const altMatch = `${before} ${after}`.match(/alt=["']([^"']*)["']/i);
       const altAttr = escapeAttr(altMatch ? altMatch[1] : "");
-      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy" class="max-h-96 w-auto rounded-lg mx-auto my-2 cursor-zoom-in">`);
+      imgTokens.push(`<img src="${finalSrc}" alt="${altAttr}" loading="lazy" decoding="async" class="max-h-96 w-auto rounded-lg mx-auto my-2 cursor-zoom-in">`);
       return `\u0000IMG${imgTokens.length - 1}\u0000`;
     },
   );

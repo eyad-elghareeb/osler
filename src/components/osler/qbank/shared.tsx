@@ -174,6 +174,7 @@ export function ContentImageFigure({
           src={src}
           alt={img.alt ?? ""}
           loading="lazy"
+          decoding="async"
           onError={() => setLoadError(true)}
           onClick={(e) => {
             e.stopPropagation();

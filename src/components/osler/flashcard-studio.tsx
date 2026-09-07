@@ -205,7 +205,7 @@ function appendImagesHtml(html: string, images: FlashcardImage[], packPath: stri
       const caption = img.caption
         ? `<div>${markdownToAnkiHtml(img.caption, packPath)}</div>`
         : "";
-      return `<img src="${ref}" alt="${alt}">${caption}`;
+      return `<img src="${ref}" alt="${alt}" loading="lazy" decoding="async">${caption}`;
     })
     .join("");
   return html ? `${html}<br>${imgs}` : imgs;

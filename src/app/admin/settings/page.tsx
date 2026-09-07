@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Settings as SettingsIcon,
   Palette,
@@ -224,18 +224,18 @@ export default function AdminSettingsPage() {
               </nav>
             </aside>
 
+            {/* Content pane — keyed enter-only fade. An exit animation here
+                (AnimatePresence mode="wait") blanked the pane between section
+                switches; same recipe as the main settings view. */}
             <div className="min-w-0">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={section}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={MOTION_TRANSITION.quick}
-                >
-                  {renderSection(section)}
-                </motion.div>
-              </AnimatePresence>
+              <motion.div
+                key={section}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={MOTION_TRANSITION.quick}
+              >
+                {renderSection(section)}
+              </motion.div>
             </div>
           </div>
         </div>

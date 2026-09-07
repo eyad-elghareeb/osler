@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Activity, ArrowLeft, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -87,13 +87,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   );
 
   // Directional slide tuned for a form wizard (24px, not the 80px card
-  // carousel) — composed from the shared motion tokens only.
+  // carousel) — enter-only, composed from the shared motion tokens. An exit
+  // animation (AnimatePresence mode="wait") blanked the card between steps.
   const slide = React.useMemo(() => {
     const x = dir * (rtl ? -24 : 24);
     return {
       initial: { opacity: 0, x },
       animate: { opacity: 1, x: 0, transition: MOTION_TRANSITION.normal },
-      exit: { opacity: 0, x: -x, transition: MOTION_TRANSITION.quick },
     };
   }, [dir, rtl]);
 
@@ -167,11 +167,9 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             </div>
 
             <div className="bg-card border border-border rounded-xl p-6 shadow-e1">
-              <AnimatePresence mode="wait">
-                <motion.div key={index} {...slide}>
-                  <Step />
-                </motion.div>
-              </AnimatePresence>
+              <motion.div key={index} {...slide}>
+                <Step />
+              </motion.div>
             </div>
 
             <div className="flex items-center gap-2 mt-4">
