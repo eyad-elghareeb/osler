@@ -41,19 +41,28 @@ interface I18nContextValue {
 const I18nContext = React.createContext<I18nContextValue | null>(null);
 
 export function OslerI18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = React.useState<UiLang>(DEFAULT_UI_LANG);
-  const [contentFilter, setContentFilterState] = React.useState<ContentLangFilter>(
-    DEFAULT_CONTENT_LANG_FILTER,
-  );
+  // Read the persisted language synchronously during init (not in an effect)
+  // so the first paint already uses the user's language. The previous
+  // effect-based hydration always first-painted English, then swapped the
+  // entire UI to Arabic a frame later — a full-text flash plus an LTR→RTL
+  // layout mirror on every load for Arabic users.
+  const [lang, setLangState] = React.useState<UiLang>(() => {
+    try {
+      return loadUiLang();
+    } catch {
+      return DEFAULT_UI_LANG;
+    }
+  });
+  const [contentFilter, setContentFilterState] = React.useState<ContentLangFilter>(() => {
+    try {
+      return loadContentLangFilter();
+    } catch {
+      return DEFAULT_CONTENT_LANG_FILTER;
+    }
+  });
   // Whether the osler.config has been loaded — used to force a re-render of
   // any consumer that reads site name / tagline via t("app.name") etc.
   const [, setConfigVersion] = React.useState(0);
-
-  // Hydrate from localStorage on mount.
-  React.useEffect(() => {
-    setLangState(loadUiLang());
-    setContentFilterState(loadContentLangFilter());
-  }, []);
 
   // Load osler.config.json on mount so the brand mark / tagline reflect the
   // user's customisation. We bump a version counter to force consumers to

@@ -203,20 +203,56 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
 
 export function OslerThemeProvider({ children }: { children: React.ReactNode }) {
   // Applied theme id. Lazy-init to match THEME_INIT_SCRIPT so first paint
-  // agrees with the pre-paint class (explicit dark/light, else the OS).
+  // agrees with the pre-paint class (explicit dark/light, else the OS). A
+  // stored custom id is validated against the synchronously cached config
+  // (localStorage mirror of the last boot) so custom-theme users first-paint
+  // on their palette instead of flashing the built-in dark theme until the
+  // async config fetch resolves.
   const [theme, setThemeState] = React.useState<string>(() => {
     const stored = readStoredThemeChoice();
     if (stored === "dark" || stored === "light") return stored;
-    if (stored && stored !== SYSTEM_THEME_CHOICE) return "dark";
+    if (stored && stored !== SYSTEM_THEME_CHOICE) {
+      try {
+        if (getCustomThemes().some((t) => t.id === stored)) return stored;
+        const def = getDefaultTheme();
+        if (def) return def;
+      } catch {
+        // ignore — fall through to dark
+      }
+      return "dark";
+    }
     return systemTheme();
   });
   // Stored choice: a theme id, or "system" while following the OS. Null
   // until the config load resolves it (treated as following).
   const [themeChoice, setThemeChoice] = React.useState<string>(() => readStoredThemeChoice() ?? SYSTEM_THEME_CHOICE);
-  const [customThemes, setCustomThemes] = React.useState<CustomThemeConfig[]>([]);
+  // Seed from the synchronous config cache so isDark / availableThemes agree
+  // with the applied class before the async load resolves.
+  const [customThemes, setCustomThemes] = React.useState<CustomThemeConfig[]>(() => {
+    try {
+      return getCustomThemes();
+    } catch {
+      return [];
+    }
+  });
   // Mirror of customThemes for the matchMedia listener (avoids re-binding).
   const customThemesRef = React.useRef<CustomThemeConfig[]>([]);
   customThemesRef.current = customThemes;
+
+  // Apply the cached custom palette before first paint (layout effect runs
+  // synchronously after DOM insert, ahead of the browser's paint), so the
+  // async loadConfig() below never flashes a wrong theme on repeat visits.
+  React.useLayoutEffect(() => {
+    try {
+      const syncCustom = getCustomThemes();
+      if (syncCustom.length > 0) {
+        injectCustomThemeStyles(syncCustom);
+        applyThemeClass(theme, syncCustom);
+      }
+    } catch {
+      // ignore — the async config load recovers below
+    }
+  }, []);
 
   React.useEffect(() => {
     // 1. Read the user's persisted choice (if any).

@@ -58,8 +58,6 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import {
-  withViewTransition,
-  isViewTransitionsSupported,
   haptic,
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
@@ -179,11 +177,6 @@ export function AppShell({ children }: AppShellProps) {
   // without a hard refresh (see lib/osler/content-version.ts).
   React.useEffect(() => {
     startContentVersionSync();
-  }, []);
-
-  const [vtActive, setVtActive] = React.useState(false);
-  React.useEffect(() => {
-    setVtActive(isViewTransitionsSupported());
   }, []);
 
   // Warm the router cache and precache full site static files once the shell is idle.
@@ -441,13 +434,15 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Main content — viewport container for views.
           Individual views control their own single scroll container (.osler-page).
-          A single motion.div stays mounted across the vtActive flip so the view
-          is never remounted (which reset all state and caused a flash). When the
-          browser supports the View Transitions API the framer enter fade is
-          disabled (initial=false) — the VT snapshot already crossfades old→new,
-          and stacking a second opacity-0 fade on top reads as content
-          vanishing for a beat. Without VT support, the subtle framer fade is
-          the only transition. */}
+          The container is a static div with NO key and NO enter animation:
+          cross-view motion comes solely from the View Transitions API slide
+          (see globals.css + navigate()). The previous keyed motion.div remounted
+          the whole view subtree on every tab switch and started it at
+          opacity 0 — on browsers without VT (or while a transition was
+          in flight, or under reduced motion) every navigation blanked the
+          page for ~200ms, and with VT active the extra fade stacked on top
+          of the VT crossfade as a visible flicker. Without VT the swap is
+          instant, which reads as faster than a fade-from-blank. */}
       <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col safe-pt">
         {/* Mobile scroll-away top bar — a slim bar with the centered site name
             + search icon that hides when the user scrolls down and reappears
@@ -465,15 +460,9 @@ export function AppShell({ children }: AppShellProps) {
           onSignOut={logout}
         />
         <LightboxProvider>
-          <motion.div
-            key={view}
-            initial={vtActive ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={MOTION_TRANSITION.quick}
-            className="h-full w-full flex-1 flex flex-col min-h-0"
-          >
+          <div className="h-full w-full flex-1 flex flex-col min-h-0">
             {children}
-          </motion.div>
+          </div>
         </LightboxProvider>
         {/* Custom right-click menu for the content region (export PDF /
             share / copy link). Inputs and editors keep the native menu. */}

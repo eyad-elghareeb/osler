@@ -37,12 +37,12 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { readCloudSession, clearCloudSession } from "@/lib/osler/cloud";
-import { haptic, pushWithViewTransition, isViewTransitionsSupported } from "@/lib/osler/native";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
 import { LoginScreen } from "@/components/osler/login-screen";
 import { AdminProvider } from "@/components/osler/admin/admin-context";
-import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
+import { MOTION_SPRING } from "@/lib/osler/motion";
 import {
   AdminSettingsProvider,
   useAdminSettings,
@@ -86,14 +86,6 @@ function AdminShellInner({ children }: AdminShellProps) {
   const [pendingCount, setPendingCount] = React.useState(0);
   const [openTicketCount, setOpenTicketCount] = React.useState(0);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
-
-  // When the browser can run View Transitions, the keyed page container
-  // skips its framer fade (the VT crossfade handles it) — same contract as
-  // the main AppShell.
-  const [vtActive, setVtActive] = React.useState(false);
-  React.useEffect(() => {
-    setVtActive(isViewTransitionsSupported());
-  }, []);
 
   // Load (or reload) the admin identity from the saved cloud session. Sets
   // the identity whenever /v1/admin/me succeeds — even for roles without
@@ -298,8 +290,11 @@ function AdminShellInner({ children }: AdminShellProps) {
         rtl && "rtl",
       )}
     >
-      {/* Top bar — mirrors main site AppShell header style */}
-      <header className="z-40 shrink-0 h-14 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 safe-pt">
+      {/* Top bar — opaque like the main AppShell header. The previous
+          translucent + backdrop-blur recipe forced a full-screen blur pass
+          on every scroll frame (the dominant GPU cost on budget hardware),
+          which read as scroll jank across admin pages. */}
+      <header className="z-40 shrink-0 h-14 border-b border-border bg-background safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Sidebar toggle — desktop: collapse/expand; mobile: open slide-in sheet */}
           <Button
@@ -479,23 +474,17 @@ function AdminShellInner({ children }: AdminShellProps) {
           </SheetContent>
         </Sheet>
 
-        {/* Main content — keyed by pathname so each admin page mounts fresh.
-            Enter-only fade (no exit): AnimatePresence mode="wait" faded the
-            outgoing page out completely before mounting the incoming one,
-            which blanked the viewport between every sidebar navigation. The
-            swap is instant; a short fade-in on the new page is the only
-            animation. Sidebar links run through pushWithViewTransition, which
-            crossfades old→new via the View Transitions API when supported. */}
+        {/* Main content — a static container with NO key and NO enter fade.
+            The previous key={pathname} motion.div remounted the whole subtree
+            (including AdminProvider) on every sidebar navigation and started
+            it at opacity 0, blanking the viewport between pages where VT was
+            unavailable. Each admin page already renders its own skeleton /
+            loading state while its data fetches, so the swap is instant and
+            the identity provider stays mounted across navigations. */}
         <main className="flex-1 min-h-0 overflow-y-auto osler-scroll-y">
-          <motion.div
-            key={pathname}
-            initial={vtActive ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={MOTION_TRANSITION.quick}
-            className="h-full"
-          >
-            <AdminProvider identity={identity}>{children}</AdminProvider>
-          </motion.div>
+          <AdminProvider identity={identity}>
+            <div className="h-full">{children}</div>
+          </AdminProvider>
         </main>
       </div>
     </div>
@@ -610,7 +599,6 @@ function SidebarLink({
 }) {
   const { t } = useI18n();
   const router = useRouter();
-  const { settings } = useAdminSettings();
   const Icon = item.icon;
   const label = t(item.labelKey as any);
   return (
@@ -623,14 +611,12 @@ function SidebarLink({
         e.preventDefault();
         haptic("selection");
         onNavigate?.();
-        // The admin reduced-motion setting forces near-zero CSS transitions
-        // via .admin-reduced-motion, which can't reach ::view-transition
-        // pseudo-elements — skip the snapshot roundtrip entirely there.
-        if (settings.reducedMotion) {
-          router.push(item.href);
-          return;
-        }
-        pushWithViewTransition((p) => router.push(p), item.href);
+        // Plain push (no View Transition fade): each admin page renders its
+        // own skeleton while its Worker data fetches, and crossfading two
+        // different layouts ghosted visibly. The sidebar's shared-layout
+        // active tint still slides, so the navigation reads as responsive
+        // without a full-page snapshot roundtrip on every click.
+        router.push(item.href);
       }}
       title={collapsed ? label : undefined}
       className={cn(
