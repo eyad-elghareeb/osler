@@ -1304,7 +1304,7 @@ export function QuizView({
         <button
           onClick={() => { haptic("selection"); onNavMobileChange(!navOpenMobile); }}
           data-walkthrough="qbank-nav-mobile"
-          className={`md:hidden size-8 rounded-lg flex items-center justify-center me-1 shrink-0 transition-colors ${
+          className={`lg:hidden size-8 rounded-lg flex items-center justify-center me-1 shrink-0 transition-colors ${
             navOpenMobile
               ? "bg-primary-foreground/30 ring-1 ring-inset ring-primary-foreground/40"
               : "bg-primary-foreground/15 hover:bg-primary-foreground/25"
@@ -1428,8 +1428,11 @@ export function QuizView({
           readonly={readonly}
         />
 
-        {/* Simple question navigator (left strip) */}
-        <div className="hidden md:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar" data-walkthrough="qbank-nav-strip">
+        {/* Simple question navigator (left strip) — desktop pointers only.
+            Tablets use the bottom-sheet navigator like phones (see above):
+            the 40px strip buttons are finger-hostile and the sheet gives the
+            whole palette to the fingers. */}
+        <div className="hidden lg:flex flex-col w-12 shrink-0 border-r border-border bg-sidebar" data-walkthrough="qbank-nav-strip">
           <div className="flex-1 overflow-y-auto osler-scroll p-1 space-y-0.5">
             {session.questions.map((_, i) => {
               const ans = session.answers[i];
@@ -1487,9 +1490,13 @@ export function QuizView({
             )}
           </AnimatePresence>
 
-          {/* Mobile tab switcher — shown only on phones in split mode after submit */}
+          {/* Mobile tab switcher — phones AND tablets in split mode after
+              submit. The split layout already runs the swipe carousel on
+              tablets (mobileTabsActive covers the whole <lg band); without
+              these tabs iPad users had swipe as the only way to reach the
+              explanation. */}
           {submitted && isSplitMode && (
-            <div className="md:hidden flex border-b border-border bg-muted/30">
+            <div className="lg:hidden flex border-b border-border bg-muted/30">
               <button
                 onClick={() => setMobileTutorTab("question")}
                 className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
@@ -1680,8 +1687,9 @@ export function QuizView({
             )}
           </div>
 
-          {/* Bottom action bar — desktop */}
-          <footer className="hidden sm:flex border-t border-border bg-card px-4 sm:px-6 py-2.5 items-center gap-2 shrink-0">
+          {/* Bottom action bar — desktop pointers only (tablets get the
+              compact touch bar below: 40px targets + tools sheet). */}
+          <footer className="hidden lg:flex border-t border-border bg-card px-4 sm:px-6 py-2.5 items-center gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={goPrev} disabled={session.current === 0} className="h-9 rounded-lg">
               <ChevronLeft className="size-4 me-1" /> {t("common.previous")}
             </Button>
@@ -1785,10 +1793,11 @@ export function QuizView({
             </Button>
           </footer>
 
-          {/* Bottom action bar — mobile (compact).
+          {/* Bottom action bar — touch (phones + tablets, full tool parity
+              via the tools sheet).
               Extra bottom padding (pb-[env+0.5rem]) ensures the action buttons
               clear the iOS home indicator with breathing room. */}
-          <footer className="sm:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 osler-tap-none">
+          <footer className="lg:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 osler-tap-none">
             <Button
               variant="outline" size="icon"
               onClick={goPrev} disabled={session.current === 0}
