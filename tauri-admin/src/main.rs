@@ -86,6 +86,7 @@ fn main() {
             setup::setup_generate_secret,
             setup::setup_write_secrets,
             setup::setup_promote_admin,
+            setup::setup_apply_d1_migrations,
             setup::setup_check_health,
             setup::deploy_email_worker,
             // Instance updater & patches
@@ -107,7 +108,8 @@ fn main() {
             #[cfg(debug_assertions)]
             {
                 use tauri_plugin_dialog::DialogExt;
-                _app.dialog().message("Osler Admin ready. Pick a project root to begin.");
+                _app.dialog()
+                    .message("Osler Admin ready. Pick a project root to begin.");
             }
             Ok(())
         })

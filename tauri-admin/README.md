@@ -59,8 +59,19 @@ The **Instance Generator** view walks through the same steps as [SELF-HOSTING.md
 1. **Prerequisites** — Node.js, Git, Wrangler, Cloudflare login (1-click installers for missing tools).
 2. **Site identity & engines** — name, tagline, GitHub repo, engine plugins, theme, language, sample content.
 3. **Cloudflare stack** — Worker/Pages/D1/R2 names, frontend origin, and optional Google Sign-In credentials (Client ID + Secret; the exact redirect URI is confirmed after deploy).
-4. **Automated deploy** — scaffolds the instance, then runs the full Cloudflare pipeline (`scripts/cloudflare-init.js`): creates D1 + R2, patches `wrangler.toml` (origin, worker URL), applies migrations, generates + writes `JWT_SECRET`, deploys the Worker and Pages, and wires `cloud.apiUrl` into the generated `osler.config.json`.
-5. **Finish setup** — backend health check, Google Sign-In secrets (if not collected in step 3, with the exact Authorized redirect URI to register in Google Cloud Console), and first-admin promotion (register in the app, then enter the username here — admin is never granted at registration).
+4. **Automated deploy** — scaffolds the complete runnable instance, creates D1 + R2, preserves the canonical Worker bindings (including realtime Durable Object and cron), applies migrations to the selected D1 database, generates + writes `JWT_SECRET`, deploys the Worker twice so its callback URL is live, records the discovered Worker URL in `osler.config.json`, then builds and deploys Pages.
+5. **Finish setup** — the wizard only unlocks this step after a successful deployment and a saved Worker URL. Verify backend health, register the exact Google callback URI in Google Cloud Console before saving both OAuth credentials, then register and promote the first admin account.
+
+## Maintaining an existing instance
+
+After selecting an instance directory, use **Cloud services** in the sidebar for a guided maintenance checklist:
+
+1. **Verify Worker health** using the URL stored in `osler.config.json`.
+2. **Configure or rotate Google Sign-In** credentials. The app shows the exact callback URI and writes credentials directly to Worker secrets; they are never persisted locally.
+3. **Apply D1 migrations** after an Osler update. Use the D1 name recorded during instance creation (the UI pre-fills it).
+4. **Deploy or rotate the Gmail relay** with a Gmail address, app password, sender name, and the public Pages/custom-domain origin. The manager installs relay dependencies, deploys it, writes the shared secrets, wires the same-account service binding, redeploys the main Worker, and applies the email-log migration.
+
+Use **Instance updater** to compare an instance with the upstream source. It preserves branding, content, secrets, deployed resource configuration, and Git history while also bringing in email-relay source updates. After an update, apply any pending D1 migrations in **Cloud services**, then deploy the Worker and Pages from **Run & Publish**.
 
 ## Commands (Rust → frontend)
 

@@ -268,6 +268,7 @@
     { route: "instance", icon: "M13 10V3L4 14h7v7l9-11h-7z", labelKey: "nav.instanceGenerator" },
     { route: "instance-updater", icon: "M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9", labelKey: "nav.instanceUpdater" },
     { route: "configure", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", labelKey: "nav.configure" },
+    { route: "cloud-services", icon: "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4", labelKey: "nav.cloudServices" },
     { route: "run-publish", icon: "M3.5 13.5 12 5l8.5 8.5 M5 12v8h14v-8 M12 5v15", labelKey: "nav.runPublish" },
     { route: "prereq", icon: "M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", labelKey: "nav.prereqs" },
   ];
@@ -449,6 +450,7 @@
     register("instance-updater", window.OslerAdminViews.instanceUpdater);
     register("prereq", window.OslerAdminViews.prereq);
     register("configure", window.OslerAdminViews.configure);
+    register("cloud-services", window.OslerAdminViews.cloudServices);
     register("run-publish", window.OslerAdminViews.runPublish);
     register("start", window.OslerAdminViews.start);
     register("git", window.OslerAdminViews.git);

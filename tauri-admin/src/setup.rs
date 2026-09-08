@@ -26,6 +26,14 @@ fn worker_dir(root: &Path) -> PathBuf {
     root.join("cloudflare").join("worker")
 }
 
+fn valid_resource_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 63
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+}
+
 /// Generic platform command — npm/npx are .cmd shims on Windows, so those go
 /// through cmd /C there (same convention as deploy.rs).
 fn platform_command(program: &str, args: &[&str], cwd: &Path) -> Command {
@@ -58,11 +66,13 @@ fn run_captured(
     stdin_data: Option<&str>,
     secs: u64,
 ) -> Result<(i32, String), String> {
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(if stdin_data.is_some() {
-        Stdio::piped()
-    } else {
-        Stdio::null()
-    });
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(if stdin_data.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        });
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn: {}", e))?;
     if let (Some(mut sin), Some(data)) = (child.stdin.take(), stdin_data) {
         let _ = sin.write_all(data.as_bytes());
@@ -195,12 +205,20 @@ pub async fn setup_promote_admin(
         return Err(format!("Worker directory not found: {}", dir.display()));
     }
     let user = username.trim().to_string();
-    if user.is_empty() || user.len() > 32 || user.contains('\'') || user.contains(';') || user.contains("--") {
+    if user.is_empty()
+        || user.len() > 32
+        || user.contains('\'')
+        || user.contains(';')
+        || user.contains("--")
+    {
         return Err("Invalid username".to_string());
     }
     let db = d1_name.unwrap_or_else(|| "osler-cloud".to_string());
+    if !valid_resource_name(&db) {
+        return Err("Invalid D1 database name".to_string());
+    }
     let sql = format!(
-        "UPDATE users SET role = 'admin' WHERE username = '{}' COLLATE NOCASE;",
+        "UPDATE users SET role = 'admin' WHERE username = '{}' COLLATE NOCASE RETURNING username;",
         user.replace('\'', "''")
     );
     tauri::async_runtime::spawn_blocking(move || {
@@ -218,7 +236,60 @@ pub async fn setup_promote_admin(
                 out.lines().last().unwrap_or("unknown error")
             ));
         }
+        if !out.to_ascii_lowercase().contains(&user.to_ascii_lowercase()) {
+            return Err(format!(
+                "No registered user named '{}' was found. Register that username in the instance, then try again.",
+                user
+            ));
+        }
         Ok(json!({ "promoted": true, "username": user }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Apply all pending main D1 migrations for an existing instance.
+#[tauri::command]
+pub async fn setup_apply_d1_migrations(
+    target_dir: Option<String>,
+    d1_name: String,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    if !valid_resource_name(&d1_name) {
+        return Err("Invalid D1 database name".to_string());
+    }
+    let root = if let Some(td) = target_dir {
+        PathBuf::from(td)
+    } else {
+        root_or_err_pub(&state)?
+    };
+    let dir = worker_dir(&root);
+    if !dir.is_dir() {
+        return Err(format!("Worker directory not found: {}", dir.display()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let (code, out) = run_captured(
+            npx_command(
+                &[
+                    "wrangler",
+                    "d1",
+                    "migrations",
+                    "apply",
+                    &d1_name,
+                    "--remote",
+                ],
+                &dir,
+            ),
+            None,
+            180,
+        )?;
+        if code != 0 {
+            return Err(format!(
+                "Failed to apply D1 migrations: {}",
+                last_line(&out)
+            ));
+        }
+        Ok(json!({ "applied": true, "database": d1_name }))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -416,7 +487,12 @@ pub async fn deploy_email_worker(
 }
 
 fn last_line(out: &str) -> String {
-    out.lines().rev().map(str::trim).find(|l| !l.is_empty()).unwrap_or("unknown error").to_string()
+    out.lines()
+        .rev()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("unknown error")
+        .to_string()
 }
 
 /// GET the relay's /health endpoint and return its reported sender address.

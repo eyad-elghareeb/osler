@@ -27,10 +27,11 @@
   const THEME_PRESETS = [
     { id: "dark", name: "Dark" },
     { id: "light", name: "Light" },
-    { id: "navy-clinic", name: "Navy Clinic" },
     { id: "forest-rounds", name: "Forest Rounds" },
-    { id: "cream-journal", name: "Cream Journal" },
     { id: "crimson-ed", name: "Crimson ED" },
+    { id: "midnight", name: "Midnight" },
+    { id: "slate", name: "Slate" },
+    { id: "warm-sand", name: "Warm Sand" },
   ];
 
   window.OslerAdminViews = window.OslerAdminViews || {};
@@ -81,6 +82,7 @@
       prereqReport: null,
       deployLogs: [],
       deployRunning: false,
+      provisioning: "idle",
       result: null,
       // Which optional step-3 sections the user expanded. Defaults keep
       // Google / email / advanced settings hidden so non-technical owners
@@ -351,10 +353,10 @@
 
       // Site Identity Grid
       const idGrid = el("div", { class: "grid grid-2", style: { marginBottom: "1rem" } });
-      function field(label, val, set, ph) {
+      function field(label, val, set, ph, type = "text") {
         const c = el("div", {});
         c.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, label));
-        const inp = el("input", { type: "text", class: "input", value: val, placeholder: ph || "" });
+        const inp = el("input", { type, class: "input", value: val, placeholder: ph || "" });
         inp.addEventListener("input", () => set(inp.value));
         c.appendChild(inp);
         return c;
@@ -504,10 +506,10 @@
 
         card.appendChild(el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.75rem" } }, t("instance.cloud.namesAuto")));
         const cloudGrid = el("div", { class: "grid grid-2", style: { marginBottom: "1.25rem" } });
-        function field(label, val, set, ph) {
+        function field(label, val, set, ph, type = "text") {
           const c = el("div", {});
           c.appendChild(el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "0.25rem" } }, label));
-          const inp = el("input", { type: "text", class: "input", value: val, placeholder: ph || "" });
+          const inp = el("input", { type, class: "input", value: val, placeholder: ph || "" });
           inp.addEventListener("input", () => set(inp.value));
           c.appendChild(inp);
           return c;
@@ -567,7 +569,7 @@
           );
           const googleGrid = el("div", { class: "grid grid-2" });
           googleGrid.appendChild(field(t("instance.google.clientId"), state.cloud.googleClientId, (v) => state.cloud.googleClientId = v, "1234567890-abc.apps.googleusercontent.com"));
-          googleGrid.appendChild(field(t("instance.google.clientSecret"), state.cloud.googleClientSecret, (v) => state.cloud.googleClientSecret = v, "GOCSPX-…"));
+          googleGrid.appendChild(field(t("instance.google.clientSecret"), state.cloud.googleClientSecret, (v) => state.cloud.googleClientSecret = v, "GOCSPX-…", "password"));
           googleCard.appendChild(googleGrid);
           googleCard.appendChild(
             el("div", { style: { fontSize: "0.6875rem", color: "var(--text-muted)", marginTop: "0.5rem" } }, t("instance.google.postDeployNote"))
@@ -609,7 +611,7 @@
           if (state.email.provider === "gmail") {
             const eGrid = el("div", { class: "grid grid-2" });
             eGrid.appendChild(field(t("instance.email.gmailAddress"), state.email.gmailUser, (v) => state.email.gmailUser = v, "you@gmail.com"));
-            eGrid.appendChild(field(t("instance.email.appPassword"), state.email.gmailAppPassword, (v) => state.email.gmailAppPassword = v, "abcd efgh ijkl mnop"));
+            eGrid.appendChild(field(t("instance.email.appPassword"), state.email.gmailAppPassword, (v) => state.email.gmailAppPassword = v, "abcd efgh ijkl mnop", "password"));
             const eName = el("div", { style: { marginTop: "0.75rem" } });
             eName.appendChild(field(t("instance.email.fromName"), state.email.fromName, (v) => state.email.fromName = v, t("instance.email.fromNamePh")));
             eGrid.appendChild(eName);
@@ -628,6 +630,13 @@
       prevBtn.addEventListener("click", () => { state.step = 2; renderStepBar(); renderCurrentStep(); });
       const nextBtn = el("button", { class: "btn btn-primary" }, state.cloud.enabled ? t("instance.deployBtn") : t("instance.generate"), svgIcon("M13 10V3L4 14h7v7l9-11h-7z", 14));
       nextBtn.addEventListener("click", () => {
+        if (state.cloud.enabled && !(state.prereqReport?.items || []).every((item) => item.satisfied)) {
+          toast(t("instance.prereqs.warnMissing"), "error");
+          state.step = 1;
+          renderStepBar();
+          renderCurrentStep();
+          return;
+        }
         state.step = 4;
         renderStepBar();
         renderCurrentStep();
@@ -667,7 +676,14 @@
       card.appendChild(term);
 
       const navRow = el("div", { id: "deploy-nav-row", style: { display: "flex", justifyContent: "flex-end", gap: "0.5rem" } });
-      const finishBtn = el("button", { class: "btn btn-primary", id: "pipeline-finish-btn", disabled: true }, t("instance.viewActions"), svgIcon("M9 5l7 7-7 7", 14));
+      if (state.provisioning === "failed") {
+        const retryBtn = el("button", { class: "btn" }, t("instance.retryDeploy"));
+        retryBtn.addEventListener("click", () => startDeployPipeline());
+        const editBtn = el("button", { class: "btn btn-ghost" }, t("instance.editSetup"));
+        editBtn.addEventListener("click", () => { state.step = 3; renderStepBar(); renderCurrentStep(); });
+        navRow.append(retryBtn, editBtn);
+      }
+      const finishBtn = el("button", { class: "btn btn-primary", id: "pipeline-finish-btn", disabled: state.provisioning !== "succeeded" && !(!state.cloud.enabled && state.provisioning === "idle") }, t("instance.viewActions"), svgIcon("M9 5l7 7-7 7", 14));
       finishBtn.addEventListener("click", () => {
         state.step = 5;
         renderStepBar();
@@ -680,6 +696,7 @@
     }
 
     async function startDeployPipeline() {
+      state.provisioning = "running";
       const term = document.getElementById("pipeline-terminal");
       const pipeBox = document.getElementById("pipeline-status-box");
       const finishBtn = document.getElementById("pipeline-finish-btn");
@@ -707,9 +724,9 @@
           cloud: state.cloud.enabled ? state.cloud : null,
         };
 
-        const res = await invoke("generate_instance", { opts: genOpts });
+        const res = state.result || await invoke("generate_instance", { opts: genOpts });
         state.result = res;
-        addLog(`✓ Scaffolded ${res.files?.length || 0} files in ${state.targetDir}`, "#3fb950");
+        if (!state.result?.reused) addLog(`✓ Scaffolded ${res.files?.length || 0} files in ${state.targetDir}`, "#3fb950");
 
         if (state.cloud.enabled) {
           addLog("☁️ [2/3] Initializing Cloudflare D1, R2, Worker and Pages deploy…", "#58a6ff");
@@ -726,13 +743,15 @@
           // Poll deploy logs
           pollDeployStatus(addLog, finishBtn);
         } else {
+          state.provisioning = "succeeded";
           addLog("✓ [3/3] Local instance ready!", "#3fb950");
           if (finishBtn) finishBtn.disabled = false;
         }
       } catch (err) {
+        state.provisioning = "failed";
         addLog(`✗ Generation error: ${String(err)}`, "#f85149");
         toast(t("toast.error", { msg: String(err) }), "error");
-        if (finishBtn) finishBtn.disabled = false;
+        renderCurrentStep();
       }
     }
 
@@ -753,17 +772,30 @@
           if (!st.running) {
             clearInterval(timer);
             if (st.success) {
+              try {
+                await invoke("set_project_root", { root: state.targetDir });
+                const config = await invoke("read_config");
+                state.cloud.workerUrl = config?.cloud?.apiUrl || "";
+                if (!state.cloud.workerUrl) throw new Error(t("instance.workerUrlMissing"));
+              } catch (e) {
+                state.provisioning = "failed";
+                addLog(`✗ ${String(e)}`, "#f85149");
+                toast(t("toast.error", { msg: String(e) }), "error");
+                renderCurrentStep();
+                return;
+              }
+              state.provisioning = "succeeded";
               addLog("🎉 Cloudflare Full Stack Deployment Complete!", "#3fb950");
               toast(t("instance.deployComplete"), "success");
               // Post-deploy setup: the Worker is live, so optional secrets
               // collected in step 3 (Google OAuth) can be written now.
               try {
-                if (state.cloud.enabled && state.cloud.googleClientSecret) {
+                if (state.cloud.enabled && state.cloud.googleClientId.trim() && state.cloud.googleClientSecret.trim()) {
                   addLog("🔐 Writing Google OAuth secrets…", "#58a6ff");
                   await invoke("setup_write_secrets", {
                     targetDir: state.targetDir,
                     secrets: [
-                      { name: "GOOGLE_CLIENT_ID", value: state.cloud.googleClientId || "" },
+                      { name: "GOOGLE_CLIENT_ID", value: state.cloud.googleClientId },
                       { name: "GOOGLE_CLIENT_SECRET", value: state.cloud.googleClientSecret },
                     ],
                   });
@@ -781,7 +813,7 @@
                 } else {
                   try {
                     addLog("📧 Deploying the Gmail relay worker (email-worker)...", "#58a6ff");
-                    const appOrigin = "https://" + (state.cloud.projectName || "osler") + ".pages.dev";
+                    const appOrigin = state.cloud.allowedOrigin;
                     const res = await invoke("deploy_email_worker", {
                       targetDir: state.targetDir,
                       setup: {
@@ -801,8 +833,12 @@
                   }
                 }
               }
-            } else if (st.error) {
-              addLog(`⚠️ Deploy notice: ${st.error}`, "#d29922");
+            } else {
+              state.provisioning = "failed";
+              addLog(`✗ ${t("instance.deployFailed")}: ${st.error || t("instance.deployUnknownFailure")}`, "#f85149");
+              toast(t("instance.deployFailed"), "error");
+              renderCurrentStep();
+              return;
             }
             if (finishBtn) finishBtn.disabled = false;
           }

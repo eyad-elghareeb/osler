@@ -83,6 +83,13 @@ fn is_core_update_path(rel: &str) -> bool {
         || r.starts_with("scripts/")
         || r.starts_with("cloudflare/worker/src/")
         || r.starts_with("cloudflare/worker/migrations/")
+        || r.starts_with("cloudflare/email-worker/src/")
+        || matches!(
+            r,
+            "cloudflare/email-worker/package.json"
+                | "cloudflare/email-worker/package-lock.json"
+                | "cloudflare/email-worker/tsconfig.json"
+        )
     {
         return true;
     }
@@ -148,8 +155,9 @@ fn check_instance_update_sync(target_root: PathBuf) -> Result<UpdateCheckReport,
         return Err("Target path is not a valid directory".into());
     }
 
-    let source_root = resolve_source_root()
-        .ok_or_else(|| "Could not locate main Osler source directory to pull updates from".to_string())?;
+    let source_root = resolve_source_root().ok_or_else(|| {
+        "Could not locate main Osler source directory to pull updates from".to_string()
+    })?;
 
     let mut files = Vec::new();
     let mut changed_count = 0;
@@ -235,15 +243,18 @@ fn apply_instance_patch_sync(target_root: PathBuf) -> Result<Value, String> {
         return Err("Target path is not a valid directory".into());
     }
 
-    let source_root = resolve_source_root()
-        .ok_or_else(|| "Could not locate main Osler source directory to pull updates from".to_string())?;
+    let source_root = resolve_source_root().ok_or_else(|| {
+        "Could not locate main Osler source directory to pull updates from".to_string()
+    })?;
 
     // 1. Create a safety backup in `<target_root>/.osler-backup/backup-<timestamp>`
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let backup_dir = target_root.join(".osler-backup").join(format!("backup-{}", now));
+    let backup_dir = target_root
+        .join(".osler-backup")
+        .join(format!("backup-{}", now));
     fs::create_dir_all(&backup_dir).map_err(|e| format!("Failed to create backup dir: {}", e))?;
 
     let mut backed_up_count = 0;
@@ -276,7 +287,8 @@ fn apply_instance_patch_sync(target_root: PathBuf) -> Result<Value, String> {
                 if let Some(parent) = tgt_file.parent() {
                     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
-                fs::copy(src_file, &tgt_file).map_err(|e| format!("Failed to copy {}: {}", rel_str, e))?;
+                fs::copy(src_file, &tgt_file)
+                    .map_err(|e| format!("Failed to copy {}: {}", rel_str, e))?;
                 updated_files.push(rel_str);
             }
         }
@@ -286,7 +298,10 @@ fn apply_instance_patch_sync(target_root: PathBuf) -> Result<Value, String> {
     let src_pkg_path = source_root.join("package.json");
     let tgt_pkg_path = target_root.join("package.json");
     if src_pkg_path.is_file() && tgt_pkg_path.is_file() {
-        if let (Ok(src_raw), Ok(tgt_raw)) = (fs::read_to_string(&src_pkg_path), fs::read_to_string(&tgt_pkg_path)) {
+        if let (Ok(src_raw), Ok(tgt_raw)) = (
+            fs::read_to_string(&src_pkg_path),
+            fs::read_to_string(&tgt_pkg_path),
+        ) {
             if let (Ok(src_val), Ok(mut tgt_val)) = (
                 serde_json::from_str::<Value>(&src_raw),
                 serde_json::from_str::<Value>(&tgt_raw),
@@ -330,9 +345,11 @@ pub async fn rollback_instance_patch(
     } else {
         crate::commands::root_or_err_pub(&state)?
     };
-    tauri::async_runtime::spawn_blocking(move || rollback_instance_patch_sync(backup_id, target_root))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        rollback_instance_patch_sync(backup_id, target_root)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn rollback_instance_patch_sync(backup_id: String, target_root: PathBuf) -> Result<Value, String> {

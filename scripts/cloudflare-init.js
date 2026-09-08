@@ -77,6 +77,16 @@ if (!args.origin) {
   console.error("Error: --origin is required (e.g. https://osler.pages.dev)");
   process.exit(1);
 }
+if (!/^https?:\/\/[^\s"']+$/i.test(args.origin)) {
+  console.error("Error: --origin must be a valid HTTP(S) origin without spaces or quotes.");
+  process.exit(1);
+}
+for (const [flag, value] of [["--project", args.project], ["--d1", args.d1], ["--r2", args.r2]]) {
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(value)) {
+    console.error(`Error: ${flag} must contain only letters, numbers, and hyphens.`);
+    process.exit(1);
+  }
+}
 
 // ── Small helpers ──────────────────────────────────────────────────────
 function run(cmd, { cwd = ROOT, input = null, allowFail = false, quiet = false } = {}) {
@@ -217,9 +227,9 @@ function patchVars(origin, workerUrl) {
 }
 
 // ── Migrations + deploy ────────────────────────────────────────────────
-function runMigrations() {
+function runMigrations(dbName) {
   step("Applying D1 migrations");
-  runFail("npm run db:migrate", { cwd: WORKER_DIR });
+  runFail(`npx wrangler d1 migrations apply ${dbName} --remote`, { cwd: WORKER_DIR });
 }
 
 function deployWorker() {
@@ -255,23 +265,19 @@ function deployPages(project) {
 // ── Frontend config wiring ─────────────────────────────────────────────
 function patchConfig(workerUrl, siteUrl) {
   step("Patching public/osler.config.json (cloud.apiUrl, site.url)");
-  patchFile(CONFIG_JSON, [[`"apiUrl": "http://localhost:8787"`, `"apiUrl": "${workerUrl}"`]]);
-  console.log(`  ✓ cloud.apiUrl = ${workerUrl}`);
-  // The canonical origin feeds `metadataBase` at build time — without it,
-  // og:image resolves against http://localhost:3000 and social link
-  // previews ship without an image.
-  if (siteUrl) {
-    if (readFile(CONFIG_JSON).includes(`"url": "${siteUrl}"`)) {
-      console.log(`  ✓ site.url already = ${siteUrl}`);
-    } else if (/"url"\s*:\s*""/.test(readFile(CONFIG_JSON))) {
-      patchFile(CONFIG_JSON, [[`"url": ""`, `"url": "${siteUrl}"`]]);
-      console.log(`  ✓ site.url = ${siteUrl}`);
-    } else {
-      const text = readFile(CONFIG_JSON);
-      writeFile(CONFIG_JSON, text.replace(`"site": {`, `"site": {\n    "url": "${siteUrl}",`));
-      console.log(`  ✓ site.url = ${siteUrl} (added)`);
-    }
+  let config;
+  try {
+    config = JSON.parse(readFile(CONFIG_JSON));
+  } catch (error) {
+    console.error(`  ✗ Could not parse ${CONFIG_JSON}: ${error.message}`);
+    process.exit(1);
   }
+  config.cloud = { ...(config.cloud || {}), enabled: true, apiUrl: workerUrl };
+  config.site = { ...(config.site || {}), url: siteUrl };
+  config.wizard = { ...(config.wizard || {}), completed: true, completedAt: new Date().toISOString() };
+  writeFile(CONFIG_JSON, JSON.stringify(config, null, 2) + "\n");
+  console.log(`  ✓ cloud.apiUrl = ${workerUrl}`);
+  console.log(`  ✓ site.url = ${siteUrl}`);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
@@ -292,18 +298,24 @@ async function main() {
 
   let workerUrl = args.workerUrl;  if (!args.skipWorker) {
     patchVars(args.origin, args.workerUrl);
-    runMigrations();
+    runMigrations(args.d1);
     const deployedUrl = deployWorker();
     workerUrl = args.workerUrl || deployedUrl;
-    if (!args.workerUrl) patchVars(args.origin, workerUrl);
+    if (!args.workerUrl) {
+      patchVars(args.origin, workerUrl);
+      // OAuth callbacks derive from WORKER_URL, so deploy the updated vars
+      // before writing secrets or presenting the Google setup step.
+      deployWorker();
+    }
   }
+
+  const siteUrl = `https://${args.project}.pages.dev`;
+  if (workerUrl) patchConfig(workerUrl, siteUrl);
 
   if (!args.skipPages) {
     if (!args.skipBuild) buildFrontend();
     deployPages(args.project);
   }
-
-  if (workerUrl) patchConfig(workerUrl, `https://${args.project}.pages.dev`);
 
   step("Deploy complete");
   console.log(`  Site:    https://${args.project}.pages.dev`);

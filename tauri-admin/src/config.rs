@@ -23,12 +23,7 @@ const CONFIG_REL: &str = "public/osler.config.json";
 /// without surprises. Kept inline (not read from disk) so the admin app
 /// doesn't need to ship a template file alongside the Rust binary.
 const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("../default-osler-config.json");
-const CLOUDFLARE_WORKER_SOURCE: &str = include_str!("../../cloudflare/worker/src/index.ts");
-const CLOUDFLARE_SCHEMA: &str = include_str!("../../cloudflare/worker/migrations/0001_schema.sql");
-const CLOUDFLARE_PACKAGE: &str = include_str!("../../cloudflare/worker/package.json");
-const CLOUDFLARE_DEV_VARS: &str = include_str!("../../cloudflare/worker/.dev.vars.example");
-const CLOUDFLARE_README: &str = include_str!("../../cloudflare/worker/README.md");
-const CLOUDFLARE_BACKEND_GUIDE: &str = include_str!("../../docs/cloudflare-backend.md");
+const CLOUDFLARE_WRANGLER: &str = include_str!("../../cloudflare/worker/wrangler.toml");
 
 /// Resolve the config file path inside the project root.
 fn config_path(root: &Path) -> PathBuf {
@@ -82,8 +77,8 @@ fn resolve_source_root() -> Option<PathBuf> {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   read_config / write_config
-   ═══════════════════════════════════════════════════════════════════════ */
+read_config / write_config
+═══════════════════════════════════════════════════════════════════════ */
 
 /// Read the project's `osler.config.json`. Returns the parsed JSON object.
 #[tauri::command]
@@ -134,8 +129,8 @@ pub async fn config_exists(state: State<'_, ProjectRoot>) -> Result<Value, Strin
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   generate_instance — scaffold a brand-new Osler project
-   ═══════════════════════════════════════════════════════════════════════ */
+generate_instance — scaffold a brand-new Osler project
+═══════════════════════════════════════════════════════════════════════ */
 
 /// Options passed to `generate_instance`. All fields are required; the
 /// frontend wizard collects them before calling this command.
@@ -161,6 +156,9 @@ pub struct InstanceCloudOptions {
     pub enabled: bool,
     pub worker_url: String,
     pub worker_name: String,
+    pub project_name: String,
+    pub d1_name: String,
+    pub r2_name: String,
     pub allowed_origin: String,
     pub turnstile_site_key: String,
 }
@@ -176,6 +174,9 @@ pub async fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
 }
 
 fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
+    let source_root = resolve_source_root().ok_or_else(|| {
+        "Could not locate the complete Osler instance template. Run the Instance Manager from an Osler source checkout.".to_string()
+    })?;
     let target = PathBuf::from(&opts.target_dir);
 
     // Validate the target directory.
@@ -189,7 +190,10 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
                 ));
             }
         } else {
-            return Err(format!("Target path is not a directory: {}", target.display()));
+            return Err(format!(
+                "Target path is not a directory: {}",
+                target.display()
+            ));
         }
     } else {
         fs::create_dir_all(&target).map_err(|e| e.to_string())?;
@@ -200,68 +204,89 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
 
     let cloud_enabled = opts.cloud.as_ref().is_some_and(|cloud| cloud.enabled);
 
-    // ── 1. Copy core framework code from source if available ───────────
-    if let Some(src_root) = resolve_source_root() {
-        // "cloudflare" is included so generated instances carry BOTH workers
-        // (main + email relay) and the cloudflare-init deploy pipeline works
-        // out of the box. Dependency folders are excluded from the walk.
-        for folder in ["src", "scripts", "cloudflare"] {
-            let src_folder = src_root.join(folder);
-            if src_folder.is_dir() {
-                for entry in WalkDir::new(&src_folder).into_iter().filter_map(|e| e.ok()) {
-                    let path = entry.path();
-                    // Skip dependency/build directories — copying node_modules
-                    // would balloon instances with tens of thousands of files.
-                    if path
-                        .components()
-                        .any(|c| matches!(c.as_os_str().to_string_lossy().as_ref(), "node_modules" | ".wrangler" | "target"))
-                    {
-                        continue;
-                    }
-                    if let Ok(rel) = path.strip_prefix(&src_root) {
-                        let rel_str = rel.to_string_lossy().replace('\\', "/");
-                        // Maintainer-only trees (notably `tauri-admin/`) never
-                        // ship in instances — see `is_generator_excluded`.
-                        if is_generator_excluded(&rel_str) {
-                            continue;
-                        }
-                        let tgt_file = target.join(rel);
-                        if entry.file_type().is_dir() {
-                            let _ = fs::create_dir_all(&tgt_file);
-                        } else if entry.file_type().is_file() {
-                            if let Some(parent) = tgt_file.parent() {
-                                let _ = fs::create_dir_all(parent);
-                            }
-                            if fs::copy(path, &tgt_file).is_ok() {
-                                created_files.push(rel_str);
-                            }
-                        }
-                    }
-                }
-            }
+    // ── 1. Copy the complete runnable framework template ──────────────
+    // `public/` is required for PWA assets, fonts, and static metadata. The
+    // instance-specific config and content tree are created below instead.
+    for folder in ["src", "scripts", "cloudflare", "public"] {
+        let src_folder = source_root.join(folder);
+        if !src_folder.is_dir() {
+            continue;
         }
-
-        // Copy root configuration files
-        for root_file in [
-            "package.json",
-            "tsconfig.json",
-            "next.config.ts",
-            "tailwind.config.ts",
-            "postcss.config.mjs",
-            "components.json",
-            "eslint.config.mjs",
-        ] {
-            let sf = src_root.join(root_file);
-            let tf = target.join(root_file);
-            if sf.is_file() && fs::copy(&sf, &tf).is_ok() {
-                created_files.push(root_file.into());
+        for entry in WalkDir::new(&src_folder).into_iter().filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.components().any(|c| {
+                matches!(
+                    c.as_os_str().to_string_lossy().as_ref(),
+                    "node_modules" | ".wrangler" | "target"
+                )
+            }) {
+                continue;
+            }
+            if let Ok(rel) = path.strip_prefix(&source_root) {
+                let rel_str = rel.to_string_lossy().replace('\\', "/");
+                if is_generator_excluded(&rel_str)
+                    || rel_str == "public/osler.config.json"
+                    || rel_str.starts_with("public/osler-content/")
+                {
+                    continue;
+                }
+                let target_path = target.join(rel);
+                if entry.file_type().is_dir() {
+                    fs::create_dir_all(&target_path).map_err(|e| e.to_string())?;
+                } else if entry.file_type().is_file() {
+                    if let Some(parent) = target_path.parent() {
+                        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    fs::copy(path, &target_path).map_err(|e| e.to_string())?;
+                    created_files.push(rel_str);
+                }
             }
         }
     }
 
+    for root_file in [
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "next.config.ts",
+        "tailwind.config.ts",
+        "postcss.config.mjs",
+        "components.json",
+        "eslint.config.mjs",
+    ] {
+        let sf = source_root.join(root_file);
+        let tf = target.join(root_file);
+        if sf.is_file() {
+            fs::copy(&sf, &tf).map_err(|e| e.to_string())?;
+            created_files.push(root_file.into());
+        }
+    }
+
+    if let Some(cloud) = opts.cloud.as_ref().filter(|cloud| cloud.enabled) {
+        let package_path = target.join("package.json");
+        let raw = fs::read_to_string(&package_path).map_err(|e| e.to_string())?;
+        let mut package: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        let scripts = package
+            .get_mut("scripts")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| "Instance template package.json has no scripts object".to_string())?;
+        scripts.insert(
+            "deploy:pages".into(),
+            json!(format!(
+                "npx wrangler pages deploy out --project-name {}",
+                cloud.project_name
+            )),
+        );
+        fs::write(
+            &package_path,
+            serde_json::to_string_pretty(&package).map_err(|e| e.to_string())? + "\n",
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
     // ── 2. Content structure ──────────────────────────────────────────
     let content_root = target.join("public/osler-content");
-    if !cloud_enabled || opts.include_sample_content {
+    {
         for sub in ["qbank", "flashcard", "osce", "library", "videos"] {
             let p = content_root.join(sub);
             fs::create_dir_all(&p).map_err(|e| e.to_string())?;
@@ -322,74 +347,51 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
 
     if let Some(cloud) = opts.cloud.as_ref().filter(|cloud| cloud.enabled) {
         if let Some(root) = cfg.as_object_mut() {
-            root.insert("cloud".into(), json!({
-                "enabled": true,
-                "apiUrl": cloud.worker_url.trim_end_matches('/'),
-                "turnstileSiteKey": cloud.turnstile_site_key,
-                "syncQbank": true,
-                "syncFlashcards": true,
-                "r2Storage": true,
-            }));
+            root.insert(
+                "cloud".into(),
+                json!({
+                    "enabled": true,
+                    "apiUrl": cloud.worker_url.trim_end_matches('/'),
+                    "turnstileSiteKey": cloud.turnstile_site_key,
+                    "syncQbank": true,
+                    "syncFlashcards": true,
+                    "syncContent": true,
+                    "resources": {
+                        "workerName": sanitize_worker_name(&cloud.worker_name, &opts.short_name),
+                        "pagesProject": cloud.project_name,
+                        "d1Name": cloud.d1_name,
+                        "r2Name": cloud.r2_name,
+                    },
+                }),
+            );
         }
     }
 
     if let Some(wizard) = cfg.get_mut("wizard").and_then(|v| v.as_object_mut()) {
-        wizard.insert("completed".into(), json!(true));
-        let now = chrono_now_iso();
-        wizard.insert("completedAt".into(), json!(now));
+        wizard.insert("completed".into(), json!(!cloud_enabled));
+        if !cloud_enabled {
+            wizard.insert("completedAt".into(), json!(chrono_now_iso()));
+        }
     }
 
     let cfg_path = target.join("public/osler.config.json");
     if let Some(parent) = cfg_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).unwrap())
-        .map_err(|e| e.to_string())?;
+    fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).unwrap()).map_err(|e| e.to_string())?;
     created_files.push("public/osler.config.json".into());
 
-    // ── 4. Optional Cloudflare Worker + D1 backend ─────────────────────
+    // ── 4. Optional Cloudflare Worker configuration ───────────────────
     if let Some(cloud) = opts.cloud.as_ref().filter(|cloud| cloud.enabled) {
-        let worker_root = target.join("cloudflare/worker");
-        let worker_src = worker_root.join("src");
-        let migration_dir = worker_root.join("migrations");
-        fs::create_dir_all(&worker_src).map_err(|e| e.to_string())?;
-        fs::create_dir_all(&migration_dir).map_err(|e| e.to_string())?;
-        created_dirs.extend([
-            "cloudflare".into(),
-            "cloudflare/worker".into(),
-            "cloudflare/worker/src".into(),
-            "cloudflare/worker/migrations".into(),
-        ]);
-
-        let mut worker_config = format!(
-            "name = \"{}\"\nmain = \"src/index.mjs\"\ncompatibility_date = \"2026-07-23\"\nworkers_dev = true\n\n[[d1_databases]]\nbinding = \"DB\"\ndatabase_name = \"{}\"\ndatabase_id = \"REPLACE_WITH_D1_DATABASE_ID\"\n\n[[r2_buckets]]\nbinding = \"CONTENT_BUCKET\"\nbucket_name = \"{}-content\"\n\n[vars]\nALLOWED_ORIGIN = \"{}\"\nTURNSTILE_ENABLED = \"false\"\n",
-            sanitize_worker_name(&cloud.worker_name, &opts.short_name),
-            sanitize_worker_name(&cloud.worker_name, &opts.short_name),
-            sanitize_worker_name(&cloud.worker_name, &opts.short_name),
-            cloud.allowed_origin.trim_end_matches('/').replace('"', ""),
+        let worker_config = configure_worker_toml(
+            CLOUDFLARE_WRANGLER,
+            &sanitize_worker_name(&cloud.worker_name, &opts.short_name),
+            &cloud.d1_name,
+            &cloud.r2_name,
+            &cloud.allowed_origin,
         );
-        if worker_config.contains("ALLOWED_ORIGIN = \"\"") {
-            worker_config = worker_config.replace("ALLOWED_ORIGIN = \"\"", "ALLOWED_ORIGIN = \"http://localhost:3000\"");
-        }
-        let files = [
-            (worker_src.join("index.mjs"), CLOUDFLARE_WORKER_SOURCE, "cloudflare/worker/src/index.mjs"),
-            (migration_dir.join("0001_schema.sql"), CLOUDFLARE_SCHEMA, "cloudflare/worker/migrations/0001_schema.sql"),
-            (worker_root.join("package.json"), CLOUDFLARE_PACKAGE, "cloudflare/worker/package.json"),
-            (worker_root.join(".dev.vars.example"), CLOUDFLARE_DEV_VARS, "cloudflare/worker/.dev.vars.example"),
-            (worker_root.join("README.md"), CLOUDFLARE_README, "cloudflare/worker/README.md"),
-        ];
-        for (path, contents, relative) in files {
-            fs::write(path, contents).map_err(|e| e.to_string())?;
-            created_files.push(relative.into());
-        }
-        fs::write(worker_root.join("wrangler.toml"), worker_config).map_err(|e| e.to_string())?;
-        created_files.push("cloudflare/worker/wrangler.toml".into());
-        let docs_dir = target.join("docs");
-        fs::create_dir_all(&docs_dir).map_err(|e| e.to_string())?;
-        fs::write(docs_dir.join("cloudflare-backend.md"), CLOUDFLARE_BACKEND_GUIDE)
-            .map_err(|e| e.to_string())?;
-        created_dirs.push("docs".into());
-        created_files.push("docs/cloudflare-backend.md".into());
+        let worker_toml = target.join("cloudflare/worker/wrangler.toml");
+        fs::write(worker_toml, worker_config).map_err(|e| e.to_string())?;
     }
 
     // ── 5. README.md & .gitignore ───────────────────────────────────
@@ -449,8 +451,11 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
             ]
         });
         let qm_path = content_root.join("qbank/manifest.json");
-        fs::write(&qm_path, serde_json::to_string_pretty(&qbank_manifest).unwrap())
-            .map_err(|e| e.to_string())?;
+        fs::write(
+            &qm_path,
+            serde_json::to_string_pretty(&qbank_manifest).unwrap(),
+        )
+        .map_err(|e| e.to_string())?;
     }
 
     Ok(json!({
@@ -462,12 +467,59 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
     }))
 }
 
+fn configure_worker_toml(
+    template: &str,
+    worker_name: &str,
+    d1_name: &str,
+    r2_name: &str,
+    origin: &str,
+) -> String {
+    let origin = origin.trim_end_matches('/').replace('"', "");
+    let origin = if origin.is_empty() {
+        "http://localhost:3000".to_string()
+    } else {
+        origin
+    };
+    let mut configured_d1 = false;
+    let mut configured_r2 = false;
+
+    template
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("name = ") {
+                format!("name = \"{worker_name}\"")
+            } else if trimmed.starts_with("database_name = ") && !configured_d1 {
+                configured_d1 = true;
+                format!("database_name = \"{d1_name}\"")
+            } else if trimmed.starts_with("bucket_name = ") && !configured_r2 {
+                configured_r2 = true;
+                format!("bucket_name = \"{r2_name}\"")
+            } else if trimmed.starts_with("ALLOWED_ORIGIN = ") {
+                format!("ALLOWED_ORIGIN = \"{origin}\"")
+            } else if trimmed.starts_with("# APP_ORIGIN = ") {
+                format!("APP_ORIGIN = \"{origin}\"")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
 fn sanitize_worker_name(value: &str, fallback: &str) -> String {
     let candidate: String = value
         .trim()
         .to_ascii_lowercase()
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' { ch } else { '-' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' {
+                ch
+            } else {
+                '-'
+            }
+        })
         .collect();
     let candidate = candidate.trim_matches('-');
     if candidate.is_empty() {
@@ -488,7 +540,25 @@ fn chrono_now_iso() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::is_generator_excluded;
+    use super::{configure_worker_toml, is_generator_excluded};
+
+    #[test]
+    fn generated_worker_config_keeps_canonical_bindings() {
+        let toml = configure_worker_toml(
+            "name = \"osler-cloud\"\nmain = \"src/index.ts\"\n[[d1_databases]]\ndatabase_name = \"osler-cloud\"\n[[r2_buckets]]\nbinding = \"CONTENT\"\nbucket_name = \"osler-content\"\n[durable_objects]\nbindings = []\n[vars]\nALLOWED_ORIGIN = \"http://localhost:3000\"\n# APP_ORIGIN = \"https://your-app.pages.dev\"\n",
+            "school-cloud",
+            "school-db",
+            "school-content",
+            "https://school.pages.dev",
+        );
+        assert!(toml.contains("name = \"school-cloud\""));
+        assert!(toml.contains("main = \"src/index.ts\""));
+        assert!(toml.contains("database_name = \"school-db\""));
+        assert!(toml.contains("binding = \"CONTENT\""));
+        assert!(toml.contains("bucket_name = \"school-content\""));
+        assert!(toml.contains("[durable_objects]"));
+        assert!(toml.contains("APP_ORIGIN = \"https://school.pages.dev\""));
+    }
 
     #[test]
     fn tauri_admin_never_lands_in_instances() {
