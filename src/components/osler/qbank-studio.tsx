@@ -897,6 +897,16 @@ export function QBankStudio({
     });
   }, [startCustomSession]);
 
+  // Enter read-only review for the just-finished session, reusing the
+  // in-memory questions/answers — no pool rebuild, no tracker write. In
+  // review `readonly` is true so timed-exam restrictions lift and every
+  // question shows its full explanation.
+  const enterReviewMode = React.useCallback(() => {
+    haptic("selection");
+    setSession((s) => (s && !s.isReview ? { ...s, isReview: true, current: 0 } : s));
+    setMode("review");
+  }, []);
+
   const exitToHome = React.useCallback(() => {
     sessions.clearActive();
     setMode("home");
@@ -1431,6 +1441,7 @@ export function QBankStudio({
         item={resultsItem}
         onGoHome={exitToHome}
         onRestart={restartSession}
+        onReview={enterReviewMode}
       />
     );
   }

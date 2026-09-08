@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { BarChart3, FileText, Home, ListChecks, RotateCcw, Timer } from "lucide-react";
+import { BarChart3, BookOpen, FileText, Home, ListChecks, RotateCcw, Timer } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { haptic } from "@/lib/osler/native";
 import { useCountUp } from "@/hooks/use-count-up";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { storage, sessions } from "@/lib/osler/storage";
@@ -123,11 +124,13 @@ export function ResultsView({
   item,
   onGoHome,
   onRestart,
+  onReview,
 }: {
   session: SessionData;
   item: ContentTreeNode;
   onGoHome: () => void;
   onRestart: () => void;
+  onReview: () => void;
 }) {
   const { t } = useI18n();
   const [pdfDialogOpen, setPdfDialogOpen] = React.useState(false);
@@ -255,6 +258,9 @@ export function ResultsView({
             </p>
           </div>
           <div className="flex gap-2">
+            <Button onClick={() => { haptic("selection"); onReview(); }} className="rounded-xl">
+              <BookOpen className="size-4 me-1.5" /> {t("qbank.review.title")}
+            </Button>
             <Button variant="outline" onClick={() => setPdfDialogOpen(true)} className="rounded-xl">
               <FileText className="size-4 me-1.5" /> {t("pdf.exportResults")}
             </Button>
