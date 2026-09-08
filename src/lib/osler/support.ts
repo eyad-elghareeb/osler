@@ -58,6 +58,29 @@ export interface SupportTicket {
 const RECEIPTS_KEY = "support-ticket-receipts";
 const MAX_RECEIPTS = 200;
 
+/** Client-side mirrors of the Worker caps (see TICKET_BODY_MAX_BYTES and the
+ *  field slices in handleSupportTicketCreate). Enforced here so oversized
+ *  input never leaves the device — and never bloats the IndexedDB receipts —
+ *  even when the dialog's maxLength attributes are bypassed. */
+export const TICKET_SUBJECT_MAX = 200;
+export const TICKET_MESSAGE_MAX = 5000;
+const TICKET_CONTEXT_MAX = 16_000;
+
+/** Shrink an over-budget context while keeping the identifiers admins need
+ *  (pack/article ids and titles). The full question payload is the only
+ *  field that can realistically blow the budget, so it goes first. */
+function trimTicketContext(context: TicketContext | undefined): TicketContext | undefined {
+  if (!context) return undefined;
+  if (JSON.stringify(context).length <= TICKET_CONTEXT_MAX) return context;
+  const { question, questionExcerpt, selectedAnswer, ...identifiers } = context;
+  if (JSON.stringify(identifiers).length <= TICKET_CONTEXT_MAX) return identifiers;
+  const trimmed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(identifiers)) {
+    trimmed[key] = typeof value === "string" ? value.slice(0, 500) : value;
+  }
+  return trimmed as TicketContext;
+}
+
 export const TICKET_CATEGORIES: TicketCategory[] = ["bug", "content", "feature", "other"];
 
 export const TICKET_STATUS_I18N: Record<TicketStatus, StringKey> = {
@@ -126,6 +149,9 @@ export async function fileTicket(input: {
     status: "open",
     synced: false,
     ...input,
+    subject: input.subject.trim().slice(0, TICKET_SUBJECT_MAX),
+    message: input.message.trim().slice(0, TICKET_MESSAGE_MAX),
+    context: trimTicketContext(input.context),
   };
   const receipts = await readReceipts();
   await writeReceipts([ticket, ...receipts]);

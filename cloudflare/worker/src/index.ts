@@ -3835,6 +3835,12 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
 const TICKET_SOURCES = new Set(["settings", "qbank", "library"]);
 const TICKET_CATEGORIES = new Set(["bug", "content", "feature", "other"]);
 const TICKET_STATUSES = new Set(["open", "in_progress", "resolved"]);
+/** Hard cap on the ticket request body. A legit filing peaks around ~22KB
+ *  (5KB message + 16KB QBank context + envelope); 48KB leaves 2x headroom
+ *  while keeping pre-auth abuse bounded. Enforced on the ACTUAL bytes read
+ *  (see requestBodyText), not just the Content-Length header, so chunked
+ *  bodies with no declared length can't slip through to the 1MB default. */
+const TICKET_BODY_MAX_BYTES = 48_000;
 
 function mapTicketRow(r: any) {
   let context: unknown = null;
@@ -3865,9 +3871,18 @@ function mapTicketRow(r: any) {
 }
 
 async function handleSupportTicketCreate(request: Request, env: Env, session: Session | null, origin: string, log: Logger): Promise<Response> {
-  const contentLength = Number(request.headers.get("content-length") || "0");
-  if (contentLength > 32_000) return json({ error: "Request body too large" }, 413, origin, log);
-  const body = await readJson(request);
+  let body: any;
+  try {
+    body = await readJsonBody(request, TICKET_BODY_MAX_BYTES);
+  } catch (error: any) {
+    const tooLarge = /too large/i.test(String(error?.message || ""));
+    return json(
+      { error: tooLarge ? "Request body too large" : "Invalid request" },
+      tooLarge ? 413 : 400,
+      origin,
+      log,
+    );
+  }
   if (!body || typeof body !== "object") return json({ error: "Invalid request" }, 400, origin, log);
   const tid = typeof body.id === "string" && body.id.length > 0 && body.id.length <= 64 && !/[\x00-\x1f\x7f]/.test(body.id) ? body.id : null;
   const category = typeof body.category === "string" && TICKET_CATEGORIES.has(body.category) ? body.category : null;
