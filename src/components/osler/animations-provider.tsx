@@ -38,9 +38,9 @@ export function AnimationsProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   // Low-end device detection (once): weak CPUs / little RAM / data-saver
-  // get `data-perf="low"` on <html>, which globals.css maps to solid
-  // surfaces without backdrop-filter passes — the dominant GPU cost on
-  // budget hardware. The design is identical, just frost-free.
+  // get `data-perf="low"` on <html>, which view-transitions.ts reads to
+  // skip heavy transition effects. It no longer gates blur CSS — an
+  // explicit blur opt-in from Settings → Native Features always wins.
   React.useEffect(() => {
     const nav = navigator as Navigator & {
       deviceMemory?: number;

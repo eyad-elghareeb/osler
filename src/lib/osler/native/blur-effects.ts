@@ -12,8 +12,8 @@
  *    resolve to their solid tokens — same design, frost-free. Accent tints
  *    (bg-primary/10) and dim scrims (bg-black/50) stay translucent: they're
  *    color, not material.
- *  - Composes with the automatic overrides: data-perf="low" (weak hardware)
- *    and prefers-reduced-transparency keep blur off even when opted in.
+ *  - Explicit opt-in wins over everything: data-perf="low" and OS
+ *    prefers-reduced-transparency only shape the blur-off default.
  */
 
 const BLUR_KEY = "osler-blur-effects-enabled";

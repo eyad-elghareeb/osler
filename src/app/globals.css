@@ -1296,19 +1296,6 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* ── Low-end device mode ──────────────────────────────────────────────────
- * AnimationsProvider sets data-perf="low" on weak hardware (few cores,
- * little RAM, or data-saver on). Backdrop blur is the dominant GPU cost on
- * budget phones, so translucent materials resolve to their solid tokens —
- * same design, frost-free. */
-[data-perf="low"] [class*="backdrop-blur"] {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-[data-perf="low"] [class*="bg-card/"] { background-color: var(--card) !important; }
-[data-perf="low"] [class*="bg-popover/"] { background-color: var(--popover) !important; }
-[data-perf="low"] [class*="bg-background/"] { background-color: var(--background) !important; }
-
 /* ── Blur effects preference ─────────────────────────────────────────────
  * Frosted (backdrop-blur) surfaces are OFF by default — the preference is
  * opt-in from Settings → Native Features. src/lib/osler/native/blur-effects.ts
@@ -1329,8 +1316,7 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
  * (OSCE voice overlay: from-background via-background to-card/40) resolve to
  * their solid base token so conversation content never shows through
  * un-blurred behind the orb. Same-element class chaining, not descendant. */
-[data-blur="off"] [class*="backdrop-blur"][class*="to-card/"],
-[data-perf="low"] [class*="backdrop-blur"][class*="to-card/"] {
+[data-blur="off"] [class*="backdrop-blur"][class*="to-card/"] {
   background: var(--background) !important;
 }
 /* ── Frosted modal material (opt-in) ─────────────────────────────────────
@@ -1341,71 +1327,30 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
  * every dialog, alert, sheet, drawer, popover, dropdown, select, menu,
  * hover-card, tooltip and toast is frosted without per-component edits.
  * Guarded by @supports so browsers without backdrop-filter keep opaque
- * surfaces, and :not([data-perf="low"]) so weak hardware never blurs. */
+ * surfaces. An explicit opt-in WINS over data-perf and OS reduced-
+ * transparency: the user asked for it, so nothing silently vetoes it. */
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   /* Dim scrims frost the page behind every modal/sheet/lightbox. */
-  [data-blur="on"]:not([data-perf="low"]) [data-slot$="-overlay"],
-  [data-blur="on"]:not([data-perf="low"]) [data-frost-scrim] {
+  [data-blur="on"] [data-slot$="-overlay"],
+  [data-blur="on"] [data-frost-scrim] {
     backdrop-filter: blur(8px) saturate(1.2);
     -webkit-backdrop-filter: blur(8px) saturate(1.2);
   }
   /* Modal bodies (dialog / alert / sheet / hand-rolled panels). */
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="dialog-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="alert-dialog-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="sheet-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-frost-panel] {
+  [data-blur="on"] [data-slot="dialog-content"],
+  [data-blur="on"] [data-slot="alert-dialog-content"],
+  [data-blur="on"] [data-slot="sheet-content"],
+  [data-blur="on"] [data-frost-panel] {
     background: color-mix(in oklab, var(--card) 88%, transparent);
     backdrop-filter: blur(16px) saturate(1.4);
     -webkit-backdrop-filter: blur(16px) saturate(1.4);
   }
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="drawer-content"] {
+  [data-blur="on"] [data-slot="drawer-content"] {
     background: color-mix(in oklab, var(--background) 88%, transparent);
     backdrop-filter: blur(16px) saturate(1.4);
     -webkit-backdrop-filter: blur(16px) saturate(1.4);
   }
   /* Floating surfaces (popovers, menus, selects, tooltips, toasts). */
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="popover-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="select-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="dropdown-menu-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="dropdown-menu-sub-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="context-menu-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="context-menu-sub-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="menubar-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="menubar-sub-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="hover-card-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="navigation-menu-viewport"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="navigation-menu-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="tooltip-content"],
-  [data-blur="on"]:not([data-perf="low"]) [data-slot="toast"] {
-    background: color-mix(in oklab, var(--popover) 92%, transparent);
-    backdrop-filter: blur(12px) saturate(1.3);
-    -webkit-backdrop-filter: blur(12px) saturate(1.3);
-  }
-}
-
-/* ── Reduced-transparency preference ─────────────────────────────────────
- * Users who disable transparency at the OS level get frostier surfaces:
- * every blurred material drops its backdrop pass and its translucent
- * neutral surface (bg-card/60, bg-background/xx) resolves to the solid
- * token. Accent tints (bg-primary/10 etc.) are left alone — they're color,
- * not material. !important beats component utilities since this is an
- * accessibility override. */
-@media (prefers-reduced-transparency: reduce) {
-  [class*="backdrop-blur"] {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-  [class*="bg-card/"] { background-color: var(--card) !important; }
-  [class*="bg-background/"] { background-color: var(--background) !important; }
-  /* The opt-in frosted modal material (see "Frosted modal material") must
-   * also resolve to solid tokens here — translucent color-mix backgrounds
-   * bleed content through when the backdrop pass is dropped. */
-  [data-blur="on"] [data-slot$="-overlay"],
-  [data-blur="on"] [data-frost-scrim],
-  [data-blur="on"] [data-slot="dialog-content"],
-  [data-blur="on"] [data-slot="alert-dialog-content"],
-  [data-blur="on"] [data-slot="sheet-content"],
-  [data-blur="on"] [data-frost-panel],
   [data-blur="on"] [data-slot="popover-content"],
   [data-blur="on"] [data-slot="select-content"],
   [data-blur="on"] [data-slot="dropdown-menu-content"],
@@ -1419,27 +1364,26 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   [data-blur="on"] [data-slot="navigation-menu-content"],
   [data-blur="on"] [data-slot="tooltip-content"],
   [data-blur="on"] [data-slot="toast"] {
+    background: color-mix(in oklab, var(--popover) 92%, transparent);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  }
+}
+
+/* ── Reduced-transparency preference ─────────────────────────────────────
+ * Users who disable transparency at the OS level (e.g. Windows
+ * "Transparency effects: off" maps to prefers-reduced-transparency) get
+ * solid surfaces INSTEAD of blur in the default state. It only governs the
+ * blur-off default — an explicit opt-in from Settings → Native Features
+ * wins, the same way it wins over data-perf. Accent tints (bg-primary/10)
+ * are left alone — they're color, not material. */
+@media (prefers-reduced-transparency: reduce) {
+  [data-blur="off"] [class*="backdrop-blur"] {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
-  [data-blur="on"] [data-slot="dialog-content"],
-  [data-blur="on"] [data-slot="alert-dialog-content"],
-  [data-blur="on"] [data-slot="sheet-content"],
-  [data-blur="on"] [data-frost-panel] { background: var(--card) !important; }
-  [data-blur="on"] [data-slot="drawer-content"] { background: var(--background) !important; }
-  [data-blur="on"] [data-slot="popover-content"],
-  [data-blur="on"] [data-slot="select-content"],
-  [data-blur="on"] [data-slot="dropdown-menu-content"],
-  [data-blur="on"] [data-slot="dropdown-menu-sub-content"],
-  [data-blur="on"] [data-slot="context-menu-content"],
-  [data-blur="on"] [data-slot="context-menu-sub-content"],
-  [data-blur="on"] [data-slot="menubar-content"],
-  [data-blur="on"] [data-slot="menubar-sub-content"],
-  [data-blur="on"] [data-slot="hover-card-content"],
-  [data-blur="on"] [data-slot="navigation-menu-viewport"],
-  [data-blur="on"] [data-slot="navigation-menu-content"],
-  [data-blur="on"] [data-slot="tooltip-content"],
-  [data-blur="on"] [data-slot="toast"] { background: var(--popover) !important; }
+  [data-blur="off"] [class*="bg-card/"] { background-color: var(--card) !important; }
+  [data-blur="off"] [class*="bg-background/"] { background-color: var(--background) !important; }
 }
 
 /* ── Increased-contrast preference ───────────────────────────────────────
