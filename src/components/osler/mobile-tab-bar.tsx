@@ -63,7 +63,16 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
 
   const [pendingView, setPendingView] = React.useState<OslerView | null>(null);
   const activeView = pendingView ?? propView ?? currentView;
-  const handleNav = onViewChange ?? navigate;
+  // Tab taps are lateral hub switches — run the subtle tab crossfade, not
+  // the directional push slide. onViewChange (AppShell) already does this;
+  // the standalone navigate path passes it explicitly.
+  const handleNav = React.useCallback(
+    (v: OslerView) => {
+      if (onViewChange) onViewChange(v);
+      else navigate(v, undefined, { viaTab: true });
+    },
+    [onViewChange, navigate],
+  );
 
   React.useEffect(() => {
     setPendingView(null);

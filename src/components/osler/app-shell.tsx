@@ -59,6 +59,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import {
   haptic,
+  initViewTransitionFlags,
+  wantsFallbackTransition,
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
 
@@ -204,10 +206,37 @@ export function AppShell({ children }: AppShellProps) {
     (next: OslerView) => {
       if (next === view) return;
       void refreshContentVersion();
-      navigate(next);
+      // Tab-bar / top-nav hub switches are lateral moves, not stack pushes —
+      // run the subtle tab crossfade instead of the directional slide.
+      navigate(next, undefined, { viaTab: true });
     },
     [view, navigate],
   );
+
+  // Mark <html data-vt="off"> when the native snapshot transition won't run
+  // (Firefox, no VT API, low-perf) so CSS can apply the fallback enter.
+  React.useEffect(() => {
+    initViewTransitionFlags();
+  }, []);
+
+  // Fallback enter for non-VT browsers: restart the subtle rise animation on
+  // the content wrapper after each view change. Imperative class restart (no
+  // keyed remount) so the mounted studio subtree is never torn down — the
+  // animation is opacity/transform only and stays on the compositor. Gated
+  // per navigation so mid-session toggles (animations off / reduced motion)
+  // take effect immediately.
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const prevViewRef = React.useRef(view);
+  React.useEffect(() => {
+    if (prevViewRef.current === view) return;
+    prevViewRef.current = view;
+    if (!wantsFallbackTransition()) return;
+    const el = contentRef.current;
+    if (!el) return;
+    el.classList.remove("osler-view-enter");
+    void el.offsetWidth;
+    el.classList.add("osler-view-enter");
+  }, [view]);
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -434,7 +463,9 @@ export function AppShell({ children }: AppShellProps) {
           in flight, or under reduced motion) every navigation blanked the
           page for ~200ms, and with VT active the extra fade stacked on top
           of the VT crossfade as a visible flicker. Without VT the swap is
-          instant, which reads as faster than a fade-from-blank. */}
+          instant, which reads as faster than a fade-from-blank.
+          Non-VT browsers instead get `.osler-view-enter` restarted on the
+          inner wrapper (see the view effect above) — no remount, no blank. */}
       <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col safe-pt">
         {/* Mobile scroll-away top bar — a slim bar with the centered site name
             + search icon that hides when the user scrolls down and reappears
@@ -452,7 +483,7 @@ export function AppShell({ children }: AppShellProps) {
           onSignOut={logout}
         />
         <LightboxProvider>
-          <div className="h-full w-full flex-1 flex flex-col min-h-0">
+          <div ref={contentRef} className="h-full w-full flex-1 flex flex-col min-h-0">
             {children}
           </div>
         </LightboxProvider>

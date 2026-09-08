@@ -14,16 +14,19 @@
  *    (recent versions). Firefox now exposes it too, but its snapshot
  *    compositing tears visibly on dense pages — quarantined below, we
  *    feature-detect AND engine-detect, falling back to instant update.
- *  - Direction (slide left vs slide right) is signaled by setting
- *    `data-vt-direction` on <html> before calling startViewTransition.
- *    The matching CSS lives in globals.css under `@view-transition`.
+ *  - Direction (slide left vs slide right, or the subtle tab crossfade) is
+ *    signaled by setting `data-vt-direction` on <html> before calling
+ *    startViewTransition. The matching CSS lives in globals.css under
+ *    `@view-transition`. "tab" is the lateral-motion-free crossfade used by
+ *    bottom-tab / top-nav hub switches; "forward"/"backward" are reserved
+ *    for push/pop drill navigation where the slide implies stack depth.
  *  - We honor `prefers-reduced-motion`: when reduced, we skip the snapshot
  *    roundtrip entirely and just call the callback synchronously.
  */
 
 import { isAnimationsEnabled } from "@/lib/osler/motion";
 
-export type ViewTransitionDirection = "forward" | "backward" | "none";
+export type ViewTransitionDirection = "forward" | "backward" | "none" | "tab";
 
 const VT_DIR_ATTR = "data-vt-direction";
 
@@ -88,6 +91,40 @@ function prefersReducedMotion(): boolean {
 export function isViewTransitionsSupported(): boolean {
   if (typeof document === "undefined") return false;
   return typeof (document as any).startViewTransition === "function";
+}
+
+/**
+ * Whether navigations need a lightweight CSS fallback animation because the
+ * native snapshot transition won't carry them: Firefox (quarantined above),
+ * browsers without the API, or low-perf devices — while motion is otherwise
+ * allowed. Reduced-motion and the Settings animations toggle are excluded
+ * here (no animation at all there; the global kill-switches squash the
+ * fallback too, so a stale flag is harmless).
+ *
+ * AppShell calls `initViewTransitionFlags()` once on mount so CSS can target
+ * `html[data-vt="off"]` with a subtle enter animation, keeping tab switches
+ * feeling intentional instead of an abrupt cut where VT is absent.
+ */
+export function wantsFallbackTransition(): boolean {
+  if (typeof document === "undefined" || typeof navigator === "undefined") return false;
+  try {
+    if (prefersReducedMotion() || !isAnimationsEnabled()) return false;
+    if (isFirefoxEngine() || !isViewTransitionsSupported()) return true;
+    if (document.documentElement.getAttribute("data-perf") === "low") return true;
+  } catch {
+    // ignore — cosmetic flag only.
+  }
+  return false;
+}
+
+/** Mirror `wantsFallbackTransition()` onto `<html data-vt="off">` for CSS. */
+export function initViewTransitionFlags(): void {
+  try {
+    if (wantsFallbackTransition()) document.documentElement.setAttribute("data-vt", "off");
+    else document.documentElement.removeAttribute("data-vt");
+  } catch {
+    // ignore — cosmetic flag only.
+  }
 }
 
 /**
@@ -182,9 +219,10 @@ export function waitForRouteChange(beforeUrl: string, targetUrl?: string, maxFra
  * while waiting for the router to commit the new route. Warm (prefetched)
  * commits land in 1–3 frames, so the wait is invisible; beyond this budget
  * we start the animation anyway and let the new page paint when it's ready —
- * holding the page inert any longer reads as a hang.
+ * holding the page inert any longer reads as a hang. Kept tight (160ms) so
+ * rapid tab taps never feel stuck on the old page.
  */
-const COMMIT_BUDGET_MS = 280;
+const COMMIT_BUDGET_MS = 160;
 
 /**
  * Push a new SPA route inside a view transition, waiting for the router to

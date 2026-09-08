@@ -175,9 +175,9 @@ export function useOslerRouter() {
   );
 
   const navigate = React.useCallback(
-    (view: OslerView, params?: OslerRouteParams) => {
+    (view: OslerView, params?: OslerRouteParams, opts?: { viaTab?: boolean }) => {
       const targetPath = routeFor(view, params);
-      const direction = directionFor(currentView, view);
+      const ordered = directionFor(currentView, view);
 
       haptic("selection");
 
@@ -188,10 +188,19 @@ export function useOslerRouter() {
       // own enter/exit animation (visible as a flicker when a modal closes
       // during pack navigation). The studio stays mounted and re-renders the
       // new param in place, so no global crossfade is needed.
-      if (direction === "none") {
+      if (ordered === "none") {
         router.push(targetPath);
         return;
       }
+
+      // Hub switches from the bottom tab bar / desktop top nav are lateral
+      // moves, not stack pushes — a full slide implies depth that isn't there
+      // and reads as sluggish on every tap. They run the subtle "tab"
+      // crossfade (quick fade + whisper of lift, no horizontal travel) while
+      // drill navigation (search results, pack opens, back) keeps the
+      // directional slide.
+      const direction: ViewTransitionDirection =
+        opts?.viaTab ? "tab" : ordered;
 
       // Cross-view: transition old→new (not old→old). pushWithViewTransition
       // awaits the actual route commit + paint before letting the browser

@@ -1169,16 +1169,19 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 500;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, transform 0.12s ease;
   -webkit-tap-highlight-color: transparent;
 }
 .osler-tabbar-item.active {
   color: var(--primary);
 }
 /* Touch-down highlight — the tab tints immediately on press, before the
- * navigation commits (the hover state already covers pointer devices). */
+ * navigation commits (the hover state already covers pointer devices). The
+ * subtle shrink sells the tap instantly, so the switch feels responsive even
+ * while the route chunk is still committing. */
 .osler-tabbar-item:active {
   color: var(--primary);
+  transform: scale(0.94);
 }
 /* Sliding active pill — rendered by <MobileTabBar> as a motion.span with
    layoutId="mobile-tab-indicator" so it glides between tabs (matching the
@@ -1454,6 +1457,8 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
  * how the snapshots are animated.
  *
  * Direction is signaled by `data-vt-direction` on <html>:
+ *   - "tab"      → quick crossfade + whisper of lift, no horizontal travel
+ *                  (bottom-tab / top-nav hub switches — lateral, not depth)
  *   - "forward"  → outgoing view slides left,  incoming slides in from right
  *   - "backward" → outgoing view slides right, incoming slides in from left
  *   - (none)     → simple fade (no horizontal movement)
@@ -1473,8 +1478,9 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
 
 ::view-transition-group(root) {
   /* Keep the transition fast and physical — like a native push nav.
-     280ms matches iOS push/pop transition timing. */
-  animation-duration: 280ms;
+     200ms sits just under the ~250ms "instant" perception threshold, so
+     drill navigation reads as responsive rather than cinematic. */
+  animation-duration: 200ms;
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -1497,27 +1503,39 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
 
 /* Default (no direction attribute) — simple fade for incidental updates. */
 ::view-transition-old(root) {
-  animation: vt-fade-out 280ms ease both;
+  animation: vt-fade-out 160ms ease both;
 }
 ::view-transition-new(root) {
-  animation: vt-fade-in 280ms ease both;
+  animation: vt-fade-in 160ms ease both;
+}
+
+/* Tab direction — bottom-tab / top-nav hub switches. Lateral moves aren't
+   stack pushes, so there is no horizontal travel: a quick crossfade with a
+   whisper of lift on the incoming page. Fast enough to feel instant, present
+   enough to avoid an abrupt cut. */
+html[data-vt-direction="tab"] ::view-transition-old(root) {
+  animation: vt-tab-out 140ms ease both;
+}
+html[data-vt-direction="tab"] ::view-transition-new(root) {
+  animation: vt-tab-in 170ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Forward direction — push navigation (outgoing exits stage-start, incoming
-   enters from stage-end). */
+   enters from stage-end). Short 8% travel keeps the spatial cue without the
+   heavy full-page sweep a 20% slide produced on every tap. */
 html[data-vt-direction="forward"] ::view-transition-old(root) {
-  animation: vt-slide-out-start 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: vt-slide-out-start 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 html[data-vt-direction="forward"] ::view-transition-new(root) {
-  animation: vt-slide-in-end 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: vt-slide-in-end 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Backward direction — pop navigation (reverse of forward). */
 html[data-vt-direction="backward"] ::view-transition-old(root) {
-  animation: vt-slide-out-end 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: vt-slide-out-end 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 html[data-vt-direction="backward"] ::view-transition-new(root) {
-  animation: vt-slide-in-start 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: vt-slide-in-start 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 @keyframes vt-fade-out {
@@ -1527,24 +1545,32 @@ html[data-vt-direction="backward"] ::view-transition-new(root) {
   from { opacity: 0; }
 }
 
+@keyframes vt-tab-out {
+  to { opacity: 0; }
+}
+@keyframes vt-tab-in {
+  from { opacity: 0.3; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* "start" = inline-start side (left in LTR, right in RTL).
    "end"   = inline-end side   (right in LTR, left in RTL).
    We use translateX with logical direction-aware signs via CSS custom
    properties so a single keyframe set works for both LTR and RTL. */
 @keyframes vt-slide-out-start {
   from { transform: translateX(0); opacity: 1; }
-  to   { transform: translateX(calc(-1 * var(--vt-slide, 20%))); opacity: 0.4; }
+  to   { transform: translateX(calc(-1 * var(--vt-slide, 8%))); opacity: 0.4; }
 }
 @keyframes vt-slide-in-end {
-  from { transform: translateX(var(--vt-slide, 20%)); opacity: 0.4; }
+  from { transform: translateX(var(--vt-slide, 8%)); opacity: 0.4; }
   to   { transform: translateX(0); opacity: 1; }
 }
 @keyframes vt-slide-out-end {
   from { transform: translateX(0); opacity: 1; }
-  to   { transform: translateX(var(--vt-slide, 20%)); opacity: 0.4; }
+  to   { transform: translateX(var(--vt-slide, 8%)); opacity: 0.4; }
 }
 @keyframes vt-slide-in-start {
-  from { transform: translateX(calc(-1 * var(--vt-slide, 20%))); opacity: 0.4; }
+  from { transform: translateX(calc(-1 * var(--vt-slide, 8%))); opacity: 0.4; }
   to   { transform: translateX(0); opacity: 1; }
 }
 
@@ -1553,14 +1579,30 @@ html[data-vt-direction="backward"] ::view-transition-new(root) {
    *forward in time*, which means the new screen enters from the left
    (where the next page would come from in RTL). */
 html[dir="rtl"] {
-  --vt-slide: -20%;
+  --vt-slide: -8%;
+}
+
+/* Fallback enter — restarted imperatively on the AppShell content wrapper
+   after each view change when the native snapshot transition won't run
+   (Firefox, older browsers, low-perf devices; see `wantsFallbackTransition`
+   + `html[data-vt="off"]`). Mirrors the tab crossfade so non-VT browsers get
+   the same subtle rise instead of an abrupt cut. Opacity/transform only, so
+   it stays on the compositor. Reduced-motion and the Settings animations
+   toggle squash this via the guards below / the global kill-switch. */
+html[data-vt="off"] .osler-view-enter {
+  animation: osler-view-enter 170ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes osler-view-enter {
+  from { opacity: 0.3; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Honor reduced-motion: skip all VT animations entirely. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(root),
   ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(root),
+  html[data-vt="off"] .osler-view-enter {
     animation: none !important;
   }
 }
