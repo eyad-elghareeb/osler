@@ -12,10 +12,11 @@ import { Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Flickering flame — sways around its base while an inner layer pulses,
- * like real fire. Each layer loops on its own period (both close their
- * keyframe cycle, so the repeat never jumps) and the mismatch between the
- * two periods keeps the combined motion organic.
+ * Flickering flame — a single gentle sway around its base with a faint
+ * inner flicker on the same period, like a candle in still air. Both
+ * layers share one period so they never beat against each other, and the
+ * amplitudes stay small (±2.5°, ≤4% stretch) so the icon reads as alive
+ * rather than wobbling.
  */
 export function AnimatedFlame({
   className,
@@ -28,20 +29,20 @@ export function AnimatedFlame({
     <motion.span
       className="inline-flex"
       style={{ transformOrigin: "50% 88%" }}
-      animate={active ? { rotate: [-4, 4, -4] } : undefined}
-      transition={active ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" } : undefined}
+      animate={active ? { rotate: [-2.5, 2.5, -2.5] } : undefined}
+      transition={active ? { duration: 2.8, repeat: Infinity, ease: "easeInOut" } : undefined}
     >
       <motion.span
         className="inline-flex"
         style={{ transformOrigin: "50% 88%" }}
         animate={
           active
-            ? { scaleY: [1, 1.08, 0.98, 1], scaleX: [1, 0.97, 1.03, 1] }
+            ? { scaleY: [1, 1.04, 1], scaleX: [1, 0.99, 1] }
             : undefined
         }
         transition={
           active
-            ? { duration: 2.6, repeat: Infinity, ease: "easeInOut" }
+            ? { duration: 2.8, repeat: Infinity, ease: "easeInOut" }
             : undefined
         }
       >

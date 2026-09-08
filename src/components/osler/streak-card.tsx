@@ -169,18 +169,12 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
 /* ── Flame badge ──────────────────────────────────────────────────────── */
 
 function FlameCounter({ count, active }: { count: number; active: boolean }) {
-  // One living layer only: the sway + flicker live inside <AnimatedFlame>.
-  // This shell adds a single calm breathing scale (no rotation, no second
-  // loop) so the badge feels alive without oscillating against the flame.
+  // Static badge shell — only the flame icon itself moves (inside
+  // <AnimatedFlame>). Scaling the box breathes the border + shadow and
+  // compounds with the flame's sway, which reads as wobble.
   return (
     <div className="flex items-center gap-3">
-      <motion.div
-        animate={active ? { scale: [1, 1.04, 1] } : { scale: 1 }}
-        transition={
-          active
-            ? { duration: 2.4, repeat: Infinity, repeatDelay: 1.2, ease: "easeInOut" }
-            : MOTION_TRANSITION.fast
-        }
+      <div
         className={cn(
           "size-13 rounded-2xl flex items-center justify-center shrink-0 border",
           active
@@ -189,7 +183,7 @@ function FlameCounter({ count, active }: { count: number; active: boolean }) {
         )}
       >
         <AnimatedFlame active={active} className={cn("size-6", active && "fill-warning/20")} />
-      </motion.div>
+      </div>
 
       <div>
         <motion.div
