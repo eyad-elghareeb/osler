@@ -18,7 +18,7 @@
  */
 
 import type { RuntimeCaching } from "serwist";
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate, Serwist } from "serwist";
+import { CacheFirst, ExpirationPlugin, NetworkFirst, StaleWhileRevalidate, Serwist } from "serwist";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -27,10 +27,20 @@ declare const self: ServiceWorkerGlobalScope;
  *  the content cache must survive deploys to keep downloaded packs. */
 declare const __OSLER_SW_BUILD_ID__: string;
 
+// Explicitly downloaded packs are retained until the user removes them. All
+// automatically populated caches are bounded to avoid exhausting storage on
+// lower-end Android devices, where quota eviction can terminate the PWA.
 const CONTENT_CACHE = "osler-content-v1";
-const STATIC_CACHE = "osler-static-v1";
-const IMAGE_CACHE = "osler-images-v1";
-const PAGE_CACHE = "osler-pages-v1";
+const CONTENT_RUNTIME_CACHE = "osler-content-runtime-v1";
+const STATIC_CACHE = "osler-static-v2";
+const IMAGE_CACHE = "osler-images-v2";
+const PAGE_CACHE = "osler-pages-v2";
+
+const DAY_SECONDS = 24 * 60 * 60;
+const cacheableResponse = {
+  cacheWillUpdate: async ({ response }: { response?: Response }) =>
+    response?.status === 200 ? response : null,
+};
 
 const runtimeCaching: RuntimeCaching[] = [
   // App shell code — hashed /_next/static/* is immutable but CacheFirst
@@ -41,32 +51,23 @@ const runtimeCaching: RuntimeCaching[] = [
     handler: new CacheFirst({
       cacheName: STATIC_CACHE,
       plugins: [
-        {
-          cacheWillUpdate: async ({ response }) => {
-            if (response && response.status === 200) return response;
-            return null;
-          },
-        },
+        cacheableResponse,
+        new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
   },
-  // HTML page navigations — NetworkFirst with 1.5s timeout falling back to
-  // PAGE_CACHE. Provides instant offline navigation while always picking up
-  // fresh HTML when online. matchOptions.ignoreSearch allows deep-link URLs
-  // (e.g. /qbank?uid=...) to match the cached /qbank/ HTML shell when offline.
+  // HTML page navigations — serve a previously visited shell immediately and
+  // refresh it in the background. This avoids a 1.5s network-first wait on
+  // unreliable mobile networks while matchOptions.ignoreSearch still lets
+  // deep links (e.g. /qbank?uid=...) reuse the cached /qbank/ shell.
   {
     matcher: ({ request }) => request.mode === "navigate",
-    handler: new NetworkFirst({
+    handler: new StaleWhileRevalidate({
       cacheName: PAGE_CACHE,
-      networkTimeoutSeconds: 1.5,
       matchOptions: { ignoreSearch: true },
       plugins: [
-        {
-          cacheWillUpdate: async ({ response }) => {
-            if (response && response.status === 200) return response;
-            return null;
-          },
-        },
+        cacheableResponse,
+        new ExpirationPlugin({ maxEntries: 12, maxAgeSeconds: 7 * DAY_SECONDS }),
       ],
     }),
   },
@@ -85,12 +86,8 @@ const runtimeCaching: RuntimeCaching[] = [
     handler: new StaleWhileRevalidate({
       cacheName: STATIC_CACHE,
       plugins: [
-        {
-          cacheWillUpdate: async ({ response }) => {
-            if (response && response.status === 200) return response;
-            return null;
-          },
-        },
+        cacheableResponse,
+        new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
   },
@@ -99,9 +96,9 @@ const runtimeCaching: RuntimeCaching[] = [
   //    revisit hits local cache only. A publish bumps ?v, making a new cache
   //    key that fetches fresh. Zero Worker/R2 cost for repeat views.
   //  • Unversioned (initial boot before version known, fallback fetches):
-  //    NetworkFirst with timeout — tries network for up to 3s then falls
-  //    back to cache so spotty networks stay usable while online publishes
-  //    still land without a hard refresh.
+  //    StaleWhileRevalidate — serves local data immediately, then updates it
+  //    in the background so spotty networks never block an already visited
+  //    pack while content publishes still land without a hard refresh.
   {
     matcher: ({ url }) => {
       if (!url.searchParams.has("v")) return false;
@@ -109,14 +106,10 @@ const runtimeCaching: RuntimeCaching[] = [
       return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
     },
     handler: new CacheFirst({
-      cacheName: CONTENT_CACHE,
+      cacheName: CONTENT_RUNTIME_CACHE,
       plugins: [
-        {
-          cacheWillUpdate: async ({ response }) => {
-            if (response && response.status === 200) return response;
-            return null;
-          },
-        },
+        cacheableResponse,
+        new ExpirationPlugin({ maxEntries: 180, maxAgeSeconds: 14 * DAY_SECONDS }),
       ],
     }),
   },
@@ -126,16 +119,11 @@ const runtimeCaching: RuntimeCaching[] = [
       const p = url.pathname;
       return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
     },
-    handler: new NetworkFirst({
-      cacheName: CONTENT_CACHE,
-      networkTimeoutSeconds: 3,
+    handler: new StaleWhileRevalidate({
+      cacheName: CONTENT_RUNTIME_CACHE,
       plugins: [
-        {
-          cacheWillUpdate: async ({ response }) => {
-            if (response && response.status === 200) return response;
-            return null;
-          },
-        },
+        cacheableResponse,
+        new ExpirationPlugin({ maxEntries: 180, maxAgeSeconds: 14 * DAY_SECONDS }),
       ],
     }),
   },
@@ -147,12 +135,8 @@ const runtimeCaching: RuntimeCaching[] = [
     handler: new StaleWhileRevalidate({
       cacheName: IMAGE_CACHE,
       plugins: [
-        {
-          cacheWillUpdate: async ({ response }) => {
-            if (response && response.status === 200) return response;
-            return null;
-          },
-        },
+        cacheableResponse,
+        new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
   },
@@ -210,7 +194,10 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
       break;
     case "CLEAR_CONTENT_CACHE":
       event.waitUntil(
-        caches.delete(CONTENT_CACHE).then(() => caches.open(CONTENT_CACHE))
+        Promise.all([
+          caches.delete(CONTENT_CACHE),
+          caches.delete(CONTENT_RUNTIME_CACHE),
+        ]).then(() => caches.open(CONTENT_CACHE))
       );
       break;
     case "GET_CONTENT_CACHE_STATS":
@@ -245,7 +232,7 @@ async function precacheAppShell(client: Client | null, urls: string[]) {
 
   const staticCache = await caches.open(STATIC_CACHE);
   const pageCache = await caches.open(PAGE_CACHE);
-  const contentCache = await caches.open(CONTENT_CACHE);
+  const contentCache = await caches.open(CONTENT_RUNTIME_CACHE);
 
   for (const rawUrl of urls) {
     try {

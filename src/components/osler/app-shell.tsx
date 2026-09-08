@@ -18,7 +18,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+
 import { readCloudSession, syncGeminiKeyFromCloud, type CloudSession } from "@/lib/osler/cloud";
 
 import {
@@ -129,10 +129,9 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 }
 
 import { useOslerSession } from "@/lib/osler/session-context";
-import { useCurrentView, useOslerRouter, prefetchTopLevelRoutes } from "@/lib/osler/navigation";
-import { loadCategoryTrees, loadContentByUid } from "@/lib/osler/content";
+import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
+import { loadContentByUid } from "@/lib/osler/content";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
-import { startBackgroundPrecaching } from "@/lib/osler/precache";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 
 interface AppShellProps {
@@ -180,27 +179,6 @@ export function AppShell({ children }: AppShellProps) {
     startContentVersionSync();
   }, []);
 
-  // Warm the router cache and precache full site static files once the shell is idle.
-  // Programmatic navigation (buttons → router.push) never gets <Link>-style
-  // prefetching, so without this the first push to each view pays a payload
-  // fetch + chunk load while a view transition holds the page frozen. The
-  // same idle pass warms every enabled engine's manifest tree, so first
-  // hub visits paint entries instead of a skeleton flash.
-  const navRouter = useRouter();
-  React.useEffect(() => {
-    const idle = (cb: () => void) => {
-      if (typeof window.requestIdleCallback === "function") {
-        window.requestIdleCallback(cb, { timeout: 2000 });
-      } else {
-        setTimeout(cb, 1200);
-      }
-    };
-    idle(() => {
-      prefetchTopLevelRoutes((href) => navRouter.prefetch(href));
-      void loadCategoryTrees().catch(() => {});
-      void startBackgroundPrecaching().catch(() => {});
-    });
-  }, [navRouter]);
 
   const handleViewChange = React.useCallback(
     (next: OslerView) => {

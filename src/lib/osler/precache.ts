@@ -1,64 +1,27 @@
+
 /**
  * Osler Background Precaching Engine
  *
- * Silently warms and precaches all static files, route HTMLs, Next.js JS/CSS chunks,
- * core static assets, and content manifests in the background.
+ * Silently warms only the active route and the files it has already loaded.
  *
- * Key guarantees:
- *   1. Non-blocking: Runs strictly during idle cycles via `requestIdleCallback`
- *      with batched concurrency (max 3 in-flight) so UI interactions, scrolling,
- *      and animations are never delayed.
- *   2. Cache-busting compatible: Honors versioned `?v=` stamps for content packs,
- *      Next.js immutable content hashes for `/_next/static/` chunks, and SW update
- *      lifecycles.
- *   3. Silent background recaching: Automatically triggered when a new SW version
- *      activates or when `content-version` updates, keeping the offline cache
- *      fresh without disturbing active sessions.
+ * Earlier versions fetched every route, parsed every page document, and pulled the
+ * corresponding Next.js chunks after startup. That created a multi-megabyte burst
+ * of network, parsing, cache writes, and memory use on every device. On constrained
+ * Android PWAs this could cause tab eviction or storage-quota failures before a user
+ * interacted with the app. The service worker continues to cache later visited
+ * routes, while explicit pack downloads retain their full offline behaviour.
  */
 
-import { currentContentVersion, onContentVersionChange } from "./content-version";
-import { loadCategoryTrees } from "./content";
-import { loadConfig } from "./config";
-
-/** Core static route documents across the application. */
-export const CORE_ROUTES = [
-  "/",
-  "/login/",
-  "/learn/",
-  "/library/",
-  "/qbank/",
-  "/flashcards/",
-  "/osce/",
-  "/videos/",
-  "/profile/",
-  "/settings/",
-  "/admin/",
-] as const;
-
-/** Core static assets that should always be instantly available offline. */
+/** Small assets required for PWA identity and first-run configuration. */
 export const CORE_STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/osler.config.json",
   "/assets/favicon.png",
-  "/assets/icon.svg",
   "/assets/icons/icon-192.png",
-  "/assets/icons/icon-512.png",
-  "/assets/icons/apple-touch-icon.png",
-  "/assets/og-image.png",
-] as const;
-
-/** Core category manifest locations for offline content browsing. */
-export const CORE_MANIFEST_FOLDERS = [
-  "qbank",
-  "flashcard",
-  "osce",
-  "library",
-  "videos",
 ] as const;
 
 let isPrecaching = false;
 let isCompleted = false;
-let lastPrecachedVersion: string | null = null;
 const listeners = new Set<(completed: boolean) => void>();
 
 /** Check if initial full precaching has finished in the current tab session. */
@@ -81,68 +44,24 @@ function notify(completed: boolean) {
 }
 
 /**
- * Extract script and stylesheet URLs referenced inside an HTML document.
- * Focuses on same-origin Next.js static chunks (`/_next/static/...`).
+ * Return only same-origin static resources the active page has already requested.
+ * Reading performance entries avoids re-downloading and reparsing other route
+ * documents merely to discover their chunks.
  */
-function extractNextAssetsFromHtml(html: string): string[] {
+function activeRouteAssets(): string[] {
+  if (typeof performance === "undefined") return [];
   const urls = new Set<string>();
-  try {
-    if (typeof DOMParser !== "undefined") {
-      const doc = new DOMParser().parseFromString(html, "text/html");
-      const scripts = doc.querySelectorAll("script[src]");
-      scripts.forEach((s) => {
-        const src = s.getAttribute("src");
-        if (src && src.startsWith("/_next/static/")) {
-          urls.add(src);
-        }
-      });
-
-      const links = doc.querySelectorAll("link[href]");
-      links.forEach((l) => {
-        const href = l.getAttribute("href");
-        if (href && href.startsWith("/_next/static/")) {
-          urls.add(href);
-        }
-      });
-    } else {
-      // Fallback regex in case DOMParser is unavailable
-      const scriptRegex = /<script[^>]+src=["'](\/_next\/static\/[^"']+)["']/g;
-      const linkRegex = /<link[^>]+href=["'](\/_next\/static\/[^"']+)["']/g;
-      let match: RegExpExecArray | null;
-      while ((match = scriptRegex.exec(html)) !== null) {
-        if (match[1]) urls.add(match[1]);
+  for (const entry of performance.getEntriesByType("resource")) {
+    try {
+      const url = new URL(entry.name);
+      if (url.origin === window.location.origin && url.pathname.startsWith("/_next/static/")) {
+        urls.add(`${url.pathname}${url.search}`);
       }
-      while ((match = linkRegex.exec(html)) !== null) {
-        if (match[1]) urls.add(match[1]);
-      }
+    } catch {
+      // Ignore malformed timing entries.
     }
-  } catch {
-    // Ignore parse errors on unusual markup
   }
   return [...urls];
-}
-
-/**
- * Fetch a list of URLs with limited concurrency to prevent network saturation.
- */
-async function fetchBatched(urls: string[], concurrency = 3): Promise<void> {
-  const queue = [...new Set(urls)];
-  let index = 0;
-
-  async function worker() {
-    while (index < queue.length) {
-      const current = queue[index++];
-      if (!current) continue;
-      try {
-        await fetch(current, { cache: "default" });
-      } catch {
-        // Tolerant to individual resource errors
-      }
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => worker());
-  await Promise.all(workers);
 }
 
 /**
@@ -174,81 +93,27 @@ function sendPrecacheMessageToSW(urls: string[]) {
 }
 
 /**
- * Start full background precaching of all site static files, route HTMLs, JS/CSS chunks,
- * static assets, and content manifests.
+ * Warm the active app shell after it is already interactive. The worker must be
+ * controlling this page before we issue requests; otherwise this would duplicate
+ * network work without retaining anything for offline use.
  *
  * Idempotent: Subsequent calls in the same session return immediately unless `force: true`.
  */
 export async function startBackgroundPrecaching(options?: { force?: boolean }): Promise<void> {
-  if (typeof window === "undefined") return;
-  if (isPrecaching) return;
-  if (isCompleted && !options?.force) return;
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  if (!navigator.serviceWorker.controller || isPrecaching || (isCompleted && !options?.force)) return;
 
   isPrecaching = true;
 
   return new Promise<void>((resolve) => {
-    runOnIdle(async () => {
+    runOnIdle(() => {
       try {
-        const collectedUrls = new Set<string>();
-
-        // 1. Precache static assets
-        for (const asset of CORE_STATIC_ASSETS) {
-          collectedUrls.add(asset);
-        }
-
-        // 2. Precache content manifests (with ?v= stamp if version is known)
-        const version = currentContentVersion();
-        lastPrecachedVersion = version;
-
-        for (const folder of CORE_MANIFEST_FOLDERS) {
-          const basePath = `/osler-content/${folder}/manifest.json`;
-          collectedUrls.add(version ? `${basePath}?v=${encodeURIComponent(version)}` : basePath);
-        }
-        collectedUrls.add("/osler-content/content-version.json");
-
-        // 3. Precache route documents (HTML) and extract their JS/CSS chunk URLs
-        const routeHtmlUrls: string[] = [];
-        for (const route of CORE_ROUTES) {
-          collectedUrls.add(route);
-          routeHtmlUrls.push(route);
-        }
-
-        // Fetch routes first to parse referenced Next.js bundles
-        const dynamicChunkUrls = new Set<string>();
-        for (const route of routeHtmlUrls) {
-          try {
-            const res = await fetch(route, { cache: "default" });
-            if (res.ok) {
-              const text = await res.text();
-              const extracted = extractNextAssetsFromHtml(text);
-              for (const chunk of extracted) {
-                dynamicChunkUrls.add(chunk);
-                collectedUrls.add(chunk);
-              }
-            }
-          } catch {
-            // Ignore offline/network fetch issues
-          }
-        }
-
-        // 4. Batch fetch any newly discovered dynamic JS/CSS chunks & static assets
-        await fetchBatched([...dynamicChunkUrls, ...CORE_STATIC_ASSETS], 3);
-
-        // 5. Warm in-memory caches for category trees and config
-        try {
-          await loadConfig();
-          await loadCategoryTrees();
-        } catch {
-          // Ignore tree loading failures
-        }
-
-        // 6. Notify the Service Worker to retain all precached URLs in STATIC_CACHE & PAGE_CACHE
-        sendPrecacheMessageToSW([...collectedUrls]);
-
+        const route = window.location.pathname || "/";
+        sendPrecacheMessageToSW([...new Set([route, ...CORE_STATIC_ASSETS, ...activeRouteAssets()])]);
         isCompleted = true;
         notify(true);
       } catch (err) {
-        console.warn("[precache] background warming encountered an issue:", err);
+        console.warn("[precache] active route warming encountered an issue:", err);
       } finally {
         isPrecaching = false;
         resolve();
@@ -258,8 +123,7 @@ export async function startBackgroundPrecaching(options?: { force?: boolean }): 
 }
 
 /**
- * Silently recache updated routes, assets, and content manifests in the background.
- * Triggered when a new Service Worker activates or a content-version bump is observed.
+ * Silently refresh the active app shell after a new Service Worker activates.
  */
 export async function triggerSilentRecache(): Promise<void> {
   if (typeof window === "undefined") return;
@@ -268,9 +132,7 @@ export async function triggerSilentRecache(): Promise<void> {
 }
 
 /**
- * Initialize automatic background recaching listeners:
- *  - Service Worker controller changes (new deploy)
- *  - Remote content version changes (new content publish)
+ * Initialize automatic active-route recaching after a Service Worker update.
  */
 let listenersAttached = false;
 export function initBackgroundSyncListeners(): void {
@@ -284,10 +146,4 @@ export function initBackgroundSyncListeners(): void {
     });
   }
 
-  // Recache when remote content version changes
-  onContentVersionChange((newVersion) => {
-    if (newVersion && newVersion !== lastPrecachedVersion) {
-      void triggerSilentRecache();
-    }
-  });
 }

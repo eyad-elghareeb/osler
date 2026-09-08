@@ -2,10 +2,10 @@
 
 import * as React from "react";
 
-import { startBackgroundPrecaching, initBackgroundSyncListeners, triggerSilentRecache } from "@/lib/osler/precache";
+import { startBackgroundPrecaching, initBackgroundSyncListeners } from "@/lib/osler/precache";
 
 /**
- * Registers the service worker at `/sw.js` and manages full site background
+ * Registers the service worker at `/sw.js` and manages lightweight active-route
  * precaching and silent recaching on updates.
  *
  * The SW is built separately by `scripts/build-sw.js` (esbuild) into
@@ -28,30 +28,32 @@ export function SerwistProvider({ children }: { children: React.ReactNode }) {
     // Attach listeners for background controller and content changes
     initBackgroundSyncListeners();
 
-    // Start background precaching on idle (works both with and without SW)
-    void startBackgroundPrecaching();
-
     if (!("serviceWorker" in navigator)) return;
     // Only register in production — dev builds have a non-minified SW
     // that adds noise to the console and competes with HMR.
     if (process.env.NODE_ENV !== "production") return;
 
     let registration: ServiceWorkerRegistration | null = null;
+    let updateTimer: number | null = null;
+    let cancelled = false;
     const update = () => {
-      void registration?.update().then(() => {
-        // If an update was found and waiting worker took over, controllerchange fires
-      }).catch(() => {});
+      void registration?.update().catch(() => {});
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") update();
     };
 
     const register = () => {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
         .then((reg) => {
+          if (cancelled) return;
           registration = reg;
-          window.setInterval(update, 60 * 60 * 1000);
-          document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") update();
-          });
+          updateTimer = window.setInterval(update, 60 * 60 * 1000);
+          document.addEventListener("visibilitychange", onVisibilityChange);
+          // Existing installations already control this page. Fresh installs
+          // trigger controllerchange and use the listener initialized above.
+          void startBackgroundPrecaching();
         })
         .catch((err) => {
           // Don't crash the app if SW registration fails — the app still
@@ -60,12 +62,15 @@ export function SerwistProvider({ children }: { children: React.ReactNode }) {
         });
     };
 
-    if (document.readyState === "complete") {
-      register();
-    } else {
-      window.addEventListener("load", register, { once: true });
-      return () => window.removeEventListener("load", register);
-    }
+    if (document.readyState === "complete") register();
+    else window.addEventListener("load", register, { once: true });
+
+    return () => {
+      cancelled = true;
+      if (updateTimer !== null) window.clearInterval(updateTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("load", register);
+    };
   }, []);
 
   return <>{children}</>;
