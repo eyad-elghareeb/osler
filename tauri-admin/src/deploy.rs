@@ -1016,10 +1016,18 @@ fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, String> {
         "https://api.cloudflare.com/client/v4/accounts/{}/pages/projects/{}/deployments",
         account_id, project
     );
-    let body = json!({ "branch": branch });
+    // The Pages "Create Deployment" endpoint takes multipart/form-data — a
+    // JSON body is undocumented and can silently deploy the default branch.
+    let boundary = format!("------------------------{}", now_millis());
+    let mut body: Vec<u8> = Vec::new();
+    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"branch\"\r\n\r\n");
+    body.extend_from_slice(branch.as_bytes());
+    body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
     log_info("Cloudflare deploy: POST deployment (300s timeout)…");
     let resp = bearer_post!(client, &url, token)
-        .send_json(&body)
+        .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+        .send_bytes(&body)
         .map_err(|e| e.to_string())?;
     log_info("Cloudflare deploy: response received");
 
@@ -1042,28 +1050,21 @@ fn deploy_cloudflare_pages(root: &Path, cfg: &Value) -> Result<String, String> {
 fn deploy_cloudflare_everything(root: &Path, cfg: &Value) -> Result<String, String> {
     let token = read_field_or_err(cfg, "cloudflare_pages", "api_token", "API token")?;
     let account_id = read_field_or_err(cfg, "cloudflare_pages", "account_id", "Account ID")?;
-    let custom_worker = read_field(cfg, "cloudflare_pages", "worker_name");
 
     // Step 1/2: Deploy Cloudflare Pages (Frontend web app)
     log_info("--- Step 1/2: Deploying Cloudflare Pages (Frontend) ---");
     let pages_url = deploy_cloudflare_pages(root, cfg)?;
 
-    // Step 2/2: Deploy Cloudflare Worker (Backend & Sync)
+    // Step 2/2: Deploy Cloudflare Worker (Backend & Sync) — a failure here
+    // fails the whole pipeline: the frontend is useless without its backend,
+    // so swallowing the error would report success on a broken deploy.
     log_info("--- Step 2/2: Deploying Cloudflare Worker (Backend & Sync) ---");
-    match deploy_cloudflare_worker(root, &token, &account_id, custom_worker.as_deref()) {
-        Ok(()) => log_ok("Cloudflare Worker deploy step finished successfully."),
-        Err(e) => log_warn(format!("Cloudflare Worker deploy skipped or notice: {}", e)),
-    }
+    deploy_cloudflare_worker(root, &token, &account_id)?;
 
     Ok(pages_url)
 }
 
-fn deploy_cloudflare_worker(
-    root: &Path,
-    token: &str,
-    account_id: &str,
-    custom_worker_name: Option<&str>,
-) -> Result<(), String> {
+fn deploy_cloudflare_worker(root: &Path, token: &str, account_id: &str) -> Result<(), String> {
     let worker_dir = root.join("cloudflare").join("worker");
     if !worker_dir.is_dir() {
         log_info("No cloudflare/worker directory found — skipping Worker deploy.");
@@ -1071,24 +1072,6 @@ fn deploy_cloudflare_worker(
     }
 
     log_info("Deploying Cloudflare Worker backend from cloudflare/worker…");
-
-    let mut script_name = custom_worker_name.unwrap_or("osler-cloud").to_string();
-    let wrangler_path = worker_dir.join("wrangler.toml");
-    if wrangler_path.is_file() {
-        if let Ok(content) = std::fs::read_to_string(&wrangler_path) {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("name =") {
-                    if let Some(val) = trimmed.split('=').nth(1) {
-                        let name_val = val.trim().trim_matches('"').trim_matches('\'');
-                        if !name_val.is_empty() {
-                            script_name = name_val.to_string();
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     // Attempt Wrangler CLI execution first
     let pm = which::which("npx")
@@ -1117,80 +1100,20 @@ fn deploy_cloudflare_worker(
         Err("Wrangler CLI not found on local system PATH".to_string())
     };
 
+    // Wrangler is the only correct deploy path: a raw API upload cannot carry
+    // the Worker's module graph, bindings, or Durable Object migration.
     match wrangler_res {
         Ok(out) if out.status.success() => {
             log_ok("Cloudflare Worker deployed successfully via Wrangler.");
             Ok(())
         }
-        Ok(out) => {
-            let err_msg = String::from_utf8_lossy(&out.stderr);
-            log_warn(format!("Wrangler deploy returned non-zero exit ({}), uploading directly via Cloudflare API…", err_msg.trim()));
-            deploy_cloudflare_worker_api(token, account_id, &script_name, &worker_dir).map(|_| ())
-        }
-        Err(e) => {
-            log_info(format!("Wrangler CLI notice ({}), uploading directly via Cloudflare API…", e));
-            deploy_cloudflare_worker_api(token, account_id, &script_name, &worker_dir).map(|_| ())
-        }
+        Ok(out) => Err(format!(
+            "Wrangler deploy failed (exit {}): {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )),
+        Err(e) => Err(format!("Wrangler CLI could not be executed: {e}")),
     }
-}
-
-fn deploy_cloudflare_worker_api(
-    token: &str,
-    account_id: &str,
-    script_name: &str,
-    worker_dir: &Path,
-) -> Result<String, String> {
-    let index_path = worker_dir.join("src").join("index.mjs");
-    if !index_path.is_file() {
-        return Err(format!("Worker script not found at {}", index_path.display()));
-    }
-    let script_content = std::fs::read_to_string(&index_path)
-        .map_err(|e| format!("Failed to read worker script: {}", e))?;
-
-    let client = build_cloudflare_client();
-    let url = format!(
-        "https://api.cloudflare.com/client/v4/accounts/{}/workers/scripts/{}",
-        account_id, script_name
-    );
-
-    let boundary = format!("------------------------{}", now_millis());
-    let mut body: Vec<u8> = Vec::new();
-
-    let metadata_json = json!({
-        "main_module": "index.mjs",
-        "compatibility_date": "2026-07-23"
-    }).to_string();
-
-    // Part 1: metadata
-    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
-    body.extend_from_slice(b"Content-Disposition: form-data; name=\"metadata\"; filename=\"metadata.json\"\r\n");
-    body.extend_from_slice(b"Content-Type: application/json\r\n\r\n");
-    body.extend_from_slice(metadata_json.as_bytes());
-    body.extend_from_slice(b"\r\n");
-
-    // Part 2: main module index.mjs
-    body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
-    body.extend_from_slice(b"Content-Disposition: form-data; name=\"index.mjs\"; filename=\"index.mjs\"\r\n");
-    body.extend_from_slice(b"Content-Type: application/javascript+module\r\n\r\n");
-    body.extend_from_slice(script_content.as_bytes());
-    body.extend_from_slice(b"\r\n");
-
-    body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
-
-    let resp = client
-        .put(&url)
-        .set("Authorization", &format!("Bearer {}", token))
-        .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
-        .send_bytes(&body)
-        .map_err(|e| format!("Cloudflare Worker API request failed: {}", e))?;
-
-    let status = resp.status();
-    let text = resp.into_string().map_err(|e| e.to_string())?;
-    if status < 200 || status >= 300 {
-        return Err(format!("Cloudflare Worker API {}: {}", status, text));
-    }
-    log_ok(format!("Cloudflare Worker '{}' deployed via Cloudflare API", script_name));
-    Ok(format!("https://{}.{}.workers.dev", script_name, account_id))
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
