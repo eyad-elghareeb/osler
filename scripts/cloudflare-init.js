@@ -10,7 +10,7 @@
  * R2 bucket, existing wrangler.toml database_id) and skips them.
  *
  * Prerequisites:
- *   1. Node 18+ and a Cloudflare account.
+ *   1. Node 20.9+ (Next.js 16 requires it) and a Cloudflare account.
  *   2. Auth: either `npx wrangler login` once in this repo (browser flow), or
  *      set CLOUDFLARE_API_TOKEN=<token> (and optionally CLOUDFLARE_ACCOUNT_ID).
  *
@@ -18,23 +18,33 @@
  *   node scripts/cloudflare-init.js \
  *     --origin https://osler.your-domain.com \
  *     [--worker-url https://osler-cloud.<acct>.workers.dev] \
+ *     [--worker-name osler-cloud] \
  *     [--project osler] [--d1 osler-cloud] [--r2 osler-content] \
  *     [--env-file ./cloudflare-secrets.env] [--skip-pages] [--skip-worker]
  *
  * Flags:
- *   --origin      Production origin of the web app (CORS allowlist). Required.
- *   --worker-url  Desired Worker URL. If omitted, it is read from the `wrangler
- *                 deploy` output after the Worker is deployed.
- *   --project     Cloudflare Pages project name (default "osler").
- *   --d1          D1 database name (default "osler-cloud").
- *   --r2          R2 bucket name (default "osler-content").
- *   --env-file    Optional file of NAME=value lines; each name is set as a
- *                 Worker secret (e.g. GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
- *                 RESEND_API_KEY, TURNSTILE_SECRET_KEY, GEMINI_ENCRYPTION_KEY,
- *                 or a custom JWT_SECRET).
- *   --skip-build  Reuse an existing frontend `out/` directory (no `npm run build`).
- *   --skip-pages  Deploy only the Worker backend.
- *   --skip-worker Deploy only the Pages frontend (worker must already exist).
+ *   --origin       Production origin of the web app (CORS allowlist). Required.
+ *                  Also written as site.url (public site URL) and APP_ORIGIN
+ *                  (email link base) on every run.
+ *   --worker-name  Deployed Worker name (wrangler.toml top-level `name`).
+ *                  Change it when provisioning a second instance in the same
+ *                  Cloudflare account so the two don't overwrite each other.
+ *   --worker-url   Expected public Worker URL. If omitted, it is read from the
+ *                  `wrangler deploy` output after the Worker is deployed. If
+ *                  supplied, it must match the deployed URL exactly.
+ *   --project      Cloudflare Pages project name (default "osler").
+ *   --d1           D1 database name (default "osler-cloud").
+ *   --r2           R2 bucket name (default "osler-content") — also bound into
+ *                  the Worker's wrangler.toml CONTENT binding.
+ *   --env-file     Optional file of NAME=value lines; each name is set as a
+ *                  Worker secret (e.g. GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+ *                  RESEND_API_KEY, TURNSTILE_SECRET_KEY, GEMINI_ENCRYPTION_KEY,
+ *                  or a custom JWT_SECRET).
+ *   --skip-build   Reuse an existing frontend `out/` directory (no `npm run build`).
+ *   --skip-pages   Deploy only the Worker backend.
+ *   --skip-worker  Deploy only the Pages frontend (worker must already exist —
+ *                  pass --worker-url, or a usable cloud.apiUrl must already be
+ *                  present in public/osler.config.json).
  *
  * After it finishes, run the printed SQL to promote your first user to admin.
  */
@@ -51,13 +61,14 @@ const CONFIG_JSON = path.join(ROOT, "public", "osler.config.json");
 
 // ── CLI flags ──────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { origin: null, workerUrl: null, project: "osler", d1: "osler-cloud", r2: "osler-content", envFile: null, skipBuild: false, skipPages: false, skipWorker: false };
+  const args = { origin: null, workerUrl: null, workerName: "osler-cloud", project: "osler", d1: "osler-cloud", r2: "osler-content", envFile: null, skipBuild: false, skipPages: false, skipWorker: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => argv[++i];
     switch (a) {
       case "--origin": args.origin = val(); break;
       case "--worker-url": args.workerUrl = val(); break;
+      case "--worker-name": args.workerName = val(); break;
       case "--project": args.project = val(); break;
       case "--d1": args.d1 = val(); break;
       case "--r2": args.r2 = val(); break;
@@ -81,9 +92,33 @@ if (!/^https?:\/\/[^\s"']+$/i.test(args.origin)) {
   console.error("Error: --origin must be a valid HTTP(S) origin without spaces or quotes.");
   process.exit(1);
 }
-for (const [flag, value] of [["--project", args.project], ["--d1", args.d1], ["--r2", args.r2]]) {
+for (const [flag, value] of [["--project", args.project], ["--d1", args.d1], ["--r2", args.r2], ["--worker-name", args.workerName]]) {
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(value)) {
     console.error(`Error: ${flag} must contain only letters, numbers, and hyphens.`);
+    process.exit(1);
+  }
+}
+
+// Next.js 16 (the frontend build) requires Node >= 20.9 — fail fast with a
+// clear message instead of a cryptic `npm run build` error.
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+if (nodeMajor < 20 || (nodeMajor === 20 && nodeMinor < 9)) {
+  console.error(`Error: Node.js >= 20.9 is required (found ${process.versions.node}). Update Node and retry.`);
+  process.exit(1);
+}
+
+// --skip-worker must still resolve a usable backend URL — otherwise
+// cloud.apiUrl is never written and the health check prints "undefined/...".
+if (args.skipWorker && !args.workerUrl) {
+  try {
+    const url = JSON.parse(readFile(CONFIG_JSON))?.cloud?.apiUrl;
+    if (typeof url === "string" && /^https:\/\//i.test(url)) {
+      args.workerUrl = url;
+      console.log(`--skip-worker: reusing cloud.apiUrl from public/osler.config.json (${url})`);
+    }
+  } catch { /* config missing or unreadable — fall through to the error */ }
+  if (!args.workerUrl) {
+    console.error("Error: --skip-worker requires --worker-url (no usable cloud.apiUrl found in public/osler.config.json).");
     process.exit(1);
   }
 }
@@ -186,7 +221,16 @@ function parseD1Id(stdout) {
 function ensureR2(bucketName) {
   step(`Ensuring R2 bucket "${bucketName}"`);
   runFail(`npx wrangler r2 bucket create ${bucketName}`, { cwd: WORKER_DIR, allowFail: true });
-  console.log("  ✓ bucket present (create errors are ignored if it already exists)");
+  // The Worker binds its content bucket by name in wrangler.toml — a
+  // non-default --r2 must be written there or the deploy fails (missing
+  // default bucket) or the app reads from the wrong bucket.
+  const text = readFile(WRANGLER_TOML);
+  if (!text.includes(`bucket_name = "${bucketName}"`)) {
+    writeFile(WRANGLER_TOML, text.replace(/bucket_name\s*=\s*"[^"]*"/, `bucket_name = "${bucketName}"`));
+    console.log(`  ✓ CONTENT binding → bucket ${bucketName}`);
+  } else {
+    console.log("  ✓ bucket present");
+  }
 }
 
 // ── Worker secrets ─────────────────────────────────────────────────────
@@ -195,11 +239,24 @@ function setSecret(name, value) {
   console.log(`  ✓ ${name} set`);
 }
 
+function jwtSecretExists() {
+  const res = runFail("npx wrangler secret list --json", { cwd: WORKER_DIR, quiet: true, allowFail: true });
+  return /"JWT_SECRET"/.test(res.stdout);
+}
+
 function ensureSecrets(envFile) {
   step("Setting Worker secrets");
   const provided = envFile ? parseEnvFile(envFile) : {};
-  const jwt = provided.JWT_SECRET || crypto.randomBytes(48).toString("base64");
-  setSecret("JWT_SECRET", jwt);
+  // Idempotency: never rotate an existing JWT_SECRET on rerun — that would
+  // invalidate every active cloud session. Generate one only when the secret
+  // is absent; an explicit JWT_SECRET in the env file always rotates it.
+  if (provided.JWT_SECRET) {
+    setSecret("JWT_SECRET", provided.JWT_SECRET);
+  } else if (jwtSecretExists()) {
+    console.log("  ✓ JWT_SECRET already set — left untouched (add it to the env file to rotate it)");
+  } else {
+    setSecret("JWT_SECRET", crypto.randomBytes(48).toString("base64"));
+  }
   for (const name of Object.keys(provided)) {
     if (name === "JWT_SECRET") continue;
     setSecret(name, provided[name]);
@@ -210,20 +267,29 @@ function ensureSecrets(envFile) {
 // ── wrangler.toml [vars] ───────────────────────────────────────────────
 function patchVars(origin, workerUrl) {
   step("Patching wrangler.toml [vars]");
-  const changes = [];
-  changes.push([/^ALLOWED_ORIGIN\s*=\s*"[^"]*"/m, `ALLOWED_ORIGIN = "${origin}"`]);
-  if (workerUrl) changes.push([/^WORKER_URL\s*=\s*"[^"]*"/m, `WORKER_URL = "${workerUrl}"`]);
   let text = readFile(WRANGLER_TOML);
   let dirty = false;
-  for (const [re, to] of changes) {
-    if (re.test(text)) { text = text.replace(re, to); dirty = true; }
+  if (/^ALLOWED_ORIGIN\s*=\s*"[^"]*"/m.test(text)) {
+    text = text.replace(/^ALLOWED_ORIGIN\s*=\s*"[^"]*"/m, `ALLOWED_ORIGIN = "${origin}"`);
+    dirty = true;
   }
-  if (!text.includes("APP_ORIGIN")) {
-    text = text.replace(/^ALLOWED_ORIGIN\s*=.*$/m, `$&\nAPP_ORIGIN = "${origin}"`);
+  if (workerUrl && /^WORKER_URL\s*=\s*"[^"]*"/m.test(text)) {
+    text = text.replace(/^WORKER_URL\s*=\s*"[^"]*"/m, `WORKER_URL = "${workerUrl}"`);
+    dirty = true;
+  }
+  // APP_ORIGIN drives password-reset / email-verify links — it must follow
+  // --origin on every run. The template ships it commented out, so replace
+  // the commented line when present, else insert after ALLOWED_ORIGIN.
+  const appOriginLine = /^#?\s*APP_ORIGIN\s*=.*$/m;
+  if (appOriginLine.test(text)) {
+    text = text.replace(appOriginLine, `APP_ORIGIN = "${origin}"`);
+    dirty = true;
+  } else {
+    text = text.replace(/^ALLOWED_ORIGIN\s*=.*$/m, (m) => `${m}\nAPP_ORIGIN = "${origin}"`);
     dirty = true;
   }
   if (dirty) writeFile(WRANGLER_TOML, text);
-  console.log(`  ✓ ALLOWED_ORIGIN = ${origin}${workerUrl ? `\n  ✓ WORKER_URL = ${workerUrl}` : ""}`);
+  console.log(`  ✓ ALLOWED_ORIGIN = ${origin}\n  ✓ APP_ORIGIN = ${origin}${workerUrl ? `\n  ✓ WORKER_URL = ${workerUrl}` : ""}`);
 }
 
 // ── Migrations + deploy ────────────────────────────────────────────────
@@ -232,10 +298,19 @@ function runMigrations(dbName) {
   runFail(`npx wrangler d1 migrations apply ${dbName} --remote`, { cwd: WORKER_DIR });
 }
 
+function patchWorkerName(workerName) {
+  const text = readFile(WRANGLER_TOML);
+  const current = /^name\s*=\s*"([^"]*)"/m.exec(text)?.[1];
+  if (current === workerName) return;
+  writeFile(WRANGLER_TOML, text.replace(/^name\s*=\s*"[^"]*"/m, `name = "${workerName}"`));
+  console.log(`  ✓ Worker name = ${workerName}`);
+}
+
 function deployWorker() {
   step("Deploying Worker backend");
   const stdout = runFail("npx wrangler deploy", { cwd: WORKER_DIR }).stdout;
-  const m = stdout.match(/https:\/\/[a-z0-9-]+\.workers\.dev/);
+  // Workers URLs carry an account subdomain: https://<name>.<acct>.workers.dev
+  const m = stdout.match(/https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)+\.workers\.dev/i);
   if (!m) {
     console.error("  ✗ Could not find the Worker URL in deploy output.");
     process.exit(1);
@@ -281,11 +356,13 @@ function patchConfig(workerUrl, siteUrl) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
+const normalizeUrl = (u) => u.replace(/\/+$/, "");
+
 async function main() {
   console.log("╔══════════════════════════════════════════════════════════════╗");
   console.log("║  Osler — Cloudflare full-stack deploy initializer            ║");
   console.log("╚══════════════════════════════════════════════════════════════╝");
-  console.log(`Origin: ${args.origin}   Pages: ${args.project}   D1: ${args.d1}   R2: ${args.r2}`);
+  console.log(`Origin: ${args.origin}   Pages: ${args.project}   D1: ${args.d1}   R2: ${args.r2}   Worker: ${args.workerName}`);
 
   requireAuth();
 
@@ -296,11 +373,18 @@ async function main() {
     ensureSecrets(args.envFile);
   }
 
-  let workerUrl = args.workerUrl;  if (!args.skipWorker) {
+  let workerUrl = args.workerUrl;
+  if (!args.skipWorker) {
+    patchWorkerName(args.workerName);
     patchVars(args.origin, args.workerUrl);
     runMigrations(args.d1);
     const deployedUrl = deployWorker();
-    workerUrl = args.workerUrl || deployedUrl;
+    if (args.workerUrl && normalizeUrl(args.workerUrl) !== normalizeUrl(deployedUrl)) {
+      console.error(`  ✗ --worker-url ${args.workerUrl} does not match the deployed Worker URL (${deployedUrl}).`);
+      console.error("    Omit --worker-url, or pass --worker-name to deploy under a different name.");
+      process.exit(1);
+    }
+    workerUrl = deployedUrl;
     if (!args.workerUrl) {
       patchVars(args.origin, workerUrl);
       // OAuth callbacks derive from WORKER_URL, so deploy the updated vars
@@ -309,8 +393,9 @@ async function main() {
     }
   }
 
-  const siteUrl = `https://${args.project}.pages.dev`;
-  if (workerUrl) patchConfig(workerUrl, siteUrl);
+  // site.url must be the public site origin — a custom-domain --origin must
+  // not be overwritten with the <project>.pages.dev fallback.
+  if (workerUrl) patchConfig(workerUrl, args.origin);
 
   if (!args.skipPages) {
     if (!args.skipBuild) buildFrontend();
