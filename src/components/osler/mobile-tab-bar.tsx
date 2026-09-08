@@ -100,8 +100,21 @@ export function MobileTabBar({ view: propView, onViewChange }: MobileTabBarProps
             onPointerEnter={() => prefetch(tab.id)}
             onTouchStart={() => prefetch(tab.id)}
             onFocus={() => prefetch(tab.id)}
-            onClick={() => {
+            onPointerDown={(e) => {
+              // Touch fast-path: `click` fires after finger lift (~50-150ms
+              // of dead time per tap). Acting on touch pointer-down makes the
+              // switch feel instant; the trailing `click` is ignored via the
+              // pendingView/active guard below. Mouse + pen + keyboard keep
+              // standard click activation. The bar is fixed (no scroll) and
+              // non-selectable, so there is no scroll/selection gesture to
+              // conflict with, and non-primary buttons are ignored.
+              if (e.pointerType !== "touch" || e.button !== 0) return;
               if (active) return;
+              setPendingView(tab.id);
+              handleNav(tab.id);
+            }}
+            onClick={() => {
+              if (active || pendingView !== null) return;
               setPendingView(tab.id);
               handleNav(tab.id);
             }}

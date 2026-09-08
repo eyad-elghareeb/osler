@@ -196,16 +196,17 @@ export function useOslerRouter() {
       // Hub switches from the bottom tab bar / desktop top nav are lateral
       // moves, not stack pushes — a full slide implies depth that isn't there
       // and reads as sluggish on every tap. They run the subtle "tab"
-      // crossfade (quick fade + whisper of lift, no horizontal travel) while
-      // drill navigation (search results, pack opens, back) keeps the
-      // directional slide.
+      // crossfade (quick fade + whisper of lift, no horizontal travel) with
+      // a tight commit budget so the animation starts immediately instead of
+      // holding the old page, while drill navigation (search results, pack
+      // opens, back) keeps the directional slide and the full budget.
       const direction: ViewTransitionDirection =
         opts?.viaTab ? "tab" : ordered;
 
       // Cross-view: transition old→new (not old→old). pushWithViewTransition
       // awaits the actual route commit + paint before letting the browser
       // capture the "new" snapshot, so the crossfade never blanks the page.
-      pushWithViewTransition((p) => router.push(p), targetPath, direction);
+      pushWithViewTransition((p) => router.push(p), targetPath, direction, opts?.viaTab ? 80 : undefined);
     },
     [currentView, router]
   );

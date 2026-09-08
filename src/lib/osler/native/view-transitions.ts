@@ -229,9 +229,11 @@ const COMMIT_BUDGET_MS = 160;
  * actually render it so the browser crossfades old→new (not old→old).
  * Falls back to a plain push when VT is unsupported or reduced motion is on.
  *
- * The commit wait races COMMIT_BUDGET_MS: if the route is slow (cold cache,
- * dev compile), the transition starts without it instead of freezing the
- * page until the cap.
+ * The commit wait races `commitBudgetMs` (default COMMIT_BUDGET_MS): if the
+ * route is slow (cold cache, dev compile), the transition starts without it
+ * instead of freezing the page until the cap. Tab switches pass a tighter
+ * budget — their crossfade is only 170ms and warm commits land in 1–3
+ * frames, so holding the old page any longer just reads as stuck.
  *
  * `push` is typically Next.js's router.push — any synchronous kick-off of an
  * async client-side navigation works.
@@ -240,13 +242,14 @@ export function pushWithViewTransition(
   push: (path: string) => void,
   path: string,
   direction: ViewTransitionDirection = "none",
+  commitBudgetMs: number = COMMIT_BUDGET_MS,
 ): void {
   withViewTransition(async () => {
     const before = window.location.pathname + window.location.search;
     push(path);
     await Promise.race([
       waitForRouteChange(before, path),
-      new Promise<void>((resolve) => setTimeout(resolve, COMMIT_BUDGET_MS)),
+      new Promise<void>((resolve) => setTimeout(resolve, commitBudgetMs)),
     ]);
   }, direction);
 }
