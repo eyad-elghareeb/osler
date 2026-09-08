@@ -131,6 +131,9 @@
     const gmailPassword = field(t("instance.email.appPassword"), "", "abcd efgh ijkl mnop", "password");
     const fromName = field(t("instance.email.fromName"), site.name || "", t("instance.email.fromNamePh"));
     const appOrigin = field(t("services.email.origin"), defaultOrigin, "https://your-app.pages.dev");
+    const bindingWrap = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem", fontSize: "0.8125rem", color: "var(--text-muted)", cursor: "pointer" } });
+    const bindingCheck = el("input", { type: "checkbox" });
+    bindingWrap.append(bindingCheck, el("span", {}, t("services.email.binding")));
     const emailBtn = el("button", { class: "btn btn-primary" }, t("services.email.deploy"));
     emailBtn.addEventListener("click", async () => {
       if (!gmailUser.input.value.trim() || !gmailPassword.input.value.trim() || !appOrigin.input.value.trim()) {
@@ -146,6 +149,7 @@
             fromName: fromName.input.value.trim() || null,
             appOrigin: appOrigin.input.value.trim(),
             d1Name: d1Name.input.value.trim() || defaultD1,
+            useServiceBinding: bindingCheck.checked,
           },
         });
         toast(t("services.email.deployed", { url: result.url }), "success");
@@ -156,7 +160,7 @@
         emailBtn.disabled = false;
       }
     });
-    emailCard.append(gmailUser.node, gmailPassword.node, fromName.node, appOrigin.node, emailBtn);
+    emailCard.append(gmailUser.node, gmailPassword.node, fromName.node, appOrigin.node, bindingWrap, emailBtn);
     wrap.appendChild(emailCard);
 
     view.appendChild(wrap);

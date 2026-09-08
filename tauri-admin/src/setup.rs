@@ -7,8 +7,9 @@
 //   * promoting the first admin user
 //   * verifying the deployment with a health check
 //   * the Gmail relay worker A-to-Z (deploy_email_worker: relay deploy +
-//     secrets, /health sender check, private service binding + APP_ORIGIN on
-//     the main Worker, main redeploy, email_log migration)
+//     secrets, /health sender check, EMAIL_WORKER_URL + APP_ORIGIN on the
+//     main Worker, main redeploy, email_log migration; the private service
+//     binding is an explicit opt-in — Workers Standard plans only)
 //
 // The wizard's "Ready" step drives these so a fresh instance goes from zero
 // to fully configured without touching a terminal.
@@ -329,6 +330,12 @@ pub struct EmailWorkerSetup {
     pub app_origin: Option<String>,
     /// Core D1 database name for the email_log migration.
     pub d1_name: Option<String>,
+    /// Opt in to the private `[[services]]` EMAIL binding — requires a
+    /// Workers Standard (paid) plan; deployment fails on the Free plan with
+    /// a service binding declared. Default is the HTTPS relay (already set
+    /// via EMAIL_WORKER_URL + EMAIL_WORKER_TOKEN), which works on every plan.
+    #[serde(default)]
+    pub use_service_binding: bool,
 }
 
 /// Deploy the standalone Gmail relay worker (cloudflare/email-worker) inside
@@ -338,9 +345,10 @@ pub struct EmailWorkerSetup {
 ///   2. runs `npx wrangler deploy` in cloudflare/email-worker, parses the
 ///      workers.dev URL from the output, and verifies /health reports the
 ///      configured sender (fail fast on a wrong address / bad App Password)
-///   3. wires the main Worker: EMAIL_WORKER_TOKEN (+ URL fallback) secrets,
-///      the private [[services]] EMAIL binding + APP_ORIGIN in its
-///      wrangler.toml, then redeploys so binding + vars take effect
+///   3. wires the main Worker: EMAIL_WORKER_TOKEN (+ URL fallback) secrets
+///      and APP_ORIGIN in its wrangler.toml, then redeploys so they take
+///      effect; the private [[services]] EMAIL binding is written only when
+///      the caller opts in (Workers Standard plans only)
 ///   4. applies the email_log D1 migration for the admin delivery log
 /// Secret values are piped over stdin and never logged. The migration is
 /// best-effort (sends work without it) and surfaces as a warning instead of
@@ -451,10 +459,21 @@ pub async fn deploy_email_worker(
         }
 
         let relay_name = wrangler_name(&email_dir.join("wrangler.toml")).unwrap_or_else(|| "osler-email".to_string());
-        match ensure_service_binding(&main_dir, &relay_name) {
-            Ok(true) => {}
-            Ok(false) => warnings.push("EMAIL service binding already present — left as is".to_string()),
-            Err(e) => warnings.push(format!("Service binding not written ({e}); relay still reachable over HTTPS")),
+        // The private service binding is an explicit opt-in: Cloudflare only
+        // offers Service Bindings on Workers Standard (paid), so writing the
+        // [[services]] block unconditionally breaks Free-plan accounts. The
+        // HTTPS relay path (EMAIL_WORKER_URL + EMAIL_WORKER_TOKEN, set above)
+        // works on every plan and is the default.
+        if setup.use_service_binding {
+            match ensure_service_binding(&main_dir, &relay_name) {
+                Ok(true) => {}
+                Ok(false) => warnings.push("EMAIL service binding already present — left as is".to_string()),
+                Err(e) => warnings.push(format!("Service binding not written ({e}); relay still reachable over HTTPS")),
+            }
+        } else {
+            warnings.push(
+                "HTTPS relay mode (works on all plans) — the private service binding requires Workers Standard and was not written".to_string(),
+            );
         }
         match setup.app_origin.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             Some(origin) => {
@@ -480,7 +499,12 @@ pub async fn deploy_email_worker(
             Err(e) => warnings.push(format!("D1 migration skipped: {e}")),
         }
 
-        Ok(json!({ "url": url, "mode": "binding", "relay_sender": relay_sender, "warnings": warnings }))
+        Ok(json!({
+            "url": url,
+            "mode": if setup.use_service_binding { "binding" } else { "https" },
+            "relay_sender": relay_sender,
+            "warnings": warnings,
+        }))
     })
     .await
     .map_err(|e| e.to_string())?

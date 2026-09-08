@@ -826,7 +826,9 @@
                     });
                     state.email.url = res.url;
                     addLog(`✅ Relay worker live at ${res.url} (sender verified: ${res.relay_sender})`, "#3fb950");
-                    addLog(`✅ Main Worker rewired over the private service binding (APP_ORIGIN=${appOrigin}) — send a test mail from Admin → Email`, "#3fb950");
+                    addLog(res.mode === "binding"
+                      ? `✅ Main Worker rewired over the private service binding (APP_ORIGIN=${appOrigin}) — send a test mail from Admin → Email`
+                      : `✅ Main Worker wired to the relay over HTTPS (APP_ORIGIN=${appOrigin}) — send a test mail from Admin → Email`, "#3fb950");
                     for (const w of res.warnings || []) addLog(`⚠️ ${w}`, "#d29922");
                   } catch (e) {
                     addLog(`⚠️ ${t("instance.email.deployFailed")}: ${String(e)}`, "#d29922");
