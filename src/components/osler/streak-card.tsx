@@ -7,6 +7,7 @@ import { streak, dailyGoal, type StreakData, type DailyActivity } from "@/lib/os
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { useChartTooltip } from "@/hooks/use-chart-tooltip";
+import { haptic } from "@/lib/osler/native";
 import { OslerCard } from "./ui-primitives";
 import { AnimatedFlame } from "./animated-icons";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
@@ -43,11 +44,11 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
           <motion.div
             key={hovered}
             ref={tipRef}
-            initial={{ opacity: 0, y: 4, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.95 }}
+            initial={{ opacity: 0, y: 4, scale: 0.95, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+            exit={{ opacity: 0, y: 4, scale: 0.95, x: "-50%" }}
             transition={MOTION_TRANSITION.fast}
-            className="absolute -top-12 z-30 pointer-events-none -translate-x-1/2"
+            className="absolute -top-12 z-30 pointer-events-none origin-bottom"
             style={{
               left: `${left}px`,
             }}
@@ -78,6 +79,7 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full overflow-visible"
         style={{ height: chartH }}
+        role="img"
         aria-label="14-day activity chart"
       >
         <defs>
@@ -115,16 +117,19 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
 
           return (
             <g key={d.date}>
-              {/* Bar rect */}
-              <rect
+              {/* Bar rect — grows from its base (transform-only, spring from
+                  the live value so re-renders never jump). */}
+              <motion.rect
                 x={x}
                 y={y}
                 width={barW}
                 height={barH}
                 rx={Math.min(3, barW / 2)}
                 fill={fill}
-                opacity={isHovered ? 1 : 0.85}
-                style={{ transition: "opacity 0.15s, height 0.3s" }}
+                initial={{ opacity: 0, scaleY: 0.25 }}
+                animate={{ opacity: isHovered ? 1 : 0.85, scaleY: 1 }}
+                transition={{ ...MOTION_SPRING.soft, delay: Math.min(i * 0.02, 0.2) }}
+                style={{ transformBox: "fill-box", transformOrigin: "50% 100%" }}
               />
 
               {/* Day label inside SVG for 100% exact alignment under bar */}
@@ -164,21 +169,20 @@ const ActivityBarChart = React.memo(function ActivityBarChart({ activity, today 
 /* ── Flame badge ──────────────────────────────────────────────────────── */
 
 function FlameCounter({ count, active }: { count: number; active: boolean }) {
+  // One living layer only: the sway + flicker live inside <AnimatedFlame>.
+  // This shell adds a single calm breathing scale (no rotation, no second
+  // loop) so the badge feels alive without oscillating against the flame.
   return (
     <div className="flex items-center gap-3">
       <motion.div
-        animate={
-          active
-            ? { scale: [1, 1.08, 1], rotate: [-3, 3, -3, 0] }
-            : { scale: 1, rotate: 0 }
-        }
+        animate={active ? { scale: [1, 1.04, 1] } : { scale: 1 }}
         transition={
           active
-            ? { duration: 1.8, repeat: Infinity, repeatDelay: 2.5, ease: "easeInOut" }
-            : {}
+            ? { duration: 2.4, repeat: Infinity, repeatDelay: 1.2, ease: "easeInOut" }
+            : MOTION_TRANSITION.fast
         }
         className={cn(
-          "size-13 rounded-2xl flex items-center justify-center shrink-0 border transition-all duration-300",
+          "size-13 rounded-2xl flex items-center justify-center shrink-0 border",
           active
             ? "bg-warning/15 border-warning/40 text-warning shadow-[0_0_20px_oklch(var(--warning)/0.25)]"
             : "bg-muted/40 border-border text-muted-foreground/40"
@@ -236,6 +240,11 @@ export const StreakCard = React.memo(function StreakCard() {
   const percentAchieved = Math.round((todayCounts.total / target) * 100);
   const isAchieved = todayCounts.total >= target;
 
+  const openGoal = React.useCallback(() => {
+    haptic("light");
+    setDialogOpen(true);
+  }, []);
+
   const rings: [ActivityRingData, ActivityRingData, ActivityRingData] = React.useMemo(() => {
     return [
       {
@@ -264,8 +273,9 @@ export const StreakCard = React.memo(function StreakCard() {
 
   return (
     <OslerCard padding="roomy" className="mb-6 overflow-hidden">
-      {/* Top section: Two columns on desktop (Streak + Goal Rings summary) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center mb-6 pb-6 border-b border-border/70">
+      {/* Top section: two columns (streak + daily goal). Flat layout on one
+          material — no nested translucent panel stacked inside the card. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center mb-6 pb-6 border-b border-border">
         {/* Left column: Flame + Streak Stats */}
         <div className="lg:col-span-5 flex items-start gap-4 flex-wrap text-start">
           <FlameCounter count={data.current} active={data.activeToday || data.current > 0} />
@@ -285,8 +295,8 @@ export const StreakCard = React.memo(function StreakCard() {
           </div>
         </div>
 
-        {/* Right column: Apple Health style Activity Rings & Goal achievement */}
-        <div className="lg:col-span-7 flex items-center justify-between sm:justify-end gap-5 bg-muted/20 rounded-xl p-3.5 sm:p-4 border border-border/50">
+        {/* Right column: daily goal summary + activity rings (one control) */}
+        <div className="lg:col-span-7 flex items-center justify-between sm:justify-end gap-5 py-1">
           <div className="flex flex-col text-start justify-center gap-1">
             <div className="flex items-center gap-1.5">
               <Target className="size-4 text-primary" />
@@ -315,29 +325,39 @@ export const StreakCard = React.memo(function StreakCard() {
               <span>·</span>
               <button
                 type="button"
-                onClick={() => setDialogOpen(true)}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+                onClick={openGoal}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-4 active:scale-[0.97] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-sm"
               >
                 {t("dash.goal.changeGoal")}
               </button>
             </div>
           </div>
 
-          <ActivityRings
-            rings={rings}
-            size={96}
-            strokeWidth={8}
-            gap={3}
-            onClick={() => setDialogOpen(true)}
-            className="hover:scale-105 transition-transform"
-          />
+          <motion.button
+            type="button"
+            onClick={openGoal}
+            aria-label={t("dash.goal.title")}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            transition={MOTION_SPRING.snappy}
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <ActivityRings
+              rings={rings}
+              size={96}
+              strokeWidth={8}
+              gap={3}
+            />
+          </motion.button>
         </div>
       </div>
 
       {/* 48h restore-window indicator when the streak is at risk */}
-      {!data.activeToday && data.current > 0 && data.restoreDeadlineMs != null && (
-        <StreakRestoreBanner deadline={data.restoreDeadlineMs} />
-      )}
+      <AnimatePresence initial={false}>
+        {!data.activeToday && data.current > 0 && data.restoreDeadlineMs != null && (
+          <StreakRestoreBanner key="restore" deadline={data.restoreDeadlineMs} />
+        )}
+      </AnimatePresence>
 
       {/* Activity label + Bar chart */}
       <div className="flex items-center justify-between mb-3">
@@ -394,6 +414,7 @@ export function StreakRestoreBanner({ deadline }: { deadline: number }) {
     <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
       transition={MOTION_TRANSITION.normal}
       className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5"
     >
@@ -403,9 +424,11 @@ export function StreakRestoreBanner({ deadline }: { deadline: number }) {
         <span className="ms-auto tabular-nums">{t("dash.streak.timeLeft", { time })}</span>
       </div>
       <div className="mt-2 h-1 rounded-full bg-warning/20 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-warning transition-[width] duration-500"
-          style={{ width: `${Math.round(fraction * 100)}%` }}
+        <motion.div
+          className="h-full w-full rounded-full bg-warning origin-left rtl:origin-right"
+          initial={false}
+          animate={{ scaleX: fraction }}
+          transition={MOTION_TRANSITION.normal}
         />
       </div>
       <p className="mt-1.5 text-[11px] text-warning/80">{t("dash.streak.keepGoing")}</p>
