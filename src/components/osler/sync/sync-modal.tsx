@@ -49,6 +49,7 @@ export function SyncModal({
         >
           <motion.div
             className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-xl border border-border bg-card shadow-e4 overflow-hidden"
+            data-frost-panel=""
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}

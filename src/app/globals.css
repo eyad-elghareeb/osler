@@ -1333,6 +1333,55 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 [data-perf="low"] [class*="backdrop-blur"][class*="to-card/"] {
   background: var(--background) !important;
 }
+/* ── Frosted modal material (opt-in) ─────────────────────────────────────
+ * Most modality surfaces are SOLID (bg-card / bg-popover), so the data-blur
+ * "off" strip above has nothing to strip there — the material must be
+ * APPLIED when the user opts in. Keyed off the data-slot attributes the
+ * shadcn primitives already set (same hook as the shared easing rule), so
+ * every dialog, alert, sheet, drawer, popover, dropdown, select, menu,
+ * hover-card, tooltip and toast is frosted without per-component edits.
+ * Guarded by @supports so browsers without backdrop-filter keep opaque
+ * surfaces, and :not([data-perf="low"]) so weak hardware never blurs. */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  /* Dim scrims frost the page behind every modal/sheet/lightbox. */
+  [data-blur="on"]:not([data-perf="low"]) [data-slot$="-overlay"],
+  [data-blur="on"]:not([data-perf="low"]) [data-frost-scrim] {
+    backdrop-filter: blur(8px) saturate(1.2);
+    -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  }
+  /* Modal bodies (dialog / alert / sheet / hand-rolled panels). */
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="dialog-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="alert-dialog-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="sheet-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-frost-panel] {
+    background: color-mix(in oklab, var(--card) 88%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  }
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="drawer-content"] {
+    background: color-mix(in oklab, var(--background) 88%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  }
+  /* Floating surfaces (popovers, menus, selects, tooltips, toasts). */
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="popover-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="select-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="dropdown-menu-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="dropdown-menu-sub-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="context-menu-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="context-menu-sub-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="menubar-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="menubar-sub-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="hover-card-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="navigation-menu-viewport"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="navigation-menu-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="tooltip-content"],
+  [data-blur="on"]:not([data-perf="low"]) [data-slot="toast"] {
+    background: color-mix(in oklab, var(--popover) 92%, transparent);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  }
+}
 
 /* ── Reduced-transparency preference ─────────────────────────────────────
  * Users who disable transparency at the OS level get frostier surfaces:
@@ -1348,6 +1397,49 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   }
   [class*="bg-card/"] { background-color: var(--card) !important; }
   [class*="bg-background/"] { background-color: var(--background) !important; }
+  /* The opt-in frosted modal material (see "Frosted modal material") must
+   * also resolve to solid tokens here — translucent color-mix backgrounds
+   * bleed content through when the backdrop pass is dropped. */
+  [data-blur="on"] [data-slot$="-overlay"],
+  [data-blur="on"] [data-frost-scrim],
+  [data-blur="on"] [data-slot="dialog-content"],
+  [data-blur="on"] [data-slot="alert-dialog-content"],
+  [data-blur="on"] [data-slot="sheet-content"],
+  [data-blur="on"] [data-frost-panel],
+  [data-blur="on"] [data-slot="popover-content"],
+  [data-blur="on"] [data-slot="select-content"],
+  [data-blur="on"] [data-slot="dropdown-menu-content"],
+  [data-blur="on"] [data-slot="dropdown-menu-sub-content"],
+  [data-blur="on"] [data-slot="context-menu-content"],
+  [data-blur="on"] [data-slot="context-menu-sub-content"],
+  [data-blur="on"] [data-slot="menubar-content"],
+  [data-blur="on"] [data-slot="menubar-sub-content"],
+  [data-blur="on"] [data-slot="hover-card-content"],
+  [data-blur="on"] [data-slot="navigation-menu-viewport"],
+  [data-blur="on"] [data-slot="navigation-menu-content"],
+  [data-blur="on"] [data-slot="tooltip-content"],
+  [data-blur="on"] [data-slot="toast"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  [data-blur="on"] [data-slot="dialog-content"],
+  [data-blur="on"] [data-slot="alert-dialog-content"],
+  [data-blur="on"] [data-slot="sheet-content"],
+  [data-blur="on"] [data-frost-panel] { background: var(--card) !important; }
+  [data-blur="on"] [data-slot="drawer-content"] { background: var(--background) !important; }
+  [data-blur="on"] [data-slot="popover-content"],
+  [data-blur="on"] [data-slot="select-content"],
+  [data-blur="on"] [data-slot="dropdown-menu-content"],
+  [data-blur="on"] [data-slot="dropdown-menu-sub-content"],
+  [data-blur="on"] [data-slot="context-menu-content"],
+  [data-blur="on"] [data-slot="context-menu-sub-content"],
+  [data-blur="on"] [data-slot="menubar-content"],
+  [data-blur="on"] [data-slot="menubar-sub-content"],
+  [data-blur="on"] [data-slot="hover-card-content"],
+  [data-blur="on"] [data-slot="navigation-menu-viewport"],
+  [data-blur="on"] [data-slot="navigation-menu-content"],
+  [data-blur="on"] [data-slot="tooltip-content"],
+  [data-blur="on"] [data-slot="toast"] { background: var(--popover) !important; }
 }
 
 /* ── Increased-contrast preference ───────────────────────────────────────

@@ -160,6 +160,7 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
       exit={{ opacity: 0 }}
       transition={MOTION_TRANSITION.fast}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 select-none"
+      data-frost-scrim=""
       style={{ touchAction: "none" }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
