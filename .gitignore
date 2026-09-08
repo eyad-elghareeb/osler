@@ -71,3 +71,4 @@ output/playwright
 .playwright-cli
 .cortexkit/.gitignore
 screenshots
+.eslintcache
