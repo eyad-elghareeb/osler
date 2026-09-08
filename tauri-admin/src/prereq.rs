@@ -1,7 +1,7 @@
 // prereq.rs — System prerequisites verification and automated installer for Osler Admin.
 //
 // Checks for:
-//   1. Node.js (version >= 18)
+//   1. Node.js (version >= 20.9 — Next.js 16's minimum)
 //   2. Git CLI
 //   3. Cloudflare Wrangler CLI (global or project-local)
 //   4. Cloudflare Authentication status (via wrangler whoami / env token)
@@ -127,21 +127,27 @@ fn check_node() -> PrereqStatus {
     let out = run_cmd("node", &["-v"]);
     let (installed, ver, sat, det) = match out {
         Some(v) if v.starts_with('v') => {
-            let major = v.trim_start_matches('v').split('.').next()
-                .and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-            let sat = major >= 18;
+            let nums: Vec<u32> = v.trim_start_matches('v')
+                .split('.')
+                .map(|s| s.trim().parse::<u32>().unwrap_or(0))
+                .collect();
+            let major = nums.first().copied().unwrap_or(0);
+            let minor = nums.get(1).copied().unwrap_or(0);
+            // Next.js 16 (the frontend build) requires Node >= 20.9 — a plain
+            // major check would pass Node 18 and fail later at `npm run build`.
+            let sat = (major, minor) >= (20, 9);
             let det = if sat { format!("Node.js {} is ready", v) }
-                      else   { format!("Node.js {} is too old (requires >= v18.0.0)", v) };
+                      else   { format!("Node.js {} is too old (requires >= v20.9.0)", v) };
             (true, v, sat, det)
         }
         _ => (false, "None".into(), false, "Node.js is not installed or not in PATH".into()),
     };
     PrereqStatus { name: "node".into(), label: "Node.js (Runtime)".into(), installed, version: ver,
-        required_version: ">= 18.0.0".into(), satisfied: sat, details: det, fixable: false }
+        required_version: ">= 20.9.0".into(), satisfied: sat, details: det, fixable: false }
 }
 fn node_error() -> PrereqStatus {
     PrereqStatus { name: "node".into(), label: "Node.js (Runtime)".into(), installed: false,
-        version: "None".into(), required_version: ">= 18.0.0".into(), satisfied: false,
+        version: "None".into(), required_version: ">= 20.9.0".into(), satisfied: false,
         details: "Check panicked".into(), fixable: false }
 }
 
