@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BarChart3, BookOpen, FileText, Home, ListChecks, RotateCcw, Timer } from "lucide-react";
+import { BarChart3, BookOpen, Check, FileText, Home, ListChecks, RotateCcw, Timer, Trophy, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/osler/native";
 import { useCountUp } from "@/hooks/use-count-up";
@@ -13,7 +13,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { generateResultsPdf, downloadPdf } from "@/lib/osler/pdf";
 import { type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
 import { PdfExportDialog } from "@/components/osler/lazy-tools";
-import { MetricBar } from "@/components/osler/ui-primitives";
+import { MetricBar, PageHeader, SectionHeading } from "@/components/osler/ui-primitives";
 import { SparkTrend } from "@/components/osler/analytics-spark";
 import { choiceLetter, SessionData, SummaryRow, formatTime, formatMs } from "./shared";
 import {
@@ -248,30 +248,31 @@ export function ResultsView({
 
   return (
     <div className="osler-page">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("qbank.home.testResults")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {item.title} · {t("qbank.home.questions", { n: total })} ·{" "}
-              {session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => { haptic("selection"); onReview(); }} className="rounded-xl">
-              <BookOpen className="size-4 me-1.5" /> {t("qbank.review.title")}
-            </Button>
-            <Button variant="outline" onClick={() => setPdfDialogOpen(true)} className="rounded-xl">
-              <FileText className="size-4 me-1.5" /> {t("pdf.exportResults")}
-            </Button>
-            <Button variant="outline" onClick={onRestart} className="rounded-xl">
-              <RotateCcw className="size-4 me-1.5" /> {t("qbank.home.restart")}
-            </Button>
-            <Button variant="outline" onClick={onGoHome} className="rounded-xl">
-              <Home className="size-4 me-1.5" /> {t("qbank.home.backToQBank")}
-            </Button>
-          </div>
-        </div>
+      <div className="osler-page__inner space-y-4">
+        <PageHeader
+          inline
+          inlineIcon={Trophy}
+          title={t("qbank.home.testResults")}
+          subtitle={`${item.title} · ${t("qbank.home.questions", { n: total })} · ${
+            session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")
+          }`}
+          actions={
+            <>
+              <Button onClick={() => { haptic("selection"); onReview(); }}>
+                <BookOpen className="size-4 me-1.5" /> {t("qbank.review.title")}
+              </Button>
+              <Button variant="outline" onClick={() => setPdfDialogOpen(true)}>
+                <FileText className="size-4 me-1.5" /> {t("pdf.exportResults")}
+              </Button>
+              <Button variant="outline" onClick={onRestart}>
+                <RotateCcw className="size-4 me-1.5" /> {t("qbank.home.restart")}
+              </Button>
+              <Button variant="outline" onClick={onGoHome}>
+                <Home className="size-4 me-1.5" /> {t("qbank.home.backToQBank")}
+              </Button>
+            </>
+          }
+        />
 
         <div className="osler-card--default">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
@@ -340,7 +341,7 @@ export function ResultsView({
         </div>
 
         <div className="osler-card--default">
-          <h3 className="text-sm font-semibold mb-3">{t("qbank.home.scoreDistribution")}</h3>
+          <SectionHeading className="mb-3">{t("qbank.home.scoreDistribution")}</SectionHeading>
           <div className="flex h-3 rounded-full overflow-hidden bg-muted">
             <div
               className="bg-success"
@@ -370,9 +371,7 @@ export function ResultsView({
 
         {difficulty.length > 0 || topics.length > 0 ? (
           <div className="osler-card--default">
-            <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-              <BarChart3 className="size-4 text-primary" /> {t("qbank.results.performance")}
-            </h3>
+            <SectionHeading icon={BarChart3} className="mb-4">{t("qbank.results.performance")}</SectionHeading>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {difficulty.length > 0 && (
                 <div>
@@ -408,16 +407,19 @@ export function ResultsView({
 
         {timedPacing.length > 0 && (
           <div className="osler-card--default">
-            <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
-              <h3 className="text-base font-semibold flex items-center gap-2">
-                <Timer className="size-4 text-primary" /> {t("qbank.results.pacing")}
-              </h3>
-              {slowest && slowest.ms != null && (
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {t("qbank.results.slowest")} · Q{slowest.index + 1} · {formatMs(slowest.ms)}
-                </span>
-              )}
-            </div>
+            <SectionHeading
+              icon={Timer}
+              className="mb-4"
+              actions={
+                slowest && slowest.ms != null ? (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {t("qbank.results.slowest")} · Q{slowest.index + 1} · {formatMs(slowest.ms)}
+                  </span>
+                ) : undefined
+              }
+            >
+              {t("qbank.results.pacing")}
+            </SectionHeading>
             <div
               className="flex items-end gap-[3px] h-16"
               role="img"
@@ -454,9 +456,7 @@ export function ResultsView({
         )}
 
         <div className="osler-card--default">
-          <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <ListChecks className="size-4 text-primary" /> {t("qbank.home.questionReview")}
-          </h3>
+          <SectionHeading icon={ListChecks} className="mb-3">{t("qbank.home.questionReview")}</SectionHeading>
           <div className="space-y-2">
             {session.questions.map((q, i) => {
               const ans = session.answers[i];
@@ -479,7 +479,7 @@ export function ResultsView({
                           : "bg-muted text-muted-foreground"
                       )}
                     >
-                      {submittedQ ? (isCorrect ? "✓" : "✗") : i + 1}
+                      {submittedQ ? (isCorrect ? <Check className="size-3.5" /> : <X className="size-3.5" />) : i + 1}
                     </div>
                     <p className="text-xs line-clamp-2 flex-1">{q.stem}</p>
                   </div>
