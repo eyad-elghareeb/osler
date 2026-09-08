@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Sparkles, FileArchive, Vibrate, SwitchCamera, Sun, Wifi, Info, User } from "lucide-react";
+import { Sparkles, FileArchive, Vibrate, SwitchCamera, Sun, Wifi, Info, User, GlassWater } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileSyncPanel } from "@/components/osler/sync/file-sync-panel";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
-import { isHapticsEnabled, setHapticsEnabled, haptic, isViewTransitionsSupported, isWakeLockSupported } from "@/lib/osler/native";
+import { isHapticsEnabled, setHapticsEnabled, haptic, isViewTransitionsSupported, isWakeLockSupported, isBlurEffectsEnabled, setBlurEffectsEnabled } from "@/lib/osler/native";
 import { isAnimationsEnabled, setAnimationsEnabled } from "@/lib/osler/motion";
 export function BackupSettingsSection() {
   const { t } = useI18n();
@@ -33,12 +33,14 @@ export function NativeSettingsSection() {
   const [hapticsOn, setHapticsOn] = React.useState(false);
   const [vtOn, setVtOn] = React.useState(false);
   const [animationsOn, setAnimationsOn] = React.useState(true);
+  const [blurOn, setBlurOn] = React.useState(false);
 
   // Hydrate initial state from the lib helpers.
   React.useEffect(() => {
     setHapticsOn(isHapticsEnabled());
     setVtOn(isViewTransitionsSupported());
     setAnimationsOn(isAnimationsEnabled());
+    setBlurOn(isBlurEffectsEnabled());
   }, []);
 
   const toggleHaptics = () => {
@@ -53,6 +55,13 @@ export function NativeSettingsSection() {
     const next = !animationsOn;
     setAnimationsOn(next);
     setAnimationsEnabled(next);
+    haptic(next ? "success" : "light");
+  };
+
+  const toggleBlur = () => {
+    const next = !blurOn;
+    setBlurOn(next);
+    setBlurEffectsEnabled(next);
     haptic(next ? "success" : "light");
   };
 
@@ -155,6 +164,31 @@ export function NativeSettingsSection() {
             {!animationsOn && (
               <p className="text-[11px] text-muted-foreground/70 mt-2">
                 {t("animations.reduceHint")}
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* Blur effects (frosted surfaces) */}
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <GlassWater className="size-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold">{t("native.blur.title")}</h3>
+            <p className="text-xs text-muted-foreground mt-1 mb-3 leading-relaxed">
+              {t("native.blur.desc")}
+            </p>
+            <ToggleSwitch
+              checked={blurOn}
+              onChange={toggleBlur}
+              label={t("native.blur.enable")}
+            />
+            {!blurOn && (
+              <p className="text-[11px] text-muted-foreground/70 mt-2">
+                {t("native.blur.offHint")}
               </p>
             )}
           </div>

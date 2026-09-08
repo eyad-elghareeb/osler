@@ -1578,6 +1578,10 @@ export const en = {
     "native.wakeLock.unsupported": "Wake lock not supported on this device",
     "native.wakeLock.released": "Released",
     "native.wakeLock.acquired": "Acquired",
+    "native.blur.title": "Frosted surfaces",
+    "native.blur.desc": "Render blurred translucent backgrounds behind modals, panels, and top bars — the frosted-glass material.",
+    "native.blur.enable": "Enable blur effects",
+    "native.blur.offHint": "Blur is off by default for the best performance — surfaces render solid instead.",
 
     /* ── Global search ──────────────────────────────────────────────── */
     "search.globalPlaceholder": "Search everything — articles, decks, videos, settings…",

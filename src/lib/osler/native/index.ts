@@ -14,3 +14,4 @@ export * from "./view-transitions";
 export * from "./network-info";
 export * from "./wake-lock";
 export * from "./permissions";
+export * from "./blur-effects";

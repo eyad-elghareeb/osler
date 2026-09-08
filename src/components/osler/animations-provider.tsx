@@ -21,6 +21,7 @@ import {
   isAnimationsEnabled,
   MOTION_TRANSITION,
 } from "@/lib/osler/motion";
+import { isBlurEffectsEnabled, applyBlurEffectsFlag } from "@/lib/osler/native";
 
 export function AnimationsProvider({ children }: { children: React.ReactNode }) {
   const enabled = useAnimationsEnabled();
@@ -50,6 +51,13 @@ export function AnimationsProvider({ children }: { children: React.ReactNode }) 
       (nav.deviceMemory !== undefined && nav.deviceMemory <= 2) ||
       nav.connection?.saveData === true;
     if (weak) document.documentElement.setAttribute("data-perf", "low");
+  }, []);
+
+  // Blur effects preference (once): <html> ships with data-blur="off" so the
+  // frost-free default applies before first paint; flip it right after
+  // hydration for users who opted in via Settings → Native Features.
+  React.useEffect(() => {
+    applyBlurEffectsFlag(isBlurEffectsEnabled());
   }, []);
 
   return (

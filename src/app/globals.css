@@ -1309,6 +1309,31 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 [data-perf="low"] [class*="bg-popover/"] { background-color: var(--popover) !important; }
 [data-perf="low"] [class*="bg-background/"] { background-color: var(--background) !important; }
 
+/* ── Blur effects preference ─────────────────────────────────────────────
+ * Frosted (backdrop-blur) surfaces are OFF by default — the preference is
+ * opt-in from Settings → Native Features. src/lib/osler/native/blur-effects.ts
+ * sets data-blur="on|off" on <html> ("off" ships statically so the frost-free
+ * default applies before first paint). When off, every blurred material drops
+ * its backdrop pass and translucent neutral surfaces resolve to solid tokens;
+ * accent tints (bg-primary/10) and dim scrims (bg-black/50) stay translucent —
+ * they're color, not material. !important beats component utilities since
+ * this is a global material override. */
+[data-blur="off"] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-blur="off"] [class*="bg-card/"] { background-color: var(--card) !important; }
+[data-blur="off"] [class*="bg-popover/"] { background-color: var(--popover) !important; }
+[data-blur="off"] [class*="bg-background/"] { background-color: var(--background) !important; }
+/* Full-screen gradient overlays that leaned on the blur pass for legibility
+ * (OSCE voice overlay: from-background via-background to-card/40) resolve to
+ * their solid base token so conversation content never shows through
+ * un-blurred behind the orb. Same-element class chaining, not descendant. */
+[data-blur="off"] [class*="backdrop-blur"][class*="to-card/"],
+[data-perf="low"] [class*="backdrop-blur"][class*="to-card/"] {
+  background: var(--background) !important;
+}
+
 /* ── Reduced-transparency preference ─────────────────────────────────────
  * Users who disable transparency at the OS level get frostier surfaces:
  * every blurred material drops its backdrop pass and its translucent

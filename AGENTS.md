@@ -536,7 +536,7 @@ The UI language selector and the content-language filter both derive their optio
 - `src/components/osler/` — app-specific components (including `pdf-export-dialog.tsx` for PDF customization)
 - `src/components/ui/` — shadcn/ui primitives (49 files, do not add custom logic here)
 - `src/lib/osler/` — business logic, types, data loading, storage, grading. Larger subsystems are folder modules with a single public barrel — e.g. the PDF engine lives in `src/lib/osler/pdf/` (`tokens` / `text` / `fonts` / `icons` / `layout` / `types` / `doc` / `generators/*`, lazy-loaded via `index.ts`). See also `arabic.ts`, `pdf-fonts.ts`.
-- `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useDisableBlur`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`, `useCountUp`
+- `src/hooks/` — shared React hooks: `useContentTree`, `useArticleHighlighter`, `useGestures`, `useContentCache`, `useQuizSettings`, `useResizableSidebar`, `useShortcuts` (`useShortcutBindings` / `useShortcutListener` / `useShortcutSequenceReset`), `useSwipeBackDismiss`, `useSwipeTabs`, `useSwipeGallery`, `useToast`, `usePlatform`, `useMobile`, `useNative`, `useCountUp`
 - `public/osler-content/` — folder-based content (see Content system)
 - `scripts/` — manifest generator and build helpers
 - `tauri-admin/` — separate Tauri desktop admin panel (Rust)
@@ -613,6 +613,7 @@ Osler is a PWA that should feel like a native app. The native-feature library li
 | `view-transitions.ts` | View Transitions API | `withViewTransition(() => setState(...), "forward")` for any view-level navigation. Direction is `forward` / `backward` / `none`. The `app-shell.tsx` `handleViewChange` wrapper is the canonical example. |
 | `network-info.ts` | Network Information API | `useNetworkInfo()` hook exposes `{ type, effectiveType, downlink, rtt, saveData, online }`. iOS Safari reports `available: false` — handle it. |
 | `wake-lock.ts` | Screen Wake Lock API | `acquireWakeLock(predicate)` / `releaseWakeLock()`. Auto re-acquires on visibility regained. Used in `videos-studio.tsx` player view. |
+| `blur-effects.ts` | (preference, no browser API) | `isBlurEffectsEnabled()` / `setBlurEffectsEnabled()` / `applyBlurEffectsFlag()`. Frosted (backdrop-blur) surfaces are OFF by default; opting in via Settings → Native Features sets `data-blur="on"` on `<html>` (globals.css resolves blurred materials to solid tokens when off). |
 | `permissions.ts` | Permissions API + getUserMedia | `queryMediaPermission(kind)` / `requestMediaPermission(kind)` for `microphone` / `camera`. Request must run on a user gesture; browsers without the descriptors (iOS Safari, Firefox) fall back to `"prompt"`. Used by the onboarding Permissions step; OSCE voice mode and the written-answer photo capture need these at runtime. |
 
 Rules:
