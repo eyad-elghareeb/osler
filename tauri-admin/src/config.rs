@@ -383,15 +383,34 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
 
     // ── 4. Optional Cloudflare Worker configuration ───────────────────
     if let Some(cloud) = opts.cloud.as_ref().filter(|cloud| cloud.enabled) {
+        let worker_name = sanitize_worker_name(&cloud.worker_name, &opts.short_name);
         let worker_config = configure_worker_toml(
             CLOUDFLARE_WRANGLER,
-            &sanitize_worker_name(&cloud.worker_name, &opts.short_name),
+            &worker_name,
             &cloud.d1_name,
             &cloud.r2_name,
             &cloud.allowed_origin,
         );
         let worker_toml = target.join("cloudflare/worker/wrangler.toml");
         fs::write(worker_toml, worker_config).map_err(|e| e.to_string())?;
+
+        // Unique relay Worker name: every generated instance in the same
+        // Cloudflare account deploys its own email relay, so the fixed
+        // "osler-email" template name would make instances overwrite each
+        // other's relay. setup.rs reads this name when wiring the binding.
+        let email_toml_path = target.join("cloudflare/email-worker/wrangler.toml");
+        if email_toml_path.is_file() {
+            // "-email" suffix must fit Cloudflare's 63-char Worker name limit.
+            let base: String = worker_name.chars().take(57).collect();
+            let relay_name = format!("{base}-email").trim_end_matches('-').to_string();
+            let email_toml = fs::read_to_string(&email_toml_path).map_err(|e| e.to_string())?;
+            fs::write(
+                &email_toml_path,
+                email_toml.replacen("name = \"osler-email\"", &format!("name = \"{relay_name}\""), 1),
+            )
+            .map_err(|e| e.to_string())?;
+            created_files.push("cloudflare/email-worker/wrangler.toml".into());
+        }
     }
 
     // ── 5. README.md & .gitignore ───────────────────────────────────
