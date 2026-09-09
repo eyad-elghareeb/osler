@@ -7,6 +7,7 @@ import { buildQuestionPool, filterPoolByTags, filterPoolByProgress, filterPoolBy
 import type { AnyContent, EngineType, ContentTreeNode } from "@/lib/osler/types";
 import { sessions, type WrittenDraft } from "@/lib/osler/storage";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -125,7 +126,10 @@ export function CreateTestTab({
   // Tag filter operates on question-level tags (P2-3).
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   // Progress-mode filter (P4-2): "all" | "wrong" | "flagged".
-  const [onlyMode, setOnlyMode] = React.useState<OnlyMode>("new");
+  // Default to "all" so finished packs can always start a new cycle — a
+  // "new only" default filters to zero matches after the first full pass and
+  // leaves the Start button disabled with no obvious way back.
+  const [onlyMode, setOnlyMode] = React.useState<OnlyMode>("all");
   // Order: sequential | random.
   const [order, setOrder] = React.useState<OrderMode>("sequential");
   // Stepper value (P4-1).
@@ -288,15 +292,22 @@ export function CreateTestTab({
     if (next.length !== selectedTags.length) setSelectedTags(next);
   }, [availableTags, selectedTags]);
 
-  // Final pool after all filters are applied.
-  const filteredPool = React.useMemo(() => {
+  // Final pool after all filters are applied. poolBeforeProgress keeps the
+  // pool without the progress filter so an empty progress result can fall
+  // back to a full redo (new cycle) instead of dead-ending the builder.
+  const poolBeforeProgress = React.useMemo(() => {
     let pool = filterPoolByTags(mergedPool, selectedTags);
     if (selectedChapterIds.length > 0) pool = filterPoolByChapters(pool, selectedChapterIds);
     if (questionType !== "all") pool = filterPoolByQuestionType(pool, questionType);
     if (difficulty !== "all") pool = filterPoolByDifficulty(pool, difficulty);
-    pool = filterPoolByProgress(pool, onlyMode);
     return pool;
-  }, [mergedPool, selectedTags, selectedChapterIds, questionType, difficulty, onlyMode]);
+  }, [mergedPool, selectedTags, selectedChapterIds, questionType, difficulty]);
+
+  const filteredPool = React.useMemo(() => (
+    filterPoolByProgress(poolBeforeProgress, onlyMode)
+  ), [poolBeforeProgress, onlyMode]);
+
+  const progressEmptied = poolBeforeProgress.length > 0 && filteredPool.length === 0;
 
   const totalAvailable = filteredPool.length;
   const desiredCount = Math.max(1, Math.min(parseInt(countInput) || 1, Math.max(1, totalAvailable)));
@@ -351,7 +362,19 @@ export function CreateTestTab({
       return;
     }
     if (mergedPool.length === 0) return;
-    const finalPool = pickQuestions(filteredPool, desiredCount, order);
+    // An empty progress filter never blocks a redo: fall back to the pool
+    // without the progress filter (new cycle) so finished content can always
+    // start again. Other filters (tags/chapters/type/difficulty) still block
+    // when they match nothing — those mean "no such questions exist".
+    let workingPool = filteredPool;
+    let effectiveMode = onlyMode;
+    if (workingPool.length === 0 && poolBeforeProgress.length > 0) {
+      workingPool = poolBeforeProgress;
+      effectiveMode = "all";
+      toast({ title: t("qbank.create.filterEmptyTitle"), description: t("qbank.create.filterEmptyDesc") });
+    }
+    const effectiveCount = Math.max(1, Math.min(parseInt(countInput) || workingPool.length, workingPool.length));
+    const finalPool = pickQuestions(workingPool, effectiveCount, order);
     if (finalPool.length === 0) return;
     // The session's engine — derived from the final pool's composition so
     // mixed packs (and any mcq+written combination) land on "mixed".
@@ -370,10 +393,10 @@ export function CreateTestTab({
       engine,
       mode: testMode,
       timerMinutes: testMode === "timed"
-        ? Math.max(1, Math.min(720, parseInt(timerMinutes, 10) || desiredCount))
+        ? Math.max(1, Math.min(720, parseInt(timerMinutes, 10) || effectiveCount))
         : undefined,
       tagsFilter: selectedTags,
-      onlyMode,
+      onlyMode: effectiveMode,
     });
   };
 
@@ -876,7 +899,7 @@ export function CreateTestTab({
               <SummaryRow label={t("qbank.home.testMode")} value={testMode === "timed" ? t("qbank.home.timed") : t("qbank.home.tutor")} />
               <SummaryRow
                 label={t("qbank.home.questionsLabel")}
-                value={totalAvailable > 0 ? String(desiredCount) : "—"}
+                value={totalAvailable > 0 || progressEmptied ? String(progressEmptied ? Math.max(1, Math.min(parseInt(countInput) || poolBeforeProgress.length, poolBeforeProgress.length)) : desiredCount) : "—"}
               />
               {testMode === "timed" && (
                 <SummaryRow
@@ -890,7 +913,7 @@ export function CreateTestTab({
               />
               <SummaryRow
                 label={t("qbank.home.totalAvailable")}
-                value={String(totalAvailable)}
+                value={String(progressEmptied ? poolBeforeProgress.length : totalAvailable)}
               />
               <SummaryRow
                 label={t("qbank.home.tags")}
@@ -905,7 +928,7 @@ export function CreateTestTab({
             <div className="mt-5 pt-4 border-t border-border">
               <Button
                 onClick={handleCreateTest}
-                disabled={selectedEntries.length === 0 || totalAvailable === 0}
+                disabled={selectedEntries.length === 0 || (totalAvailable === 0 && poolBeforeProgress.length === 0)}
                 className="w-full h-11 text-sm font-semibold rounded-xl"
               >
                 <Plus className="size-4 me-2" />
@@ -913,7 +936,7 @@ export function CreateTestTab({
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-2">
                 {selectedEntries.length > 0
-                  ? t("qbank.create.availableAfterFilter", { n: totalAvailable })
+                  ? t("qbank.create.availableAfterFilter", { n: progressEmptied ? poolBeforeProgress.length : totalAvailable })
                   : t("qbank.home.noItems")}
               </p>
             </div>
@@ -949,8 +972,23 @@ export function CreateTestTab({
                     +{selectedEntries.length - 20} more
                   </p>
                 )}
-              </div>
-            </OslerCard>
+          </div>
+          {progressEmptied && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5">
+              <p className="text-xs text-muted-foreground flex-1 min-w-40">
+                {t("qbank.create.filterEmptyTitle")} — {t("qbank.create.filterEmptyDesc")}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => { haptic("selection"); setOnlyMode("all"); }}
+              >
+                {t("qbank.create.filterEmptyShowAll")}
+              </Button>
+            </div>
+          )}
+        </OslerCard>
           )}
 
           <OslerCard>

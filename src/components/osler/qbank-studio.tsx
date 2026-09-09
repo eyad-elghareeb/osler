@@ -164,7 +164,12 @@ export function QBankStudio({
   });
   const [startDialogOpen, setStartDialogOpen] = React.useState(false);
   const [startPromptUid, setStartPromptUid] = React.useState<string | null>(null);
-  const [launchOnlyMode, setLaunchOnlyMode] = React.useState<OnlyMode>("new");
+  // Default to "all" (not "new") so a finished pack can always be reopened
+  // for a redo — a "new only" default filters to zero matches after the first
+  // full pass and refuses to open. Users can still opt into "new"/"wrong"/
+  // "flagged" explicitly; an empty progress filter falls back to the full
+  // pool (new cycle) in startSession below instead of aborting.
+  const [launchOnlyMode, setLaunchOnlyMode] = React.useState<OnlyMode>("all");
   const [, force] = React.useReducer((x) => x + 1, 0);
   const pendingQuestionLimitRef = React.useRef(0);
   const { t } = useI18n();
@@ -676,15 +681,14 @@ export function QBankStudio({
       // Apply progress filter (new/wrong/flagged/all) before picking questions.
       // Pass the pack uid as fallbackUid so single-pack paths (where
       // sourceUid may not be stamped on every question) still resolve
-      // progress records correctly.
+      // progress records correctly. An empty result NEVER aborts the launch:
+      // the pack is reopened with the full pre-filter pool (new cycle) so
+      // finished content can always be redone — the filter just informs.
       if (options.onlyMode && options.onlyMode !== "all") {
         const filtered = filterPoolByProgress(questions as PoolQuestion[], options.onlyMode, item.uid);
         if (filtered.length > 0) questions = filtered as typeof questions;
         else {
-          // No questions matched the filter — inform the user instead of
-          // silently falling back to the full pool.
-          toast({ title: "No matching questions", variant: "destructive", description: "No questions found for the selected filter. Try a different filter or start with all questions." });
-          return;
+          toast({ title: t("qbank.create.filterEmptyTitle"), description: t("qbank.create.filterEmptyDesc") });
         }
       }
       if (options.maxQuestions && options.maxQuestions > 0 && options.maxQuestions < questions.length) {
@@ -814,12 +818,17 @@ export function QBankStudio({
     if (!activeItem || !activeContent) return;
     setTestMode(options.mode);
     setStartDialogOpen(false);
+    // Quiz packs hide the progress picker (SessionStartDialog only shows it
+    // for bank/written/mixed), so a stale "new"/"wrong" launchOnlyMode from a
+    // previously opened bank pack must not leak into the quiz launch and
+    // filter its pool to zero. Quizzes always start with the full pool.
+    const isBankLike = activeContent.type === "bank" || activeContent.type === "written" || activeContent.type === "mixed";
     startSession(activeItem, activeContent, {
       maxQuestions: options.questionCount,
       order: options.order,
       mode: options.mode,
       timerMinutes: options.timerMinutes,
-      onlyMode: options.onlyMode,
+      onlyMode: isBankLike ? options.onlyMode : "all",
       chapters: options.chapters,
       questionType: options.questionType,
       difficulty: options.difficulty,
