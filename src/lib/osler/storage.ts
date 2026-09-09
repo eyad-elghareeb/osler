@@ -2105,7 +2105,7 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   fontWeight: 400,
   lineHeight: 1.7,
   textAffectsChoices: true,
-  autoSubmit: false,
+  autoSubmit: true,
   explanationMode: "split",
   questionAlign: "left",
 };
