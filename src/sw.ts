@@ -91,41 +91,35 @@ const runtimeCaching: RuntimeCaching[] = [
       ],
     }),
   },
-  // Content packs — split by cache-bust to save bandwidth + Worker hits:
-  //  • Versioned (?v=…): CacheFirst — immutable. First load caches; every
-  //    revisit hits local cache only. A publish bumps ?v, making a new cache
-  //    key that fetches fresh. Zero Worker/R2 cost for repeat views.
-  //  • Unversioned (initial boot before version known, fallback fetches):
-  //    StaleWhileRevalidate — serves local data immediately, then updates it
-  //    in the background so spotty networks never block an already visited
-  //    pack while content publishes still land without a hard refresh.
+  // Content packs — explicit downloads first, then network with runtime
+  // backfill, then the stale runtime copy. CONTENT_CACHE holds ONLY packs the
+  // user explicitly downloaded (populated by PRECACHE_CONTENT, never evicted
+  // automatically), so it is the offline source of truth: the bounded runtime
+  // cache below it may evict entries under storage pressure on low-end
+  // devices, which must never silently un-download a pack. Versioned (?v=…)
+  // URLs are immutable cache keys — a publish bumps ?v and the downloader
+  // evicts the superseded key, so no staleness handling is needed here.
   {
     matcher: ({ url }) => {
-      if (!url.searchParams.has("v")) return false;
       const p = url.pathname;
       return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
     },
-    handler: new CacheFirst({
-      cacheName: CONTENT_RUNTIME_CACHE,
-      plugins: [
-        cacheableResponse,
-        new ExpirationPlugin({ maxEntries: 180, maxAgeSeconds: 14 * DAY_SECONDS }),
-      ],
-    }),
-  },
-  {
-    matcher: ({ url }) => {
-      if (url.searchParams.has("v")) return false;
-      const p = url.pathname;
-      return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
+    handler: async ({ request }: { request: Request }) => {
+      const explicit = await (await caches.open(CONTENT_CACHE)).match(request);
+      if (explicit) return explicit;
+      try {
+        const res = await fetch(request);
+        if (res.ok) {
+          const runtime = await caches.open(CONTENT_RUNTIME_CACHE);
+          await runtime.put(request, res.clone());
+        }
+        return res;
+      } catch {
+        const stale = await (await caches.open(CONTENT_RUNTIME_CACHE)).match(request);
+        if (stale) return stale;
+        throw new Error("offline and not cached");
+      }
     },
-    handler: new StaleWhileRevalidate({
-      cacheName: CONTENT_RUNTIME_CACHE,
-      plugins: [
-        cacheableResponse,
-        new ExpirationPlugin({ maxEntries: 180, maxAgeSeconds: 14 * DAY_SECONDS }),
-      ],
-    }),
   },
   // Thumbnails + content images: stale-while-revalidate so a cached image
   // paints instantly and refreshes in the background. Offline-friendly and
@@ -281,8 +275,24 @@ async function precacheContent(
       continue;
     }
     try {
-      const existing = await cache.match(url);
-      if (existing) await cache.delete(url);
+      // Evict superseded copies of the same file: a publish bumps ?v=, which
+      // changes the cache key, so without this the explicit cache would keep
+      // one entry per published version without bound. Pathnames are unique
+      // per file (pack path + filename), so same-pathname eviction is safe.
+      const u = new URL(url, self.location.origin);
+      const keys = await cache.keys();
+      await Promise.all(
+        keys
+          .filter((k) => {
+            if (k.url === url) return true;
+            try {
+              return new URL(k.url).pathname === u.pathname;
+            } catch {
+              return false;
+            }
+          })
+          .map((k) => cache.delete(k))
+      );
       const res = await fetch(url);
       if (!res.ok) {
         results.push({ url, ok: false, status: res.status });

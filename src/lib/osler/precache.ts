@@ -2,14 +2,20 @@
 /**
  * Osler Background Precaching Engine
  *
- * Silently warms only the active route and the files it has already loaded.
+ * Warms the app shell (every route + the chunks the active page already
+ * loaded) and the content manifests on idle, so the PWA keeps working
+ * offline beyond the pages the user has already visited.
  *
- * Earlier versions fetched every route, parsed every page document, and pulled the
- * corresponding Next.js chunks after startup. That created a multi-megabyte burst
- * of network, parsing, cache writes, and memory use on every device. On constrained
- * Android PWAs this could cause tab eviction or storage-quota failures before a user
- * interacted with the app. The service worker continues to cache later visited
- * routes, while explicit pack downloads retain their full offline behaviour.
+ * Cost control (why not "fetch everything"):
+ *   - Route shells + manifests are kilobytes; chunks are discovered from the
+ *     active page's own performance entries (already downloaded, no re-fetch
+ *     to discover them) plus a bounded parse of each route shell.
+ *   - Everything goes through ONE PRECACHE_APP_SHELL message; the worker
+ *     fetches sequentially and skips URLs already cached.
+ *   - Data Saver (`navigator.connection.saveData`) skips chunks/manifests
+ *     and warms route shells only.
+ *   - Explicit pack downloads (useContentCache) remain the only path that
+ *     pins pack bodies offline; this engine never bulk-downloads content.
  */
 
 /** Small assets required for PWA identity and first-run configuration. */
@@ -19,6 +25,27 @@ export const CORE_STATIC_ASSETS = [
   "/assets/favicon.png",
   "/assets/icons/icon-192.png",
 ] as const;
+
+/** Every app route whose shell should be available offline. Trailing-slash
+ *  form matches the static export (and the SW page cache) exactly. */
+const APP_ROUTES = [
+  "/",
+  "/login/",
+  "/learn/",
+  "/library/",
+  "/qbank/",
+  "/flashcards/",
+  "/osce/",
+  "/videos/",
+  "/profile/",
+  "/settings/",
+] as const;
+
+/** Content category folders whose manifests count as site data. */
+const MANIFEST_FOLDERS = ["qbank", "flashcard", "osce", "library", "videos"] as const;
+
+/** Upper bound on warmed chunk/manifest URLs per session (shells excluded). */
+const MAX_WARM_URLS = 90;
 
 let isPrecaching = false;
 let isCompleted = false;
@@ -93,9 +120,34 @@ function sendPrecacheMessageToSW(urls: string[]) {
 }
 
 /**
- * Warm the active app shell after it is already interactive. The worker must be
- * controlling this page before we issue requests; otherwise this would duplicate
- * network work without retaining anything for offline use.
+ * Discover the JS/CSS chunks a route shell references, by fetching its static
+ * HTML and extracting /_next/static/* URLs. Bounded per route; failures
+ * (offline boot, missing route) yield no URLs rather than throwing.
+ */
+async function routeShellChunks(route: string, budget: number): Promise<string[]> {
+  if (budget <= 0) return [];
+  try {
+    const res = await fetch(route, { cache: "force-cache" });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const found = new Set<string>();
+    const re = /\/_next\/static\/[^"'\s)]+?\.(?:js|css)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null && found.size < budget) {
+      found.add(m[0]);
+    }
+    return [...found];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Warm the app shell after it is already interactive: every route shell, the
+ * chunks the active page already loaded, a bounded set of chunks referenced
+ * by the other route shells, and the content manifests. The worker must be
+ * controlling this page before we issue requests; otherwise this would
+ * duplicate network work without retaining anything for offline use.
  *
  * Idempotent: Subsequent calls in the same session return immediately unless `force: true`.
  */
@@ -107,17 +159,44 @@ export async function startBackgroundPrecaching(options?: { force?: boolean }): 
 
   return new Promise<void>((resolve) => {
     runOnIdle(() => {
-      try {
-        const route = window.location.pathname || "/";
-        sendPrecacheMessageToSW([...new Set([route, ...CORE_STATIC_ASSETS, ...activeRouteAssets()])]);
-        isCompleted = true;
-        notify(true);
-      } catch (err) {
-        console.warn("[precache] active route warming encountered an issue:", err);
-      } finally {
-        isPrecaching = false;
-        resolve();
-      }
+      void (async () => {
+        try {
+          const saveData =
+            typeof navigator !== "undefined" &&
+            (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+          const urls = new Set<string>([...APP_ROUTES, ...CORE_STATIC_ASSETS, ...activeRouteAssets()]);
+          if (!saveData) {
+            let budget = MAX_WARM_URLS;
+            for (const route of APP_ROUTES) {
+              if (budget <= 0) break;
+              for (const chunk of await routeShellChunks(route, Math.min(budget, 12))) {
+                urls.add(chunk);
+                budget--;
+              }
+            }
+            if (budget > 0) {
+              const { manifestUrl } = await import("./content-url");
+              for (const folder of MANIFEST_FOLDERS) {
+                if (budget <= 0) break;
+                try {
+                  urls.add(manifestUrl(folder));
+                  budget--;
+                } catch {
+                  // Config not ready — manifests warm on next navigation.
+                }
+              }
+            }
+          }
+          sendPrecacheMessageToSW([...urls]);
+          isCompleted = true;
+          notify(true);
+        } catch (err) {
+          console.warn("[precache] active route warming encountered an issue:", err);
+        } finally {
+          isPrecaching = false;
+          resolve();
+        }
+      })();
     });
   });
 }
