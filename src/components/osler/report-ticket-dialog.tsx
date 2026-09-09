@@ -113,7 +113,10 @@ export function ReportTicketDialog({
 
         <div className="grid gap-3 py-1">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-            <div className="grid gap-1.5">
+            {/* grid-cols-1 constrains the nested implicit column (auto-sized to
+                the trigger's max-content width) to the wrapper's real track, so
+                a wide select can't overflow into the neighbouring field. */}
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="ticket-category">{t("support.categoryLabel")}</Label>
               <Select value={category} onValueChange={(v) => { haptic("selection"); setCategory(v as TicketCategory); }}>
                 <SelectTrigger id="ticket-category" className="w-full [&_[data-slot=select-value]]:block [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate">
@@ -127,7 +130,7 @@ export function ReportTicketDialog({
               </Select>
             </div>
 
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="ticket-subject">{t("support.subjectLabel")}</Label>
               <Input
                 id="ticket-subject"
