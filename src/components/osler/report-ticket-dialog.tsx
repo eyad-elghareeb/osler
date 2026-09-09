@@ -116,7 +116,7 @@ export function ReportTicketDialog({
             <div className="grid gap-1.5">
               <Label htmlFor="ticket-category">{t("support.categoryLabel")}</Label>
               <Select value={category} onValueChange={(v) => { haptic("selection"); setCategory(v as TicketCategory); }}>
-                <SelectTrigger id="ticket-category" className="w-full">
+                <SelectTrigger id="ticket-category" className="w-full [&_[data-slot=select-value]]:block [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
