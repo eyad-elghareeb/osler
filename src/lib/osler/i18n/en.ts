@@ -9,6 +9,13 @@ export const en = {
     "app.name": "Osler",
     "app.tagline": "Medical Study Platform",
 
+    "offline.surface.title": "Not available offline yet",
+    "offline.surface.body": "This feature needs to load once while online. Reconnect, reopen the app, then try again.",
+    "errorBoundary.title": "Something went wrong",
+    "errorBoundary.body": "This screen failed to load. Your progress is safe — try again, or return to the dashboard.",
+    "errorBoundary.retry": "Try again",
+    "errorBoundary.home": "Back to dashboard",
+
     "common.search": "Search",
     "common.searchPlaceholder": "Search articles, conditions, drugs…",
     "common.cancel": "Cancel",

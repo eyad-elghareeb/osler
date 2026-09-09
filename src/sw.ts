@@ -162,7 +162,19 @@ const runtimeCaching: RuntimeCaching[] = [
       const explicit = await (await caches.open(CONTENT_CACHE)).match(request);
       if (explicit) return explicit;
       const fallback = url.searchParams.has("v") ? contentVersionedFallback : contentUnversionedFallback;
-      return fallback.handle({ request, event });
+      try {
+        return await fallback.handle({ request, event });
+      } catch (err) {
+        // Offline with a moved ?v= stamp (a publish landed between download
+        // and open): the exact-key strategies miss even explicitly downloaded
+        // packs. Serve the best cached variant of the same file — stale but
+        // usable — until the next online session revalidates.
+        for (const cacheName of [CONTENT_CACHE, CONTENT_RUNTIME_CACHE]) {
+          const hit = await (await caches.open(cacheName)).match(request, { ignoreSearch: true, ignoreVary: true });
+          if (hit) return hit;
+        }
+        throw err;
+      }
     },
   },
   // Thumbnails + content images: stale-while-revalidate so a cached image

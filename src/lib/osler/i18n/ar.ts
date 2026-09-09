@@ -6,6 +6,13 @@
  */
 
 export const ar = {
+    "offline.surface.title": "غير متاحة دون اتصال بعد",
+    "offline.surface.body": "يجب تحميل هذه الميزة مرة واحدة أثناء الاتصال بالإنترنت. أعد الاتصال وافتح التطبيق ثم حاول مجددًا.",
+    "errorBoundary.title": "حدث خطأ ما",
+    "errorBoundary.body": "تعذّر تحميل هذه الشاشة. تقدّمك محفوظ — حاول مجددًا أو ارجع إلى لوحة التحكم.",
+    "errorBoundary.retry": "حاول مجددًا",
+    "errorBoundary.home": "العودة إلى لوحة التحكم",
+
     "app.name": "أوسلر",
     "app.tagline": "منصة المذاكرة الطبية",
 

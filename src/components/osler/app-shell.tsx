@@ -159,8 +159,17 @@ export function AppShell({ children }: AppShellProps) {
       if (navigator.onLine) warmLazySurfaces();
     };
     const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
-    if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(warm, { timeout: 4000 });
-    else window.setTimeout(warm, 1500);
+    const schedule = () => {
+      if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(warm, { timeout: 4000 });
+      else window.setTimeout(warm, 1500);
+    };
+    // Warmed chunks are retained only by the SW's CacheFirst static handler,
+    // so warming before the worker controls this page (first visit after a
+    // deploy) is silently lost for offline use — rerun once it takes control.
+    if ("serviceWorker" in navigator && !navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener("controllerchange", schedule, { once: true });
+    }
+    schedule();
   }, []);
 
   const [searchOpen, setSearchOpen] = React.useState(false);
