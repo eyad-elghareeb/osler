@@ -133,6 +133,7 @@ import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
 import { loadContentByUid } from "@/lib/osler/content";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
+import { warmLazySurfaces } from "./lazy-tools";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -149,9 +150,14 @@ export function AppShell({ children }: AppShellProps) {
 
   // Warm every top-level route (code + data) once at idle so the first visit
   // to each view commits from cache instead of paying a mid-transition
-  // network round trip. requestIdleCallback keeps this off the critical path.
+  // network round trip, and pin the lazy modal chunks (session start, quiz
+  // settings, calculator…) so their first open works offline too.
+  // requestIdleCallback keeps this off the critical path.
   React.useEffect(() => {
-    const warm = () => prefetchAll();
+    const warm = () => {
+      prefetchAll();
+      if (navigator.onLine) warmLazySurfaces();
+    };
     const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
     if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(warm, { timeout: 4000 });
     else window.setTimeout(warm, 1500);

@@ -70,3 +70,28 @@ export const MarkdownPreview = dynamic(
   () => resilientImport(() => import("@/components/osler/admin/editors/markdown-preview").then((m) => ({ default: m.MarkdownPreview }))),
   { ssr: false, loading: spinnerFallback },
 );
+
+/**
+ * Pin every student-facing dynamic surface's chunk into the SW static cache.
+ *
+ * next/dynamic chunks are discovered only at first open — the route-shell
+ * warmer can't see them — so a first open while offline resolves nothing and
+ * the modal silently never appears (the null loading fallback renders forever).
+ * Importing the modules here fetches the same webpack chunks through the
+ * SW's CacheFirst /_next/static/ handler, so one online session makes every
+ * later offline open instant. Admin-only editors (Milkdown, MarkdownPreview)
+ * are deliberately left out to keep the warm payload small. Fire-and-forget:
+ * failures (offline gap, deploy race) just mean the next open retries.
+ */
+export function warmLazySurfaces(): void {
+  void Promise.allSettled([
+    import("@/components/osler/calculator"),
+    import("@/components/osler/lab-values"),
+    import("@/components/osler/notes-panel"),
+    import("@/components/osler/quiz-settings-panel"),
+    import("@/components/osler/session-start-dialog"),
+    import("@/components/osler/article-modal"),
+    import("@/components/osler/pdf-export-dialog"),
+    import("@/components/osler/ai-assistant"),
+  ]);
+}

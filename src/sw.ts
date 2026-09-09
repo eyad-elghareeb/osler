@@ -96,14 +96,14 @@ const runtimeCaching: RuntimeCaching[] = [
   // App shell code — hashed /_next/static/* is immutable but CacheFirst
   // makes revisits offline-first (localfirst) and instant. Without this,
   // each chunk would need a network round trip even though it never changes.
-  // Sized for every route's chunks at once (~10 routes warmed in one pass).
+  // Sized for every route's chunks warmed in one pass plus the lazy modal surfaces pinned by warmLazySurfaces().
   {
     matcher: ({ url }) => url.pathname.startsWith("/_next/static/"),
     handler: new CacheFirst({
       cacheName: STATIC_CACHE,
       plugins: [
         cacheableResponse,
-        new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * DAY_SECONDS }),
+        new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
   },
