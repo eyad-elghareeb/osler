@@ -1208,6 +1208,8 @@ export const en = {
     "settings.downloads.swUnavailable": "Offline downloads are only available in the installed app. The service worker isn't active in this environment.",
     "settings.downloads.filesCached": "{n} files cached",
     "settings.downloads.oneFileCached": "1 file cached",
+    "settings.downloads.shellReady": "App shell ready for offline use",
+    "settings.downloads.shellPartial": "{ready} of {total} app screens cached",
     "settings.downloads.loading": "Loading…",
     "settings.downloads.clearAll": "Clear all downloads",
     "settings.downloads.confirm": "Remove all cached content?",

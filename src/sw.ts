@@ -36,23 +36,51 @@ const STATIC_CACHE = "osler-static-v2";
 const IMAGE_CACHE = "osler-images-v2";
 const PAGE_CACHE = "osler-pages-v2";
 
+// Route shells the background warmer keeps available offline. Mirrors
+// APP_ROUTES in src/lib/osler/precache.ts — used for the readiness report.
+const APP_SHELL_ROUTES = [
+  "/",
+  "/login/",
+  "/learn/",
+  "/library/",
+  "/qbank/",
+  "/flashcards/",
+  "/osce/",
+  "/videos/",
+  "/profile/",
+  "/settings/",
+];
+
 const DAY_SECONDS = 24 * 60 * 60;
 const cacheableResponse = {
   cacheWillUpdate: async ({ response }: { response?: Response }) =>
     response?.status === 200 ? response : null,
 };
 
+// Shared by both content fallbacks below: one registry, one 180-entry /
+// 14-day bound for the runtime content cache.
+const contentRuntimeExpiration = new ExpirationPlugin({ maxEntries: 180, maxAgeSeconds: 14 * DAY_SECONDS });
+const contentVersionedFallback = new CacheFirst({
+  cacheName: CONTENT_RUNTIME_CACHE,
+  plugins: [cacheableResponse, contentRuntimeExpiration],
+});
+const contentUnversionedFallback = new NetworkFirst({
+  cacheName: CONTENT_RUNTIME_CACHE,
+  plugins: [cacheableResponse, contentRuntimeExpiration],
+});
+
 const runtimeCaching: RuntimeCaching[] = [
   // App shell code — hashed /_next/static/* is immutable but CacheFirst
   // makes revisits offline-first (localfirst) and instant. Without this,
   // each chunk would need a network round trip even though it never changes.
+  // Sized for every route's chunks at once (~10 routes warmed in one pass).
   {
     matcher: ({ url }) => url.pathname.startsWith("/_next/static/"),
     handler: new CacheFirst({
       cacheName: STATIC_CACHE,
       plugins: [
         cacheableResponse,
-        new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * DAY_SECONDS }),
+        new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
   },
@@ -60,6 +88,7 @@ const runtimeCaching: RuntimeCaching[] = [
   // refresh it in the background. This avoids a 1.5s network-first wait on
   // unreliable mobile networks while matchOptions.ignoreSearch still lets
   // deep links (e.g. /qbank?uid=...) reuse the cached /qbank/ shell.
+  // Sized for every route shell plus a few deep links.
   {
     matcher: ({ request }) => request.mode === "navigate",
     handler: new StaleWhileRevalidate({
@@ -67,7 +96,7 @@ const runtimeCaching: RuntimeCaching[] = [
       matchOptions: { ignoreSearch: true },
       plugins: [
         cacheableResponse,
-        new ExpirationPlugin({ maxEntries: 12, maxAgeSeconds: 7 * DAY_SECONDS }),
+        new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 7 * DAY_SECONDS }),
       ],
     }),
   },
@@ -87,38 +116,30 @@ const runtimeCaching: RuntimeCaching[] = [
       cacheName: STATIC_CACHE,
       plugins: [
         cacheableResponse,
-        new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * DAY_SECONDS }),
+        new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
   },
-  // Content packs — explicit downloads first, then network with runtime
-  // backfill, then the stale runtime copy. CONTENT_CACHE holds ONLY packs the
-  // user explicitly downloaded (populated by PRECACHE_CONTENT, never evicted
-  // automatically), so it is the offline source of truth: the bounded runtime
-  // cache below it may evict entries under storage pressure on low-end
-  // devices, which must never silently un-download a pack. Versioned (?v=…)
-  // URLs are immutable cache keys — a publish bumps ?v and the downloader
-  // evicts the superseded key, so no staleness handling is needed here.
+  // Content packs — explicit downloads first, then the freshness-appropriate
+  // runtime strategy. CONTENT_CACHE holds ONLY packs the user explicitly
+  // downloaded (populated by PRECACHE_CONTENT, never evicted automatically),
+  // so it is the offline source of truth: the bounded runtime cache below it
+  // may evict entries under storage pressure on low-end devices, which must
+  // never silently un-download a pack. Versioned (?v=…) URLs are immutable
+  // cache keys — a publish bumps ?v and the downloader evicts the superseded
+  // key, so CacheFirst is safe; unversioned URLs stay NetworkFirst so
+  // already-visited packs refresh while offline keeps serving the stale copy.
+  // One shared expiration registry: both fallbacks feed the same cache.
   {
     matcher: ({ url }) => {
       const p = url.pathname;
       return p.startsWith("/osler-content/") || p.startsWith("/v1/content/") || p.startsWith("/v1/content-manifests/");
     },
-    handler: async ({ request }: { request: Request }) => {
+    handler: async ({ request, url, event }: { request: Request; url: URL; event: ExtendableEvent }) => {
       const explicit = await (await caches.open(CONTENT_CACHE)).match(request);
       if (explicit) return explicit;
-      try {
-        const res = await fetch(request);
-        if (res.ok) {
-          const runtime = await caches.open(CONTENT_RUNTIME_CACHE);
-          await runtime.put(request, res.clone());
-        }
-        return res;
-      } catch {
-        const stale = await (await caches.open(CONTENT_RUNTIME_CACHE)).match(request);
-        if (stale) return stale;
-        throw new Error("offline and not cached");
-      }
+      const fallback = url.searchParams.has("v") ? contentVersionedFallback : contentUnversionedFallback;
+      return fallback.handle({ request, event });
     },
   },
   // Thumbnails + content images: stale-while-revalidate so a cached image
@@ -235,20 +256,34 @@ async function precacheAppShell(client: Client | null, urls: string[]) {
         continue;
       }
 
+      // Manifests belong with the content they describe: the serving path
+      // only ever reads CONTENT_CACHE (explicit downloads) and
+      // CONTENT_RUNTIME_CACHE, so a manifest parked in STATIC_CACHE would
+      // be stored yet never served.
       let targetCache = staticCache;
       const p = u.pathname;
-      if (p.startsWith("/osler-content/") || p.startsWith("/v1/content/")) {
+      if (
+        p.startsWith("/osler-content/") ||
+        p.startsWith("/v1/content/") ||
+        p.startsWith("/v1/content-manifests/")
+      ) {
         targetCache = contentCache;
       } else if (!p.includes(".") || p.endsWith(".html") || p === "/") {
         targetCache = pageCache;
       }
 
-      const existing = await targetCache.match(u.href);
-      if (!existing) {
-        const res = await fetch(u.href, { cache: "default" });
-        if (res.ok) {
-          await targetCache.put(u.href, res.clone());
-        }
+      // Route shells and manifests share URLs across deploys while their
+      // bytes change, so always revalidate them: a skipped refresh would
+      // pin a stale shell referencing long-deleted chunks. Hashed chunks
+      // are immutable — the exists-guard below still applies to them.
+      const immutable = targetCache === staticCache;
+      if (immutable) {
+        const existing = await targetCache.match(u.href);
+        if (existing) continue;
+      }
+      const res = await fetch(u.href, { cache: "default" });
+      if (res.ok) {
+        await targetCache.put(u.href, res.clone());
       }
     } catch {
       // Ignore individual resource errors
@@ -374,5 +409,29 @@ async function reportCacheStats(client: Client | null) {
       // ignore
     }
   }
-  client.postMessage({ type: "CONTENT_CACHE_STATS", count: keys.length, size });
+  // App-shell readiness: which route shells are in the page cache, plus
+  // entry counts for the other automatic caches. Lets Settings → Downloads
+  // show whether the full app is actually available offline.
+  let shellReady: string[] = [];
+  let staticCount = 0;
+  let pageCount = 0;
+  try {
+    const pageCache = await caches.open(PAGE_CACHE);
+    const [pageKeys, staticKeys] = await Promise.all([
+      pageCache.keys(),
+      caches.open(STATIC_CACHE).then((c) => c.keys()),
+    ]);
+    pageCount = pageKeys.length;
+    staticCount = staticKeys.length;
+    const have = new Set(pageKeys.map((r) => new URL(r.url).pathname));
+    shellReady = APP_SHELL_ROUTES.filter((r) => have.has(r));
+  } catch {
+    // ignore — readiness stays empty
+  }
+  client.postMessage({
+    type: "CONTENT_CACHE_STATS",
+    count: keys.length,
+    size,
+    shell: { ready: shellReady, total: APP_SHELL_ROUTES.length, staticCount, pageCount },
+  });
 }

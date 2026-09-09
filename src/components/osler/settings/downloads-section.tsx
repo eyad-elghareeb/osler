@@ -22,7 +22,7 @@ function formatBytes(bytes: number): string {
 export function DownloadsSettingsSection() {
   const { t, rtl } = useI18n();
   const { getState, checkStatus, precache, remove } = useContentCache();
-  const [stats, setStats] = React.useState<{ count: number; size: number } | null>(null);
+  const [stats, setStats] = React.useState<{ count: number; size: number; shell?: { ready: string[]; total: number } } | null>(null);
   const [confirmClear, setConfirmClear] = React.useState(false);
   const [clearing, setClearing] = React.useState(false);
   const [trees, setTrees] = React.useState<Record<string, ContentTreeNode[]> | null>(null);
@@ -39,7 +39,14 @@ export function DownloadsSettingsSection() {
     if (!navigator.serviceWorker.controller) return;
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "CONTENT_CACHE_STATS") {
-        setStats({ count: event.data.count, size: event.data.size });
+        const shell = event.data.shell as { ready: string[]; total: number } | undefined;
+        setStats({
+          count: event.data.count,
+          size: event.data.size,
+          shell: shell && typeof shell.total === "number" && Array.isArray(shell.ready)
+            ? { ready: shell.ready, total: shell.total }
+            : undefined,
+        });
         navigator.serviceWorker.removeEventListener("message", handler);
       }
     };
@@ -234,6 +241,21 @@ export function DownloadsSettingsSection() {
                 <div className="text-xs text-muted-foreground">
                   {stats ? formatBytes(stats.size) : ""}
                 </div>
+                {stats?.shell && (
+                  <div
+                    className={cn(
+                      "text-xs mt-1",
+                      stats.shell.ready.length >= stats.shell.total ? "text-success" : "text-warning"
+                    )}
+                  >
+                    {stats.shell.ready.length >= stats.shell.total
+                      ? t("settings.downloads.shellReady")
+                      : t("settings.downloads.shellPartial", {
+                          ready: stats.shell.ready.length,
+                          total: stats.shell.total,
+                        })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -1204,6 +1204,8 @@ export const ar = {
     "settings.downloads.swUnavailable": "التنزيلات دون اتصال متاحة فقط في التطبيق المثبّت. عامل خدمة غير نشط في هذه البيئة.",
     "settings.downloads.filesCached": "{n} ملف محفوظ",
     "settings.downloads.oneFileCached": "ملف واحد محفوظ",
+    "settings.downloads.shellReady": "واجهة التطبيق جاهزة للاستخدام دون اتصال",
+    "settings.downloads.shellPartial": "{ready} من {total} شاشة مخزنة",
     "settings.downloads.loading": "جارٍ التحميل…",
     "settings.downloads.clearAll": "مسح كل التنزيلات",
     "settings.downloads.confirm": "إزالة كل المحتوى المحفوظ؟",
