@@ -116,36 +116,6 @@ export function routeFor(
 }
 
 /**
- * Top-level paths every session navigates between. Prefetching them once
- * warms the client router cache (RSC payloads + route chunks), so the first
- * tab switch to each view commits in a couple of frames instead of paying a
- * network round trip mid-view-transition.
- */
-const TOP_LEVEL_PATHS = [
-  "/",
-  "/qbank",
-  "/learn",
-  "/library",
-  "/flashcards",
-  "/osce",
-  "/videos",
-  "/profile",
-  "/settings",
-];
-
-/**
- * Warm the client-side router cache for all top-level routes. Call once at
- * idle after mount (e.g. from AppShell) — prefetches are cheap static
- * payloads and Next deduplicates in-flight ones.
- */
-export function prefetchTopLevelRoutes(prefetch: (href: string) => void): void {
-  const current = window.location.pathname.replace(/\/+$/, "") || "/";
-  for (const path of TOP_LEVEL_PATHS) {
-    if (path !== current) prefetch(path);
-  }
-}
-
-/**
  * Hook returning navigation function with haptics and View Transitions support.
  *
  * NOTE: We deliberately do NOT push/pop a custom nav history stack here.
@@ -178,6 +148,10 @@ export function useOslerRouter() {
     },
     [router]
   );
+
+  const prefetchAll = React.useCallback(() => {
+    for (const view of VIEW_ORDER) prefetch(view);
+  }, [prefetch]);
 
   const navigate = React.useCallback(
     (view: OslerView, params?: OslerRouteParams, opts?: { viaTab?: boolean }) => {
@@ -216,5 +190,5 @@ export function useOslerRouter() {
     [currentView, router]
   );
 
-  return { navigate, prefetch, routeFor, currentView };
+  return { navigate, prefetch, prefetchAll, routeFor, currentView };
 }

@@ -145,7 +145,17 @@ export function AppShell({ children }: AppShellProps) {
   const immersive = useImmersiveMode();
   const { username, cloudSession: sessionContextCloudSession, logout } = useOslerSession();
   const view = useCurrentView();
-  const { navigate, prefetch } = useOslerRouter();
+  const { navigate, prefetch, prefetchAll } = useOslerRouter();
+
+  // Warm every top-level route (code + data) once at idle so the first visit
+  // to each view commits from cache instead of paying a mid-transition
+  // network round trip. requestIdleCallback keeps this off the critical path.
+  React.useEffect(() => {
+    const warm = () => prefetchAll();
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
+    if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(warm, { timeout: 4000 });
+    else window.setTimeout(warm, 1500);
+  }, []);
 
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [cloudSession, setCloudSession] = React.useState<CloudSession | null>(() => sessionContextCloudSession || readCloudSession());
