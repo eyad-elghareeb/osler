@@ -41,6 +41,11 @@ const CONTENT_RUNTIME_CACHE = "osler-content-runtime-v2";
 const STATIC_CACHE = "osler-static-v3";
 const IMAGE_CACHE = "osler-images-v3";
 const PAGE_CACHE = "osler-pages-v3";
+// Registry of explicitly-downloaded packs. Kept in its own tiny cache so
+// generation rotations never orphan it and so the UI can report "N packs
+// available offline" without status-checking every pack from the hubs.
+const REGISTRY_CACHE = "osler-registry-v1";
+const PACK_REGISTRY_KEY = "/__osler/pack-registry";
 
 // Cache names from retired generations. Deleted one-shot on activate (below)
 // so stale generations can't serve phantom content after an update.
@@ -327,6 +332,31 @@ async function precacheAppShell(client: Client | null, urls: string[]) {
   client?.postMessage({ type: "APP_SHELL_PRECACHED", count: urls.length });
 }
 
+/* ── Downloaded-pack registry ─────────────────────────────────────── */
+
+async function readPackRegistry(): Promise<string[]> {
+  try {
+    const cache = await caches.open(REGISTRY_CACHE);
+    const res = await cache.match(PACK_REGISTRY_KEY);
+    const json = res ? await res.json() : null;
+    return Array.isArray(json) ? json.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function setPackRegistered(packId: string, registered: boolean): Promise<void> {
+  const ids = await readPackRegistry();
+  const has = ids.includes(packId);
+  if (registered === has) return;
+  const next = registered ? [...ids, packId] : ids.filter((id) => id !== packId);
+  const cache = await caches.open(REGISTRY_CACHE);
+  await cache.put(
+    PACK_REGISTRY_KEY,
+    new Response(JSON.stringify(next), { headers: { "Content-Type": "application/json" } })
+  );
+}
+
 async function precacheContent(
   client: Client | null,
   packId: string,
@@ -378,13 +408,16 @@ async function precacheContent(
     }
   }
 
+  const allOk = results.length > 0 && results.every((r) => r.ok);
+  // Only a fully-downloaded pack counts as "available offline".
+  await setPackRegistered(packId, allOk);
   const allClients = await self.clients.matchAll();
   for (const c of allClients) {
     c.postMessage({
       type: "PRECACHE_RESULT",
       packId,
       results,
-      allOk: results.every((r) => r.ok),
+      allOk,
     });
   }
 }
@@ -417,6 +450,7 @@ async function removeContent(
   packId: string,
   urls: string[]
 ) {
+  await setPackRegistered(packId, false);
   const cache = await caches.open(CONTENT_CACHE);
   await Promise.all(
     urls
@@ -467,5 +501,6 @@ async function reportCacheStats(client: Client | null) {
     count: keys.length,
     size,
     shell: { ready: shellReady, total: APP_SHELL_ROUTES.length, staticCount, pageCount },
+    packCount: (await readPackRegistry()).length,
   });
 }

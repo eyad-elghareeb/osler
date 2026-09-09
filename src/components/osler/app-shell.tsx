@@ -133,6 +133,7 @@ import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
 import { loadContentByUid } from "@/lib/osler/content";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
+import { OfflineBanner } from "./offline-banner";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -455,6 +456,9 @@ export function AppShell({ children }: AppShellProps) {
           Non-VT browsers instead get `.osler-view-enter` restarted on the
           inner wrapper (see the view effect above) — no remount, no blank. */}
       <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col safe-pt">
+        {/* Offline status banner — persistent while offline (shows how many
+            packs are downloaded), transient "Back online" on reconnect. */}
+        <OfflineBanner />
         {/* Mobile scroll-away top bar — a slim bar with the centered site name
             + search icon that hides when the user scrolls down and reappears
             on scroll up. Instagram-style collapse. Desktop uses the full top
