@@ -316,15 +316,43 @@ export function ComingSoonState({ icon: Icon = Construction, title, description,
 
 /* ─── LoadingState ──────────────────────────────────────────────────── */
 
+/**
+ * Suppress sub-threshold loading flashes: hub data usually resolves from the
+ * in-memory tree cache or the service worker in milliseconds, and mounting a
+ * spinner/skeleton for a single frame reads as flickering on every route
+ * switch. When `delayMs` elapses before the parent unmounts us, we render;
+ * genuine loads are unaffected (120ms is imperceptible there).
+ */
+function useDelayedShow(delayMs: number): boolean {
+  const [show, setShow] = React.useState(delayMs <= 0);
+  React.useEffect(() => {
+    if (delayMs <= 0) {
+      setShow(true);
+      return;
+    }
+    setShow(false);
+    const t = setTimeout(() => setShow(true), delayMs);
+    return () => clearTimeout(t);
+  }, [delayMs]);
+  return show;
+}
+
 interface LoadingStateProps {
   /** Optional caption shown below the spinner. */
   label?: React.ReactNode;
   /** Spinner size in pixels. Defaults to 24 (size-6). */
   size?: "sm" | "md" | "lg";
   className?: string;
+  /**
+   * Milliseconds to wait before painting. Defaults to 120 so cache-speed
+   * loads never flash a spinner on route switches. Pass 0 to show immediately.
+   */
+  delayMs?: number;
 }
 
-export function LoadingState({ label, size = "md", className }: LoadingStateProps) {
+export function LoadingState({ label, size = "md", className, delayMs = 120 }: LoadingStateProps) {
+  const show = useDelayedShow(delayMs);
+  if (!show) return null;
   const sz = size === "sm" ? "size-5" : size === "lg" ? "size-7" : "size-6";
   return (
     <motion.div
@@ -1096,6 +1124,11 @@ interface HubSkeletonProps {
   /** Page header eyebrow + title skeleton. Defaults to true. */
   header?: boolean;
   className?: string;
+  /**
+   * Milliseconds to wait before painting (see useDelayedShow). Defaults to
+   * 120 so cache-speed hub loads never flash a skeleton on route switches.
+   */
+  delayMs?: number;
 }
 
 export function HubSkeleton({
@@ -1104,7 +1137,10 @@ export function HubSkeleton({
   hero = false,
   header = true,
   className,
+  delayMs = 120,
 }: HubSkeletonProps) {
+  const show = useDelayedShow(delayMs);
+  if (!show) return null;
   // Column count maps to responsive classes (Tailwind can't JIT-compile
   // dynamic `md:grid-cols-${n}`, so enumerate the handful of shapes used).
   const statCols =

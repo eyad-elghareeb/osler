@@ -30,11 +30,29 @@ declare const __OSLER_SW_BUILD_ID__: string;
 // Explicitly downloaded packs are retained until the user removes them. All
 // automatically populated caches are bounded to avoid exhausting storage on
 // lower-end Android devices, where quota eviction can terminate the PWA.
+//
+// Generation suffixes (v3/v2): bumped 2026-09 after the bundled-content
+// removal — earlier generations may hold manifests/bodies for packs that no
+// longer exist anywhere, which surfaced as phantom hub entries whose bodies
+// 404 ("could not be loaded"). CONTENT_CACHE keeps v1 so explicit downloads
+// survive the rotation.
 const CONTENT_CACHE = "osler-content-v1";
-const CONTENT_RUNTIME_CACHE = "osler-content-runtime-v1";
-const STATIC_CACHE = "osler-static-v2";
-const IMAGE_CACHE = "osler-images-v2";
-const PAGE_CACHE = "osler-pages-v2";
+const CONTENT_RUNTIME_CACHE = "osler-content-runtime-v2";
+const STATIC_CACHE = "osler-static-v3";
+const IMAGE_CACHE = "osler-images-v3";
+const PAGE_CACHE = "osler-pages-v3";
+
+// Cache names from retired generations. Deleted one-shot on activate (below)
+// so stale generations can't serve phantom content after an update.
+const LEGACY_CACHES = [
+  "osler-content-runtime-v1",
+  "osler-static-v1",
+  "osler-static-v2",
+  "osler-images-v1",
+  "osler-images-v2",
+  "osler-pages-v1",
+  "osler-pages-v2",
+];
 
 // Route shells the background warmer keeps available offline. Mirrors
 // APP_ROUTES in src/lib/osler/precache.ts — used for the readiness report.
@@ -168,6 +186,22 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// One-shot purge of retired cache generations: without this, manifests and
+// bodies cached under old names outlive the deploy that made them stale and
+// keep serving phantom packs whose files 404 everywhere else. Runs before
+// Serwist's own activate work finishes; failures are non-fatal.
+self.addEventListener("activate", (event: ExtendableEvent) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        await Promise.all(LEGACY_CACHES.map((name) => caches.delete(name)));
+      } catch {
+        // ignore — leftovers simply age out via their own expiration
+      }
+    })()
+  );
+});
 
 /* ── Custom message API (content cache & precaching) ─────────────────────
  *

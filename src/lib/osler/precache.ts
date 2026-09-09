@@ -45,7 +45,7 @@ const APP_ROUTES = [
 const MANIFEST_FOLDERS = ["qbank", "flashcard", "osce", "library", "videos"] as const;
 
 /** Upper bound on warmed chunk/manifest URLs per session (shells excluded). */
-const MAX_WARM_URLS = 90;
+const MAX_WARM_URLS = 150;
 
 let isPrecaching = false;
 let isCompleted = false;
@@ -169,7 +169,7 @@ export async function startBackgroundPrecaching(options?: { force?: boolean }): 
             let budget = MAX_WARM_URLS;
             for (const route of APP_ROUTES) {
               if (budget <= 0) break;
-              for (const chunk of await routeShellChunks(route, Math.min(budget, 12))) {
+              for (const chunk of await routeShellChunks(route, Math.min(budget, 20))) {
                 urls.add(chunk);
                 budget--;
               }
