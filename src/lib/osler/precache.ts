@@ -129,6 +129,25 @@ const VIEW_DATA_WARMERS: Record<string, () => unknown[]> = {
     import("./videos").then((m) => m.listAllVideos()),
   ],
   library: () => [import("./articles").then((m) => m.listAllArticles())],
+  // Settings panes are code-split (settings.tsx mkSection): warm every
+  // section chunk so opening one never pays a first-visit chunk round trip
+  // (or hits an offline gap). backup-native-section serves two panes.
+  settings: () => [
+    Promise.all([
+      import("@/components/osler/settings/theme-section"),
+      import("@/components/osler/settings/language-section"),
+      import("@/components/osler/settings/ai-section"),
+      import("@/components/osler/settings/shortcuts-section"),
+      import("@/components/osler/settings/downloads-section"),
+      import("@/components/osler/settings/backup-native-section"),
+      import("@/components/osler/settings/support-section"),
+      import("@/components/osler/settings/about-section"),
+      import("@/components/osler/settings/danger-section"),
+      import("@/components/osler/settings/account-section"),
+      import("@/components/osler/sync/sync-settings-section"),
+      import("@/components/osler/settings/sessions-section"),
+    ]),
+  ],
 };
 
 export function warmViewData(view: string): void {

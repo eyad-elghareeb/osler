@@ -55,7 +55,26 @@ const SectionFallback = (
 const mkSection = (
   loader: () => Promise<{ default: React.ComponentType<Record<string, unknown>> }>,
 ) => {
-  const Component = dynamic(loader, { ssr: false, loading: () => SectionFallback });
+  // Chunk loads fail transiently on stale deploys (old shell referencing
+  // pruned chunks) and on first-visit offline gaps: nudge the service worker
+  // to update, then retry once before surfacing an error page.
+  const resilientLoader = async () => {
+    try {
+      return await loader();
+    } catch (firstError) {
+      try {
+        if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          await reg?.update();
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      } catch {
+        // fall through to the retry below
+      }
+      return loader();
+    }
+  };
+  const Component = dynamic(resilientLoader, { ssr: false, loading: () => SectionFallback });
   // Expose the chunk loader so hover/focus can warm it before the section
   // opens — opening a warmed section never flashes the loading fallback.
   return Object.assign(Component, {
