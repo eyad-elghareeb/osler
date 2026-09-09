@@ -1232,12 +1232,6 @@ export const en = {
     "settings.downloads.cachedBadge": "Cached",
     "settings.downloads.notCachedBadge": "Not saved",
 
-    "offline.banner.title": "You're offline",
-    "offline.banner.packs": "{n} packs ready offline",
-    "offline.banner.onePack": "1 pack ready offline",
-    "offline.banner.noPacks": "Downloaded packs will appear here",
-    "offline.banner.manage": "Manage downloads",
-    "offline.banner.back": "Back online",
 
     "settings.danger.title": "Data & Reset",
     "settings.danger.subtitle":

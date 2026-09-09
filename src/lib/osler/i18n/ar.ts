@@ -1228,12 +1228,6 @@ export const ar = {
     "settings.downloads.cachedBadge": "محفوظ",
     "settings.downloads.notCachedBadge": "غير محفوظ",
 
-    "offline.banner.title": "أنت غير متصل بالإنترنت",
-    "offline.banner.packs": "{n} من الحزم متاحة دون اتصال",
-    "offline.banner.onePack": "حزمة واحدة متاحة دون اتصال",
-    "offline.banner.noPacks": "ستظهر الحزم التي تم تنزيلها هنا",
-    "offline.banner.manage": "إدارة التنزيلات",
-    "offline.banner.back": "عاد الاتصال بالإنترنت",
 
     "settings.danger.title": "البيانات وإعادة التعيين",
     "settings.danger.subtitle":
