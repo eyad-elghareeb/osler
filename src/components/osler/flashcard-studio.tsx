@@ -981,7 +981,7 @@ function FlashcardStudioInner({
                   )}
                   dir={node.lang === "ar" ? "rtl" : undefined}
                   lang={node.lang ?? undefined}
-                  style={{ animationDelay: `${idx * 0.04}s` }}
+                  style={{ animationDelay: `${Math.min(idx, 10) * 0.04}s` }}
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div

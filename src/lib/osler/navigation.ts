@@ -8,6 +8,7 @@ import {
   haptic,
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
+import { warmViewData } from "@/lib/osler/precache";
 
 /**
  * Stable order for top-level Osler views. Used to calculate slide directions.
@@ -170,6 +171,10 @@ export function useOslerRouter() {
       } catch {
         // Ignore prefetch error
       }
+      // Warm the view's data too: router prefetch only fetches code, so
+      // without this the hub still hangs on its first manifest round trip
+      // after commit. Memoized/SW-cached — free on repeat hovers.
+      warmViewData(view);
     },
     [router]
   );

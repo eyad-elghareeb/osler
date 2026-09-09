@@ -104,6 +104,46 @@ function runOnIdle(cb: () => void, timeout = 2500): void {
 }
 
 /**
+ * Warm a view's DATA (not just its route chunks) ahead of navigation.
+ * Router prefetch makes the code arrive fast; without this the hub still
+ * hangs on its first manifest round trip after commit. Everything warmed
+ * here is memoized module-level (trees) or SW-cached (articles/videos), so
+ * repeat calls are free and the target view paints from sync cache.
+ */
+const VIEW_DATA_WARMERS: Record<string, () => unknown[]> = {
+  dashboard: () => [import("./content").then((m) => m.loadCategoryTrees())],
+  learn: () => [import("./content").then((m) => m.loadCategoryTrees())],
+  qbank: () => [
+    import("./content").then((m) =>
+      Promise.all([
+        m.loadCategoryTree("quiz"),
+        m.loadCategoryTree("bank"),
+        m.loadCategoryTree("written"),
+      ])
+    ),
+  ],
+  flashcards: () => [import("./content").then((m) => m.loadCategoryTree("flashcard"))],
+  osce: () => [import("./content").then((m) => m.loadCategoryTree("osce"))],
+  videos: () => [
+    import("./content").then((m) => m.loadCategoryTree("video")),
+    import("./videos").then((m) => m.listAllVideos()),
+  ],
+  library: () => [import("./articles").then((m) => m.listAllArticles())],
+};
+
+export function warmViewData(view: string): void {
+  try {
+    const warm = VIEW_DATA_WARMERS[view];
+    if (!warm) return;
+    for (const pending of warm()) {
+      Promise.resolve(pending).catch(() => {});
+    }
+  } catch {
+    // Never let prefetch break navigation.
+  }
+}
+
+/**
  * Send discovered precache URLs to the Service Worker so they reside in `STATIC_CACHE` & `PAGE_CACHE`.
  */
 function sendPrecacheMessageToSW(urls: string[]) {

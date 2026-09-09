@@ -130,7 +130,7 @@ export const PackCard = React.memo(function PackCard({
       )}
       dir={isAr ? "rtl" : undefined}
       lang={isAr ? "ar" : undefined}
-      style={{ animationDelay: `${index * 0.03}s` }}
+      style={{ animationDelay: `${Math.min(index, 10) * 0.03}s` }}
     >
       {/* Top row: icon + title + cache button */}
       <div className="flex items-center gap-3.5">
@@ -317,8 +317,8 @@ export function ContentTab({
                   // Folders export too — the dialog collects every leaf
                   // pack under the target.
                   data-ctx-export={node.uid}
-                  className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
-                  style={{ animationDelay: `${idx * 0.04}s` }}
+                    className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
+                    style={{ animationDelay: `${Math.min(idx, 10) * 0.04}s` }}
                 >
                   {/* Top row: folder icon + title + pack count.
                       Folders use a Folder icon (not the engine icon) so
@@ -449,7 +449,7 @@ export function ContentTab({
                     onClick={() => setSelectedFolders((folders) => [...folders, child])}
                     data-ctx-export={child.uid}
                     className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
-                    style={{ animationDelay: `${idx * 0.04}s` }}
+                    style={{ animationDelay: `${Math.min(idx, 10) * 0.04}s` }}
                   >
                     <div className="flex items-center gap-3.5">
                       <div
