@@ -414,17 +414,21 @@ function buildContent(node: ContentTreeNode, data: Record<string, unknown[]>, ef
 export async function loadCategoryTrees(): Promise<Record<string, ContentTreeNode[]>> {
   await loadConfig();
   const trees: Record<string, ContentTreeNode[]> = {};
-  for (const type of enabledEngines().filter((t) => t !== "library")) {
-    const folder = categoryFolder(type);
-    if (!folder) continue;
-    try {
-      // Multi-type folders (qbank hosts quiz/bank/written) map to one
-      // manifest, memoized per folder, so each type shares the tree.
-      trees[type] = await loadManifestTree(folder);
-    } catch {
-      // ignore missing manifests
-    }
-  }
+  await Promise.all(
+    enabledEngines()
+      .filter((type) => type !== "library")
+      .map(async (type) => {
+        const folder = categoryFolder(type);
+        if (!folder) return;
+        try {
+          // Multi-type folders share the memoized request; independent
+          // manifests load concurrently so a hub reaches usable data sooner.
+          trees[type] = await loadManifestTree(folder);
+        } catch {
+          // ignore missing manifests
+        }
+      }),
+  );
   return trees;
 }
 

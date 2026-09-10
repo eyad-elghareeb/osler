@@ -96,6 +96,13 @@ const contentVersionedFallback = new CacheFirst({
   cacheName: CONTENT_RUNTIME_CACHE,
   plugins: [cacheableResponse, contentRuntimeExpiration],
 });
+// A manifest is the minimum data needed to render a hub. It is CacheFirst:
+// content-version stamps give a publish a new immutable cache key, so return
+// visits can paint immediately without a manifest round trip.
+const manifestCacheFirst = new CacheFirst({
+  cacheName: CONTENT_RUNTIME_CACHE,
+  plugins: [cacheableResponse, contentRuntimeExpiration],
+});
 const contentUnversionedFallback = new NetworkFirst({
   cacheName: CONTENT_RUNTIME_CACHE,
   plugins: [cacheableResponse, contentRuntimeExpiration],
@@ -151,6 +158,16 @@ const runtimeCaching: RuntimeCaching[] = [
         new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),
+  },
+  // Content manifests are cache-first because they are sufficient to paint a
+  // hub. A content-version query creates a new immutable URL after publish.
+  {
+    matcher: ({ url }) => {
+      const p = url.pathname;
+      return p.startsWith("/v1/content-manifests/") ||
+        (p.startsWith("/osler-content/") && p.endsWith("/manifest.json"));
+    },
+    handler: manifestCacheFirst,
   },
   // Content packs — explicit downloads first, then the freshness-appropriate
   // runtime strategy. CONTENT_CACHE holds ONLY packs the user explicitly
