@@ -323,11 +323,10 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  // Cloud sync is opt-in per device: the loop only runs while the user
-  // enabled it (Settings → Sync). A signed-in user who never opts in makes
-  // zero sync requests, so the free-tier DB/bandwidth is spent only on the
-  // devices that actually use cross-device sync.
-  const [syncPref, setSyncPref] = React.useState<{ loaded: boolean; enabled: boolean }>({ loaded: false, enabled: false });
+  // Cloud sync is enabled by default for signed-in users. The loop remains
+  // event-driven and rate-limited; an explicit Settings opt-out is the only
+  // way to stop it on a device.
+  const [syncPref, setSyncPref] = React.useState<{ loaded: boolean; enabled: boolean }>({ loaded: false, enabled: true });
   React.useEffect(() => {
     let cancelled = false;
     void getCloudSyncEnabled().then((enabled) => {
@@ -342,10 +341,7 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // Pull account-level settings on every authenticated session (restore or
-  // fresh login) so a device that enabled sync elsewhere picks up
-  // `cloud-sync-enabled=true` without manual toggle. This runs even when
-  // the local sync pref is still `false` — the merge dispatches
-  // `osler-cloud-sync-pref` which flips `syncPref` and starts the loop.
+  // fresh login) so an explicit sync opt-out follows the user across devices.
   React.useEffect(() => {
     if (!cloudSession?.token) return;
     void pullSettingsFromCloud(cloudSession);
@@ -499,10 +495,9 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     [pendingConflict, conflictResolving]
   );
 
-  // Start cloud sync only when we have a real CloudSession with a token AND
-  // the user opted in. When a session exists but sync is off, surface an
-  // explicit "off" status so the shell's sync dot never claims a phantom
-  // "synced" state.
+  // Start cloud sync for every signed-in session unless the user explicitly
+  // opted out. When sync is off, surface an explicit status so the shell's
+  // sync dot never claims a phantom "synced" state.
   React.useEffect(() => {
     if (!cloudSession?.token || !syncPref.loaded) return;
     if (!syncPref.enabled) {

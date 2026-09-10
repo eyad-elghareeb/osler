@@ -26,11 +26,11 @@ import { haptic } from "@/lib/osler/native";
  * CloudSyncStatusCard — the canonical "Cloud Sync" card shared by the Account
  * settings section and the Sync settings section.
  *
- * Cloud sync is opt-in per device: the master switch starts/stops the whole
- * sync lifecycle (loop + live socket). When sync is on, the card shows the
- * live status dot (synced / syncing / offline), last-synced time, the live
- * connection state, and the storage-quota bar. When off (or signed out), it
- * stays a compact prompt and makes no requests.
+ * Cloud sync is on by default: the master switch is an explicit opt-out for
+ * the whole sync lifecycle (loop + live socket). When sync is on, the card
+ * shows the live status dot (synced / syncing / offline), last-synced time,
+ * the live connection state, and the storage-quota bar. When off (or signed
+ * out), it stays a compact prompt and makes no requests.
  */
 export function CloudSyncStatusCard() {
   const { t } = useI18n();
@@ -152,7 +152,7 @@ export function CloudSyncStatusCard() {
         <Cloud className="size-4 text-primary" />
         {t("settings.account.syncTitle")}
       </h3>
-      {/* Master opt-in — the single control for the whole sync lifecycle. */}
+      {/* Master sync control — the single control for the whole lifecycle. */}
       <div className="flex items-start justify-between gap-3 p-3.5 rounded-lg border border-border bg-card">
         <div className="min-w-0">
           <p className="text-sm font-semibold flex items-center gap-1.5">

@@ -451,9 +451,10 @@ export async function pullSettingsFromCloud(sessionOverride?: CloudSession): Pro
     if (remote.settings) {
       await storage.mergeCloudSnapshot(remote);
       // Keep the in-memory pref in sync so the realtime hub and the
-      // session provider see the new value without an extra IDB read.
+      // session provider see the new value without an extra IDB read. An
+      // absent legacy preference inherits the enabled-by-default policy.
       try {
-        syncEnabledPref = (await settings.getBool(CLOUD_SYNC_PREF)) === true;
+        syncEnabledPref = (await settings.get(CLOUD_SYNC_PREF)) !== "false";
       } catch {}
     }
   } catch {
@@ -796,20 +797,20 @@ export async function fetchMySupportTickets(): Promise<unknown[] | null> {
   return result.tickets;
 }
 
-/* ── Cloud sync (opt-in) ─────────────────────────────────────────────────── */
+/* ── Cloud sync ──────────────────────────────────────────────────────────── */
 
 const CLOUD_SYNC_PREF = "cloud-sync-enabled";
-let syncEnabledPref = false;
+let syncEnabledPref = true;
 
-/** Whether the user opted into cloud sync on this device. Off by default:
- *  a signed-in user who never enables sync makes zero sync requests — nothing
- *  is pushed, pulled, or polled — which keeps the free-tier DB/bandwidth
- *  budget for the devices that actually need cross-device sync. */
+/** Whether cloud sync is enabled on this device. It defaults to enabled so
+ * every signed-in user is protected automatically; only an explicit `false`
+ * preference opts out. The sync loop remains event-driven and rate-limited,
+ * so an idle device does not create recurring transfer traffic. */
 export async function getCloudSyncEnabled(): Promise<boolean> {
   try {
-    syncEnabledPref = (await settings.getBool(CLOUD_SYNC_PREF)) === true;
+    syncEnabledPref = (await settings.get(CLOUD_SYNC_PREF)) !== "false";
   } catch {
-    syncEnabledPref = false;
+    syncEnabledPref = true;
   }
   return syncEnabledPref;
 }
