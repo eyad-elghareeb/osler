@@ -54,7 +54,7 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
-import { MOTION_TRANSITION } from "@/lib/osler/motion";
+import { MOTION_TRANSITION, staggerContainer, fadeUp } from "@/lib/osler/motion";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -289,16 +289,6 @@ export function VideosStudio({
     return sorted;
   }, [folderVideos, sortMode]);
 
-  // Card entrance stagger runs only on the grid's first data paint.
-  // Later swaps (folder change, sort change, return from the player)
-  // render instantly instead of replaying the stagger (flicker). The
-  // ref resets if the studio itself remounts (fresh hub visit), which
-  // is the one case where the entrance should play again.
-  const gridEnteredRef = React.useRef(false);
-  React.useEffect(() => {
-    if (displayVideos.length > 0) gridEnteredRef.current = true;
-  }, [displayVideos]);
-
   // Warm thumbnail bytes as soon as the folder's videos resolve so card
   // images paint from cache instead of starting after mount + lazy.
   React.useEffect(() => {
@@ -490,22 +480,30 @@ export function VideosStudio({
             ) : displayVideos.length === 0 ? (
               <ComingSoonState icon={VideoIcon} />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              // Same card animation as the dashboard grids: a shared stagger
+              // container orchestrates per-card fadeUp entrances (no hand-rolled
+              // per-card delays), with a subtle hover lift + tap scale.
+              <motion.div
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+              >
                 {displayVideos.map((video, idx) => {
                   const lang = video.lang ?? "en";
                   return (
                     <motion.button
                       key={video.id}
                       type="button"
+                      variants={fadeUp}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.99 }}
                       onClick={() => { haptic("light"); openVideo(video); }}
-                      initial={gridEnteredRef.current ? false : { opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ ...MOTION_TRANSITION.quick, delay: gridEnteredRef.current ? 0 : Math.min(idx * 0.04, 0.4) }}
                       {...ctxLinkAttrs(routeFor("videos", { video: video.id }), video.title)}
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
                       className={cn(
-                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-e2 transition-all duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-e2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                         lang === "ar" && "osler-content-ar"
                       )}
                     >
@@ -563,7 +561,7 @@ export function VideosStudio({
                     </motion.button>
                   );
                 })}
-              </div>
+              </motion.div>
             )}
           </main>
         </div>
