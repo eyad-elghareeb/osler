@@ -345,8 +345,12 @@ export function AppShell({ children }: AppShellProps) {
         // In-flow bar — nothing scrolls behind it; opaque background avoids
         // a pointless backdrop-filter pass every frame.
         "osler-vt-header z-40 shrink-0 h-14 border-b border-border bg-background safe-pt",
-        "hidden md:flex",
-        isMobile && immersive && "hidden",
+        // Immersive sessions (quiz, video player, …) hide this bar on ALL
+        // form factors. Note the `md:flex` is dropped — not overridden with
+        // `hidden` — because the responsive variant wins over `hidden` in
+        // the cascade at desktop widths, so `hidden md:flex hidden` would
+        // still show. `isMobile` intentionally plays no role here.
+        immersive ? "hidden" : "hidden md:flex",
       )}>
         <div className="h-full w-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Left section: logo + desktop nav */}

@@ -20,13 +20,21 @@ export function setImmersiveMode(value: boolean) {
 }
 
 export function useImmersiveMode(): boolean {
-  const [state, setState] = React.useState(immersive);
-  React.useEffect(() => {
-    const l = () => setState(immersive);
-    listeners.add(l);
-    return () => {
-      listeners.delete(l);
-    };
-  }, []);
-  return state;
+  // useSyncExternalStore (not useState + effect subscription): the studios
+  // set the flag in their own mount effects, which run BEFORE the shell's
+  // subscription effects on first mount (child-first effect order). A
+  // useState-seeded hook missed that initial emit and stayed stuck showing
+  // the bars whenever a session started already-active (deep link, restored
+  // session) — the store re-reads the snapshot on subscribe, so the current
+  // value is never missed.
+  return React.useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => {
+        listeners.delete(cb);
+      };
+    },
+    () => immersive,
+    () => false,
+  );
 }
