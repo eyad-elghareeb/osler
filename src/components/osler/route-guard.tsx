@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Activity, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { OslerMark } from "@/components/osler/osler-mark";
 import { useOslerSession } from "@/lib/osler/session-context";
 import { cloudEnabled } from "@/lib/osler/cloud";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -100,18 +101,7 @@ function BootScreen() {
       aria-label={t("common.loading")}
       className="min-h-dvh w-full flex flex-col items-center justify-center gap-4 bg-background px-6"
     >
-      <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground shadow-e2 relative overflow-hidden">
-        {/* Subtle inner highlight — reads as a polished glass tile */}
-        <span
-          aria-hidden
-          className="absolute inset-0 opacity-40"
-          style={{
-            background:
-              "linear-gradient(160deg, color-mix(in oklch, var(--primary-foreground) 25%, transparent), transparent 55%)",
-          }}
-        />
-        <Activity className="size-8 relative" />
-      </div>
+      <OslerMark className="w-16 h-16 rounded-2xl shadow-e2" />
       <div className="text-center">
         <div className="text-base font-semibold">{t("app.name")}</div>
         <div className="text-xs text-muted-foreground mt-0.5">{t("app.tagline")}</div>

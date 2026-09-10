@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { OslerMark } from "@/components/osler/osler-mark";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  Activity,
   LayoutDashboard,
   Users,
   FileText,
@@ -317,9 +317,7 @@ function AdminShellInner({ children }: AdminShellProps) {
             prefetch={false}
             className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
-            <div className="size-8 rounded-lg bg-primary-soft border border-primary/30 flex items-center justify-center shadow-e1">
-              <Activity className="size-4 text-primary" />
-            </div>
+            <OslerMark className="size-8 rounded-lg shadow-e1" />
             <div className="hidden sm:block leading-tight text-start">
               <div className="text-sm font-semibold">
                 {t("app.name")} · {t("admin.shell.brandAdmin")}
@@ -440,9 +438,7 @@ function AdminShellInner({ children }: AdminShellProps) {
             <div className="flex h-full flex-col">
               <div className="h-14 shrink-0 border-b border-border flex items-center px-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="size-7 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
-                    <Activity className="size-4 text-primary" />
-                  </div>
+                  <OslerMark className="size-7 rounded-lg" />
                   <div className="leading-tight">
                     <div className="text-sm font-semibold">
                       {t("admin.shell.brandAdmin")}

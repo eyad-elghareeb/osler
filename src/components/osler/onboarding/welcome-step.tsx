@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Activity, Camera, Compass, Download, Languages, Palette, ShieldCheck, Sparkles, Target } from "lucide-react";
+import { Camera, Compass, Download, Languages, Palette, ShieldCheck, Sparkles, Target } from "lucide-react";
+import { OslerMark } from "@/components/osler/osler-mark";
 
 import { useI18n } from "@/components/osler/i18n-provider";
 
@@ -21,17 +22,7 @@ export function WelcomeStep() {
 
   return (
     <div className="text-center">
-      <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-e2 relative overflow-hidden">
-        <span
-          aria-hidden
-          className="absolute inset-0 opacity-40"
-          style={{
-            background:
-              "linear-gradient(160deg, color-mix(in oklch, var(--primary-foreground) 25%, transparent), transparent 55%)",
-          }}
-        />
-        <Activity className="size-7 relative" />
-      </div>
+      <OslerMark className="w-14 h-14 rounded-2xl shadow-e2 mx-auto mb-4" />
       <h1 className="text-2xl font-bold tracking-tight">
         {t("onboarding.welcome.title", { name: t("app.name") })}
       </h1>

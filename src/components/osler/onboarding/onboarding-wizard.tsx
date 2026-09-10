@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Activity, ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { OslerMark } from "@/components/osler/osler-mark";
 
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/osler/i18n-provider";
@@ -120,17 +121,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
-                <div className="size-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-e1 relative overflow-hidden">
-                  <span
-                    aria-hidden
-                    className="absolute inset-0 opacity-40"
-                    style={{
-                      background:
-                        "linear-gradient(160deg, color-mix(in oklch, var(--primary-foreground) 25%, transparent), transparent 55%)",
-                    }}
-                  />
-                  <Activity className="size-4 relative" />
-                </div>
+                <OslerMark className="size-9 rounded-lg shadow-e1" />
                 <span className="text-sm font-semibold">{t("app.name")}</span>
               </div>
               {!isLast && (

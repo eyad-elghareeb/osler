@@ -3,7 +3,6 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  Activity,
   LayoutDashboard,
   ListChecks,
   Sun,
@@ -18,6 +17,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import { OslerMark } from "@/components/osler/osler-mark";
 
 import { readCloudSession, syncGeminiKeyFromCloud, type CloudSession } from "@/lib/osler/cloud";
 
@@ -359,9 +359,7 @@ export function AppShell({ children }: AppShellProps) {
               aria-label={t("app.name")}
               className="flex items-center gap-2.5 shrink-0"
             >
-              <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
-                <Activity className="size-4 text-primary" />
-              </div>
+              <OslerMark className="size-8 rounded-lg shrink-0" />
               <div className="hidden lg:block leading-tight text-start">
                 <div className="text-sm font-semibold">{t("app.name")}</div>
                 <div className="text-[11px] text-muted-foreground">
@@ -735,9 +733,7 @@ function MobileScrollAwayBar({
           aria-label={t("app.name")}
           className="flex items-center gap-2.5 shrink-0 min-w-0"
         >
-          <div className="size-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
-            <Activity className="size-4 text-primary" />
-          </div>
+          <OslerMark className="size-8 rounded-lg shrink-0" />
           <div className="hidden sm:block leading-tight text-start min-w-0">
             <div className="text-sm font-semibold truncate">{t("app.name")}</div>
             <div className="text-[11px] text-muted-foreground truncate">

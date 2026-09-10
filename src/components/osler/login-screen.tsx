@@ -3,7 +3,6 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  Activity,
   ArrowRight,
   Check,
   Loader2,
@@ -24,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { OslerMark } from "@/components/osler/osler-mark";
 import { useI18n } from "./i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
@@ -516,18 +516,9 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                 transition: MOTION_SPRING.pop,
               },
             }}
-            className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground mx-auto mb-4 shadow-e2 relative overflow-hidden"
+            className="w-16 h-16 mx-auto mb-4"
           >
-            {/* Subtle inner highlight — reads as a polished glass tile */}
-            <span
-              aria-hidden
-              className="absolute inset-0 opacity-40"
-              style={{
-                background:
-                  "linear-gradient(160deg, color-mix(in oklch, var(--primary-foreground) 25%, transparent), transparent 55%)",
-              }}
-            />
-            <Activity className="size-8 relative" />
+            <OslerMark className="w-16 h-16 rounded-2xl shadow-e2" />
           </motion.div>
           <motion.h1
             variants={{
