@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   PlayCircle,
   Play,
@@ -170,7 +170,9 @@ export function VideosStudio({
   // Load videos in the selected folder. Branch nodes aggregate every
   // descendant leaf (nested folders act as playlists). Each video is
   // stamped with its leaf's uid/path so the player can rebuild the
-  // playlist for "Up next".
+  // playlist for "Up next". Stale responses are dropped so rapid folder
+  // switches can't overwrite the grid with the wrong folder's videos.
+  const folderReqRef = React.useRef(0);
   React.useEffect(() => {
     if (!selectedNodeUid) {
       setFolderVideos([]);
@@ -181,10 +183,13 @@ export function VideosStudio({
       setFolderVideos([]);
       return;
     }
+    folderReqRef.current += 1;
+    const req = folderReqRef.current;
     setFolderLoading(true);
     const leaves = collectLeaves(node);
     Promise.all(leaves.map(loadNodeVideos))
       .then((arrays) => {
+        if (folderReqRef.current !== req) return;
         const all = arrays.flatMap((vids, i) =>
           vids.map((v) => ({
             ...v,
@@ -200,10 +205,14 @@ export function VideosStudio({
         }
       })
       .catch((e) => {
+        if (folderReqRef.current !== req) return;
         console.error("Failed to load folder videos:", e);
         setFolderVideos([]);
       })
-      .finally(() => setFolderLoading(false));
+      .finally(() => {
+        if (folderReqRef.current !== req) return;
+        setFolderLoading(false);
+      });
   }, [selectedNodeUid, tree, contentFilter]);
 
   // Open initial video if provided — resolve it from the folder lists on
@@ -274,20 +283,15 @@ export function VideosStudio({
     return sorted;
   }, [folderVideos, sortMode]);
 
-  /* ── Render: Player view ── */
-  if (activeVideo) {
-    return (
-      <VideoPlayerView
-        video={activeVideo}
-        playlist={playlist}
-        onExit={closeVideo}
-        onNext={playNext}
-        onPrev={playPrev}
-        onSelectFromPlaylist={(v) => openVideo({ ...v, nodeUid: activeVideo.nodeUid, nodePath: activeVideo.nodePath })}
-        onOpenArticle={onOpenArticle}
-      />
-    );
-  }
+  // Card entrance stagger runs only on the grid's first data paint.
+  // Later swaps (folder change, sort change, return from the player)
+  // render instantly instead of replaying the stagger (flicker). The
+  // ref resets if the studio itself remounts (fresh hub visit), which
+  // is the one case where the entrance should play again.
+  const gridEnteredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (displayVideos.length > 0) gridEnteredRef.current = true;
+  }, [displayVideos]);
 
   /* ── Render: Hub loading skeleton (initial tree fetch only) ── */
   if (treeLoading) {
@@ -301,7 +305,12 @@ export function VideosStudio({
   // Per-pack content URLs for the offline download button (lib helper —
   // branch nodes collect every leaf descendant).
 
+  // The player renders as an overlay above the hub (its root is
+  // `fixed inset-0 z-50`) so the hub stays mounted while watching —
+  // unmounting/remounting it on every open/close replays every card
+  // entrance animation (flicker).
   return (
+    <>
     <motion.div {...swipeDismissProps} className="osler-page">
       <div className="osler-page__inner--wide">
         {/* Page header */}
@@ -445,8 +454,10 @@ export function VideosStudio({
               </div>
             )}
 
-            {/* Video grid */}
-            {folderLoading ? (
+            {/* Video grid — while a new folder loads, keep showing the
+                previous folder's cards instead of flashing the skeleton;
+                the skeleton only shows on a genuinely empty grid. */}
+            {folderLoading && folderVideos.length === 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="osler-card--default">
@@ -468,9 +479,9 @@ export function VideosStudio({
                       key={video.id}
                       type="button"
                       onClick={() => { haptic("light"); openVideo(video); }}
-                      initial={{ opacity: 0, y: 8 }}
+                      initial={gridEnteredRef.current ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ ...MOTION_TRANSITION.quick, delay: Math.min(idx * 0.04, 0.4) }}
+                      transition={{ ...MOTION_TRANSITION.quick, delay: gridEnteredRef.current ? 0 : Math.min(idx * 0.04, 0.4) }}
                       {...ctxLinkAttrs(routeFor("videos", { video: video.id }), video.title)}
                       dir={lang === "ar" ? "rtl" : undefined}
                       lang={lang}
@@ -550,6 +561,18 @@ export function VideosStudio({
         </div>
       </div>
     </motion.div>
+      {activeVideo && (
+        <VideoPlayerView
+          video={activeVideo}
+          playlist={playlist}
+          onExit={closeVideo}
+          onNext={playNext}
+          onPrev={playPrev}
+          onSelectFromPlaylist={(v) => openVideo({ ...v, nodeUid: activeVideo.nodeUid, nodePath: activeVideo.nodePath })}
+          onOpenArticle={onOpenArticle}
+        />
+      )}
+    </>
   );
 }
 
