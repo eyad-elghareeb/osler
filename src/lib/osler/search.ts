@@ -18,12 +18,10 @@
  */
 
 import { listAllArticles, type ArticleMeta } from "@/lib/osler/articles";
-import { loadContentForTypes, ENGINE_META } from "@/lib/osler/content";
+import { flattenTree, loadCategoryTrees, ENGINE_META } from "@/lib/osler/content";
 import { loadConfig, enabledEngines } from "@/lib/osler/config";
 import { listAllVideos } from "@/lib/osler/videos";
-import { countQuestions } from "@/lib/osler/qbank-pool";
 import type {
-  AnyContent,
   ContentTreeNode,
   EngineType,
 } from "@/lib/osler/types";
@@ -122,13 +120,20 @@ async function buildIndex(): Promise<SearchResult[]> {
     // ignore — search just yields fewer articles
   }
 
-  // Content packs (quiz / bank / written / flashcard / osce) — scoped to the
-  // enabled engines; this runs lazily when the search index is first built.
+  // Content packs: manifests already include every field the search needs
+  // (title, type, tags, description, and item counts). Loading pack bodies
+  // here used to issue one request and JSON parse per pack merely to create a
+  // search row, which made first search stall lower-end Chrome devices.
   try {
     await loadConfig();
-    const { items } = await loadContentForTypes(enabledEngines().filter((t) => t !== "library"));
-    for (const { node, content } of items) {
-      const r = packResult(node, content);
+    const trees = await loadCategoryTrees();
+    const nodes = new Map<string, ContentTreeNode>();
+    for (const type of enabledEngines()) {
+      if (type === "library" || type === "video") continue;
+      for (const node of flattenTree(trees[type] ?? [])) nodes.set(node.uid, node);
+    }
+    for (const node of nodes.values()) {
+      const r = packResult(node);
       if (r) out.push(r);
     }
   } catch {
@@ -195,22 +200,15 @@ function articleResult(a: ArticleMeta): SearchResult {
   };
 }
 
-function packResult(
-  node: ContentTreeNode,
-  content: AnyContent | null,
-): SearchResult | null {
-  if (!content) return null;
-  const engine = content.type as EngineType;
+function packResult(node: ContentTreeNode): SearchResult | null {
+  const engine = node.type as EngineType;
   // Branch nodes (no files) aren't openable directly — skip.
   if ((node.files ?? []).length === 0 && node.items.length > 0) return null;
   const meta = ENGINE_META[engine];
-  const cardCount =
-    content.type === "flashcard" ? content.cards.length :
-    content.type === "quiz" ? content.questions.length :
-    content.type === "bank" ? countQuestions(content) :
-    content.type === "written" ? content.prompts.length :
-    content.type === "osce" ? content.stations.length :
-    content.type === "video" ? content.videos.length : 0;
+  const itemCount =
+    engine === "quiz" || engine === "bank" || engine === "mixed"
+      ? (node.questionCount ?? node.itemCount ?? 0)
+      : (node.itemCount ?? node.questionCount ?? 0);
   return {
     kind: engine === "flashcard" ? "flashcard" :
           engine === "osce" ? "osce" :
@@ -218,9 +216,9 @@ function packResult(
     id: `pack:${node.uid}`,
     title: node.title,
     subtitle: node.description ?? meta?.label,
-    meta: `${meta?.singular ?? engine} · ${cardCount} item${cardCount === 1 ? "" : "s"}`,
+    meta: `${meta?.singular ?? engine} · ${itemCount} item${itemCount === 1 ? "" : "s"}`,
     payload: { type: "pack", uid: node.uid, engine },
-    _haystack: `${node.title} ${node.description ?? ""} ${meta?.label ?? ""} ${engine} pack`.toLowerCase(),
+    _haystack: `${node.title} ${node.description ?? ""} ${(node.tags ?? []).join(" ")} ${meta?.label ?? ""} ${engine} pack`.toLowerCase(),
   };
 }
 
