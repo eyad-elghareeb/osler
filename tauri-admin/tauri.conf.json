@@ -29,6 +29,21 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../src": "template/src",
+      "../scripts": "template/scripts",
+      "../cloudflare": "template/cloudflare",
+      "../public": "template/public",
+      "../functions": "template/functions",
+      "../package.json": "template/package.json",
+      "../package-lock.json": "template/package-lock.json",
+      "../tsconfig.json": "template/tsconfig.json",
+      "../next.config.ts": "template/next.config.ts",
+      "../postcss.config.mjs": "template/postcss.config.mjs",
+      "../components.json": "template/components.json",
+      "../eslint.config.mjs": "template/eslint.config.mjs",
+      "../.env.example": "template/.env.example"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -735,6 +735,7 @@
             origin: state.cloud.allowedOrigin || "http://localhost:3000",
             project: state.cloud.projectName,
             workerUrl: state.cloud.workerUrl || null,
+            workerName: state.cloud.workerName,
             d1: state.cloud.d1Name,
             r2: state.cloud.r2Name,
           });

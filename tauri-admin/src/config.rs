@@ -12,7 +12,7 @@ use crate::commands::ProjectRoot;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use walkdir::WalkDir;
 
 /// Path to the config file inside the project root.
@@ -35,6 +35,23 @@ fn config_path(root: &Path) -> PathBuf {
 /// `tauri-admin/` is maintainer tooling (the desktop generator app's Rust
 /// source + build tree) — an instance runs on Node.js alone and never needs
 /// it. The rest are caches, VCS state, or previous admin/backup sidecars.
+/// Path components that must never be copied into a generated instance when
+/// they appear anywhere inside a copied template folder (dependency trees,
+/// tool state, build output). Mirrors the top-level `is_generator_excluded`
+/// intent for nested paths — e.g. `cloudflare/worker/dist` must not land in
+/// a fresh instance just because its first component is `cloudflare`.
+fn is_copy_skipped_component(name: &str) -> bool {
+    matches!(name, "node_modules" | ".wrangler" | "target" | "dist")
+}
+
+/// Secret-bearing local files that must never land in a generated instance.
+/// `cloudflare/worker/.dev.vars` holds the maintainer's live JWT / API keys;
+/// its `.dev.vars.example` / `.env.example` siblings are safe templates and
+/// are still copied.
+fn is_copy_skipped_file(name: &str) -> bool {
+    matches!(name, ".dev.vars")
+}
+
 fn is_generator_excluded(rel: &str) -> bool {
     let rel = rel.replace('\\', "/");
     let rel = rel.trim_start_matches('/');
@@ -54,7 +71,23 @@ fn is_generator_excluded(rel: &str) -> bool {
     )
 }
 
-fn resolve_source_root() -> Option<PathBuf> {
+/// Prefer the complete instance template packaged with a production app. The
+/// source-tree lookup remains solely for `cargo tauri dev`, where resources
+/// are not installed next to a distributable app bundle.
+fn resolve_template_root(app: &AppHandle) -> Option<PathBuf> {
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let bundled_template = resource_dir.join("template");
+        if bundled_template.join("src/app").is_dir()
+            && bundled_template.join("package.json").is_file()
+        {
+            return Some(bundled_template);
+        }
+    }
+
+    resolve_template_root_from_source()
+}
+
+fn resolve_template_root_from_source() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         let mut curr = exe.parent();
         while let Some(p) = curr {
@@ -167,15 +200,16 @@ pub struct InstanceCloudOptions {
 /// structure, copies core framework files, writes a starter `osler.config.json`,
 /// `package.json`, and content folders. Returns a summary of what was created.
 #[tauri::command]
-pub async fn generate_instance(opts: InstanceOptions) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || generate_instance_sync(opts))
+pub async fn generate_instance(opts: InstanceOptions, app: AppHandle) -> Result<Value, String> {
+    let template_root = resolve_template_root(&app);
+    tauri::async_runtime::spawn_blocking(move || generate_instance_sync(opts, template_root))
         .await
         .map_err(|e| e.to_string())?
 }
 
-fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
-    let source_root = resolve_source_root().ok_or_else(|| {
-        "Could not locate the complete Osler instance template. Run the Instance Manager from an Osler source checkout.".to_string()
+fn generate_instance_sync(opts: InstanceOptions, template_root: Option<PathBuf>) -> Result<Value, String> {
+    let source_root = template_root.or_else(|| resolve_template_root_from_source()).ok_or_else(|| {
+        "Could not locate the bundled Osler instance template. Reinstall the Osler Instance Manager or run it from an Osler source checkout during development.".to_string()
     })?;
     let target = PathBuf::from(&opts.target_dir);
 
@@ -205,9 +239,11 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
     let cloud_enabled = opts.cloud.as_ref().is_some_and(|cloud| cloud.enabled);
 
     // ── 1. Copy the complete runnable framework template ──────────────
-    // `public/` is required for PWA assets, fonts, and static metadata. The
+    // `public/` is required for PWA assets, fonts, and static metadata.
+    // `functions/` holds the Pages RSC-rewrite Function — without it a
+    // Pages-deployed instance serves 404s on client prefetch payloads. The
     // instance-specific config and content tree are created below instead.
-    for folder in ["src", "scripts", "cloudflare", "public"] {
+    for folder in ["src", "scripts", "cloudflare", "public", "functions"] {
         let src_folder = source_root.join(folder);
         if !src_folder.is_dir() {
             continue;
@@ -215,11 +251,16 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
         for entry in WalkDir::new(&src_folder).into_iter().filter_map(|e| e.ok()) {
             let path = entry.path();
             if path.components().any(|c| {
-                matches!(
-                    c.as_os_str().to_string_lossy().as_ref(),
-                    "node_modules" | ".wrangler" | "target"
-                )
+                is_copy_skipped_component(c.as_os_str().to_string_lossy().as_ref())
             }) {
+                continue;
+            }
+            if entry.file_type().is_file()
+                && path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(is_copy_skipped_file)
+            {
                 continue;
             }
             if let Ok(rel) = path.strip_prefix(&source_root) {
@@ -253,6 +294,9 @@ fn generate_instance_sync(opts: InstanceOptions) -> Result<Value, String> {
         "postcss.config.mjs",
         "components.json",
         "eslint.config.mjs",
+        // Documents the NEXT_PUBLIC_* overrides and the production session
+        // secret so a fresh instance owner finds them without the upstream repo.
+        ".env.example",
     ] {
         let sf = source_root.join(root_file);
         let tf = target.join(root_file);
@@ -605,10 +649,27 @@ mod tests {
             "cloudflare/worker/migrations/0001_schema.sql",
             "package.json",
             "public/osler.config.json",
+            "functions/[[path]].js",
+            ".env.example",
             // Prefix lookalike — a different top-level dir, must pass.
             "tauri-admin-notes/todo.md",
         ] {
             assert!(!is_generator_excluded(p), "should pass: {}", p);
+        }
+    }
+
+    #[test]
+    fn nested_build_output_and_secrets_stay_out() {
+        use super::{is_copy_skipped_component, is_copy_skipped_file};
+        for p in ["node_modules", ".wrangler", "target", "dist"] {
+            assert!(is_copy_skipped_component(p), "should skip: {}", p);
+        }
+        for p in ["src", "migrations", "functions", "images"] {
+            assert!(!is_copy_skipped_component(p), "should pass: {}", p);
+        }
+        assert!(is_copy_skipped_file(".dev.vars"));
+        for p in [".dev.vars.example", ".env.example", "wrangler.toml", "package.json"] {
+            assert!(!is_copy_skipped_file(p), "should pass: {}", p);
         }
     }
 

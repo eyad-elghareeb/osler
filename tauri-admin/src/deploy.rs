@@ -1340,6 +1340,7 @@ pub async fn deploy_cloudflare_full_stack(
     origin: String,
     project: Option<String>,
     worker_url: Option<String>,
+    worker_name: Option<String>,
     d1: Option<String>,
     r2: Option<String>,
     state: State<'_, ProjectRoot>,
@@ -1366,13 +1367,14 @@ pub async fn deploy_cloudflare_full_stack(
     }
 
     let proj_name = project.unwrap_or_else(|| "osler".to_string());
+    let worker_name = worker_name.unwrap_or_else(|| "osler-cloud".to_string());
     let d1_name = d1.unwrap_or_else(|| "osler-cloud".to_string());
     let r2_name = r2.unwrap_or_else(|| "osler-content".to_string());
 
     let root_clone = root.clone();
     std::thread::spawn(move || {
         log_info("━━━ Cloudflare Full-Stack Deploy Started ━━━");
-        log_info(format!("Origin: {} | Project: {} | D1: {} | R2: {}", origin, proj_name, d1_name, r2_name));
+        log_info(format!("Origin: {} | Project: {} | Worker: {} | D1: {} | R2: {}", origin, proj_name, worker_name, d1_name, r2_name));
 
         let mut args: Vec<String> = vec![
             "scripts/cloudflare-init.js".into(),
@@ -1380,6 +1382,8 @@ pub async fn deploy_cloudflare_full_stack(
             origin,
             "--project".into(),
             proj_name,
+            "--worker-name".into(),
+            worker_name,
             "--d1".into(),
             d1_name,
             "--r2".into(),
@@ -1416,4 +1420,3 @@ pub async fn deploy_cloudflare_full_stack(
 
     Ok(json!({ "started": true, "pipeline": "cloudflare_full_stack" }))
 }
-
