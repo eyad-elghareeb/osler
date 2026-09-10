@@ -512,7 +512,7 @@ export function AppShell({ children }: AppShellProps) {
           onSignOut={logout}
         />
         <LightboxProvider>
-          <div ref={contentRef} className="h-full w-full flex-1 flex flex-col min-h-0">
+          <div ref={contentRef} className="osler-vt-content h-full w-full flex-1 flex flex-col min-h-0">
             {children}
           </div>
         </LightboxProvider>

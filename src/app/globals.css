@@ -1476,7 +1476,18 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
   navigation: auto;
 }
 
+/* Keep the persistent document surface out of the crossfade. The named
+   route-content snapshot below is the only surface that moves, so a route
+   mounting one frame later can never expose a flashed page background. */
 ::view-transition-group(root) {
+  animation-duration: 0s;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-group(app-content) {
   /* Keep the transition fast and physical — like a native push nav.
      200ms sits just under the ~250ms "instant" perception threshold, so
      drill navigation reads as responsive rather than cinematic. */
@@ -1494,6 +1505,9 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
 .osler-vt-mobile-topbar {
   view-transition-name: app-mobile-topbar;
 }
+.osler-vt-content {
+  view-transition-name: app-content;
+}
 
 ::view-transition-group(app-header),
 ::view-transition-group(app-tabbar),
@@ -1502,10 +1516,10 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
 }
 
 /* Default (no direction attribute) — simple fade for incidental updates. */
-::view-transition-old(root) {
+::view-transition-old(app-content) {
   animation: vt-fade-out 160ms ease both;
 }
-::view-transition-new(root) {
+::view-transition-new(app-content) {
   animation: vt-fade-in 160ms ease both;
 }
 
@@ -1513,28 +1527,28 @@ html[dir="rtl"] .osler-anim-slide-end { animation-name: osler-slide-in-end-rtl; 
    stack pushes, so there is no horizontal travel: a quick crossfade with a
    whisper of lift on the incoming page. Fast enough to feel instant, present
    enough to avoid an abrupt cut. */
-html[data-vt-direction="tab"] ::view-transition-old(root) {
+html[data-vt-direction="tab"] ::view-transition-old(app-content) {
   animation: vt-tab-out 140ms ease both;
 }
-html[data-vt-direction="tab"] ::view-transition-new(root) {
+html[data-vt-direction="tab"] ::view-transition-new(app-content) {
   animation: vt-tab-in 170ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Forward direction — push navigation (outgoing exits stage-start, incoming
    enters from stage-end). Short 8% travel keeps the spatial cue without the
    heavy full-page sweep a 20% slide produced on every tap. */
-html[data-vt-direction="forward"] ::view-transition-old(root) {
+html[data-vt-direction="forward"] ::view-transition-old(app-content) {
   animation: vt-slide-out-start 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
-html[data-vt-direction="forward"] ::view-transition-new(root) {
+html[data-vt-direction="forward"] ::view-transition-new(app-content) {
   animation: vt-slide-in-end 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* Backward direction — pop navigation (reverse of forward). */
-html[data-vt-direction="backward"] ::view-transition-old(root) {
+html[data-vt-direction="backward"] ::view-transition-old(app-content) {
   animation: vt-slide-out-end 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
-html[data-vt-direction="backward"] ::view-transition-new(root) {
+html[data-vt-direction="backward"] ::view-transition-new(app-content) {
   animation: vt-slide-in-start 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
@@ -1549,7 +1563,7 @@ html[data-vt-direction="backward"] ::view-transition-new(root) {
   to { opacity: 0; }
 }
 @keyframes vt-tab-in {
-  from { opacity: 0.3; transform: translateY(6px); }
+  from { opacity: 0.82; transform: translateY(2px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -1562,7 +1576,7 @@ html[data-vt-direction="backward"] ::view-transition-new(root) {
   to   { transform: translateX(calc(-1 * var(--vt-slide, 8%))); opacity: 0.4; }
 }
 @keyframes vt-slide-in-end {
-  from { transform: translateX(var(--vt-slide, 8%)); opacity: 0.4; }
+  from { transform: translateX(var(--vt-slide, 8%)); opacity: 0.75; }
   to   { transform: translateX(0); opacity: 1; }
 }
 @keyframes vt-slide-out-end {
@@ -1570,7 +1584,7 @@ html[data-vt-direction="backward"] ::view-transition-new(root) {
   to   { transform: translateX(var(--vt-slide, 8%)); opacity: 0.4; }
 }
 @keyframes vt-slide-in-start {
-  from { transform: translateX(calc(-1 * var(--vt-slide, 8%))); opacity: 0.4; }
+  from { transform: translateX(calc(-1 * var(--vt-slide, 8%))); opacity: 0.75; }
   to   { transform: translateX(0); opacity: 1; }
 }
 
@@ -1599,9 +1613,9 @@ html[data-vt="off"] .osler-view-enter {
 
 /* Honor reduced-motion: skip all VT animations entirely. */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(root),
-  ::view-transition-old(root),
-  ::view-transition-new(root),
+  ::view-transition-group(app-content),
+  ::view-transition-old(app-content),
+  ::view-transition-new(app-content),
   html[data-vt="off"] .osler-view-enter {
     animation: none !important;
   }
