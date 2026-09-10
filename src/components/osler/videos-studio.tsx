@@ -362,7 +362,7 @@ export function VideosStudio({
                 selected={selectedNodeUid}
                 selectBranches
                 onSelect={(node) => setSelectedNodeUid(node.uid)}
-                defaultExpanded={tree.length > 0 ? [tree[0].uid] : []}
+                defaultExpanded={tree.map((n) => n.uid)}
                 renderExtra={(node) =>
                   node.itemCount != null && node.itemCount > 0 ? (
                     <span className="ml-auto text-[11px] text-muted-foreground/60 tabular-nums">
@@ -444,23 +444,59 @@ export function VideosStudio({
               )}
             </div>
 
-            {/* Folder quick-nav chips (mobile) */}
+            {/* Folder quick-nav (mobile): grouped by top-level folder so the
+                hierarchy stays visible — the previous flat leaf row showed
+                e.g. "Basic Principles" with no mention of Ophthalmology.
+                Tapping a group header selects the branch (aggregated view,
+                matching the desktop tree's selectBranches); chips pick a
+                single folder. */}
             {isMobile && (
-              <div className="flex gap-2 overflow-x-auto osler-scroll-x pb-2 mb-2 -mx-1 px-1">
-                {flattenLeaves(tree).map((node) => (
-                  <button
-                    key={node.uid}
-                    onClick={() => setSelectedNodeUid(node.uid)}
-                    className={cn(
-                      "shrink-0 h-8 px-3 rounded-full text-xs font-medium border transition-colors whitespace-nowrap",
-                      node.uid === selectedNodeUid
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
-                    )}
-                  >
-                    {node.title}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-2 mb-3">
+                {tree.map((root) => {
+                  const leaves = root.items.length === 0 ? [root] : collectLeaves(root);
+                  const isRootActive = root.uid === selectedNodeUid;
+                  return (
+                    <div key={root.uid} className="osler-card--compact">
+                      <button
+                        type="button"
+                        onClick={() => { haptic("selection"); setSelectedNodeUid(root.uid); }}
+                        aria-pressed={isRootActive}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-2 py-1 rounded-lg text-sm transition-colors text-start",
+                          isRootActive ? "text-primary font-semibold" : "text-foreground hover:text-primary"
+                        )}
+                      >
+                        <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{root.title}</span>
+                        {root.itemCount != null && root.itemCount > 0 && (
+                          <span className="ms-auto text-[11px] text-muted-foreground/60 tabular-nums">
+                            {root.itemCount}
+                          </span>
+                        )}
+                      </button>
+                      {root.items.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {leaves.map((node) => (
+                            <button
+                              key={node.uid}
+                              type="button"
+                              onClick={() => { haptic("selection"); setSelectedNodeUid(node.uid); }}
+                              aria-pressed={node.uid === selectedNodeUid}
+                              className={cn(
+                                "h-8 px-3 rounded-full text-xs font-medium border transition-colors whitespace-nowrap",
+                                node.uid === selectedNodeUid
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
+                              )}
+                            >
+                              {node.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1220,16 +1256,4 @@ function findPath(nodes: ContentTreeNode[], uid: string): ContentTreeNode[] {
 function collectLeaves(node: ContentTreeNode): ContentTreeNode[] {
   if (node.items.length === 0) return [node];
   return node.items.flatMap(collectLeaves);
-}
-
-function flattenLeaves(nodes: ContentTreeNode[]): ContentTreeNode[] {
-  const result: ContentTreeNode[] = [];
-  function walk(list: ContentTreeNode[]) {
-    for (const n of list) {
-      if (n.items.length === 0) result.push(n);
-      else walk(n.items);
-    }
-  }
-  walk(nodes);
-  return result;
 }
