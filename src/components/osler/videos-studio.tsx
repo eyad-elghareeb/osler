@@ -293,6 +293,20 @@ export function VideosStudio({
     if (displayVideos.length > 0) gridEnteredRef.current = true;
   }, [displayVideos]);
 
+  // Warm thumbnail bytes as soon as the folder's videos resolve so card
+  // images paint from cache instead of starting after mount + lazy.
+  React.useEffect(() => {
+    if (typeof Image === "undefined") return;
+    for (const v of displayVideos) {
+      const t = resolveThumbnail(v);
+      if (t) {
+        const im = new Image();
+        im.decoding = "async";
+        im.src = t;
+      }
+    }
+  }, [displayVideos]);
+
   /* ── Render: Hub loading skeleton (initial tree fetch only) ── */
   if (treeLoading) {
     return <HubSkeleton statCount={0} cardCount={6} />;
@@ -472,7 +486,6 @@ export function VideosStudio({
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {displayVideos.map((video, idx) => {
-                  const thumbnail = resolveThumbnail(video);
                   const lang = video.lang ?? "en";
                   return (
                     <motion.button
@@ -492,18 +505,7 @@ export function VideosStudio({
                     >
                       {/* Thumbnail */}
                       <div className="relative aspect-video bg-muted overflow-hidden">
-                        {thumbnail ? (
-                          <img
-                            src={thumbnail}
-                            alt={video.title}
-                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
-                            <VideoIcon className="size-8" />
-                          </div>
-                        )}
+                        <VideoThumb video={video} eager={idx < 6} alt={video.title} />
                         {/* Play overlay */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-90" />
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -576,6 +578,51 @@ export function VideosStudio({
   );
 }
 
+/* ── Video thumbnail ─────────────────────────────────────────────────
+ *
+ * YouTube thumbnail candidates, largest first — when one variant 404s
+ * the next is tried instead of leaving a broken tile. Above-fold cards
+ * load eagerly; the rest stay lazy.
+ */
+const YT_THUMB_VARIANTS = ["hqdefault", "mqdefault", "default"] as const;
+
+function thumbCandidates(video: VideoResource): string[] {
+  if (video.thumbnail) return [video.thumbnail];
+  const src = video.source;
+  if (src?.type === "youtube" && src.id) {
+    return YT_THUMB_VARIANTS.map((v) => `https://i.ytimg.com/vi/${src.id}/${v}.jpg`);
+  }
+  return [];
+}
+
+function VideoThumb({ video, eager, alt, iconClass }: {
+  video: VideoResource;
+  eager?: boolean;
+  alt: string;
+  iconClass?: string;
+}) {
+  const srcs = React.useMemo(() => thumbCandidates(video), [video]);
+  const [failed, setFailed] = React.useState(0);
+  const src = failed < srcs.length ? srcs[failed] : null;
+  if (!src) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
+        <VideoIcon className={iconClass ?? "size-8"} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setFailed((n) => n + 1)}
+      className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
+    />
+  );
+}
+
 /* ── Video Player View ─────────────────────────────────────────────── */
 
 interface PlayerViewProps {
@@ -603,7 +650,10 @@ function VideoPlayerView({
   const youtubeRef = React.useRef<any>(null);
 
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(() => cachedAltHost ?? Boolean(INVIDIOUS_HOST));
+  // YouTube embed is the default player; Invidious is strictly opt-in —
+  // only a stored explicit choice ("video-alt-host" === "true") selects
+  // it. The choice persists across videos and sessions.
+  const [invidiousMode, setInvidiousMode] = React.useState<boolean>(() => cachedAltHost ?? false);
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
   const [autoplay, setAutoplay] = React.useState<boolean>(() => cachedAutoplay ?? true);
@@ -627,7 +677,7 @@ function VideoPlayerView({
     // the gate on completion OR after a short fallback either way.
     const fallback = setTimeout(() => {
       if (!cancelled) {
-        cachedAltHost ??= Boolean(INVIDIOUS_HOST);
+        cachedAltHost ??= false;
         cachedAutoplay ??= true;
         setPrefsReady(true);
       }
@@ -635,7 +685,7 @@ function VideoPlayerView({
     void Promise.all([
       settings.get("video-alt-host").then((val) => {
         if (cancelled) return;
-        cachedAltHost = val == null ? Boolean(INVIDIOUS_HOST) : val === "true";
+        cachedAltHost = val == null ? false : val === "true";
         setInvidiousMode(cachedAltHost);
       }),
       settings.get("video-autoplay").then((val) => {
@@ -648,7 +698,7 @@ function VideoPlayerView({
       .finally(() => {
         clearTimeout(fallback);
         if (!cancelled) {
-          cachedAltHost ??= Boolean(INVIDIOUS_HOST);
+          cachedAltHost ??= false;
           cachedAutoplay ??= true;
           setPrefsReady(true);
         }
@@ -669,6 +719,12 @@ function VideoPlayerView({
 
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
+
+  // A chapter jump stamps invidiousStart — clear it when the video
+  // changes so the next embed doesn't inherit the old timestamp.
+  React.useEffect(() => {
+    setInvidiousStart(undefined);
+  }, [videoId]);
 
   // ── Jump to section helper ──
   const handleJumpToSection = (time: number) => {
@@ -1081,7 +1137,6 @@ function VideoPlayerView({
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {playlist.map((v) => {
               const isActive = v.id === video.id;
-              const thumb = resolveThumbnail(v);
               return (
                 <button
                   key={v.id}
@@ -1098,13 +1153,7 @@ function VideoPlayerView({
                 >
                   {/* Thumbnail Box */}
                   <div className="relative w-32 aspect-video shrink-0 rounded-lg overflow-hidden bg-muted border border-border">
-                    {thumb ? (
-                      <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" loading="lazy" />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                        <VideoIcon className="size-6" />
-                      </div>
-                    )}
+                    <VideoThumb video={v} alt="" iconClass="size-6" />
                     {isActive ? (
                       <div className="absolute inset-0 bg-primary/40 backdrop-blur-[1px] flex items-center justify-center">
                         <Play className="size-5 text-white fill-white" />
