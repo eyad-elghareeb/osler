@@ -36,26 +36,40 @@ export type {
 
 export { downloadPdf } from "./download";
 
+/**
+ * PDF font data is intentionally loaded only for an export. The font files
+ * are several megabytes once decoded, so eager startup loading can make
+ * older Android Chrome terminate the entire PWA under memory pressure.
+ */
+async function ensurePdfFonts(): Promise<void> {
+  const { loadPdfFonts } = await import("../pdf-fonts");
+  await loadPdfFonts();
+}
+
 /** Multi-chapter quiz booklet with cover, linked TOC and answer keys. */
 export async function generateQuizCompilationPdf(cfg: PdfExportConfig): Promise<jsPDF> {
+  await ensurePdfFonts();
   const { generateQuizCompilationPdf: generate } = await import("./generators/compilation");
   return generate(cfg);
 }
 
 /** Single-attempt session results with tutor-style answer marking. */
 export async function generateResultsPdf(cfg: ResultsPdfConfig): Promise<jsPDF> {
+  await ensurePdfFonts();
   const { generateResultsPdf: generate } = await import("./generators/results");
   return generate(cfg);
 }
 
 /** Overall performance report with pack-by-pack breakdown. */
 export async function generateDashboardPdf(cfg: DashboardPdfConfig): Promise<jsPDF> {
+  await ensurePdfFonts();
   const { generateDashboardPdf: generate } = await import("./generators/dashboard");
   return generate(cfg);
 }
 
 /** Library article rendered to mirror the print view. */
 export async function generateArticlePdf(cfg: ArticlePdfConfig): Promise<jsPDF> {
+  await ensurePdfFonts();
   const { generateArticlePdf: generate } = await import("./generators/article");
   return generate(cfg);
 }

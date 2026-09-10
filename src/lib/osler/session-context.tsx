@@ -23,10 +23,10 @@ import {
   subscribeSessionChanges,
   type CloudSession,
 } from "@/lib/osler/cloud";
-import { loadPdfFonts } from "@/lib/osler/pdf-fonts";
 import { maybeReportGuestPresence } from "@/lib/osler/guest-presence";
 import { getConfig, isConfigCached } from "@/lib/osler/config";
 import { hasConflict, storage, type DataSummary } from "@/lib/osler/storage";
+import { isConstrainedDevice } from "@/lib/osler/performance";
 
 interface SessionContextType {
   username: string | null;
@@ -171,9 +171,30 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     if (!mayRevive) setLoading(false);
   }, []);
 
-  // Load PDF fonts once on the client (cheap; cached).
+  // PDF fonts expand to several megabytes once decoded to base64. Do not do
+  // that work at startup on constrained Android devices: exports load them
+  // immediately before generating instead. Capable devices retain a delayed
+  // idle warm-up so their first export remains instant.
   React.useEffect(() => {
-    loadPdfFonts();
+    if (isConstrainedDevice()) return;
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      void import("@/lib/osler/pdf-fonts").then(({ loadPdfFonts }) => loadPdfFonts());
+    };
+    const host = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const canIdle = "requestIdleCallback" in host;
+    const handle = canIdle
+      ? host.requestIdleCallback!(warm, { timeout: 12_000 })
+      : window.setTimeout(warm, 8_000);
+    return () => {
+      cancelled = true;
+      if (canIdle) host.cancelIdleCallback?.(handle);
+      else window.clearTimeout(handle);
+    };
   }, []);
 
   /**
