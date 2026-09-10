@@ -150,13 +150,25 @@ const VIEW_DATA_WARMERS: Record<string, () => unknown[]> = {
   ],
 };
 
+/**
+ * Intent signals arrive in bursts (pointer enter, touch start, focus, and the
+ * shell's idle warmer can all target the same view). Keep one shared warm-up
+ * per view while it is running so a route switch never competes with duplicate
+ * manifest requests or dynamic imports for the same destination.
+ */
+const pendingViewWarms = new Map<string, Promise<void>>();
+
 export function warmViewData(view: string): void {
+  if (pendingViewWarms.has(view)) return;
+
   try {
     const warm = VIEW_DATA_WARMERS[view];
     if (!warm) return;
-    for (const pending of warm()) {
-      Promise.resolve(pending).catch(() => {});
-    }
+
+    const pending = Promise.allSettled(warm().map((task) => Promise.resolve(task)))
+      .then(() => undefined)
+      .finally(() => pendingViewWarms.delete(view));
+    pendingViewWarms.set(view, pending);
   } catch {
     // Never let prefetch break navigation.
   }

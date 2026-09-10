@@ -478,6 +478,7 @@ export async function loadContentForTypes(types: EngineType[]): Promise<{
  */
 const MAX_CACHE_ENTRIES = 50;
 const contentCacheMemo = new Map<string, AnyContent>();
+const pendingContentLoads = new Map<string, Promise<AnyContent>>();
 
 function cacheGet(uid: string): AnyContent | undefined {
   const value = contentCacheMemo.get(uid);
@@ -598,10 +599,22 @@ export async function loadContentByUid(uid: string, engineHint?: EngineType): Pr
     return cached;
   }
 
-  const node = await loadNodeByUid(uid, engineHint);
-  const content = await loadNodeContent(node);
-  cacheSet(uid, content);
-  return content;
+  const pending = pendingContentLoads.get(uid);
+  if (pending) return pending;
+
+  const load = (async () => {
+    const node = await loadNodeByUid(uid, engineHint);
+    const content = await loadNodeContent(node);
+    cacheSet(uid, content);
+    return content;
+  })();
+  pendingContentLoads.set(uid, load);
+
+  try {
+    return await load;
+  } finally {
+    pendingContentLoads.delete(uid);
+  }
 }
 
 /**
