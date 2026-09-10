@@ -40,12 +40,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
 import { useI18n } from "./i18n-provider";
-import { FolderTreeNav } from "./folder-tree-nav";
-import { HubSkeleton, EmptyState, ComingSoonState } from "./ui-primitives";
+import { HubSkeleton, EmptyState, ComingSoonState, PageHeader, SectionHeading } from "./ui-primitives";
+import { NavigationStack } from "./navigation-stack";
 import { ContentCacheButton } from "./content-cache-button";
 import {
   acquireWakeLock,
@@ -54,7 +53,7 @@ import {
   haptic,
 } from "@/lib/osler/native";
 import { useSwipeBackDismiss } from "@/hooks/use-swipe-back-dismiss";
-import { MOTION_TRANSITION, staggerContainer, fadeUp } from "@/lib/osler/motion";
+import { staggerContainer, fadeUp } from "@/lib/osler/motion";
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 
@@ -103,7 +102,6 @@ export function VideosStudio({
   onOpenArticle: propOnOpenArticle,
   onNavigateBack: propOnNavigateBack,
 }: VideosStudioProps = {}) {
-  const isMobile = useIsMobile();
   const { t, contentFilter, rtl } = useI18n();
   const { navigate } = useOslerRouter();
 
@@ -118,7 +116,10 @@ export function VideosStudio({
   // warm revisit paints instantly instead of flashing the skeleton.
   // See design-library-roadmap.md.
   const [treeLoading, setTreeLoading] = React.useState(() => getCachedCategoryTree("video") === null);
-  const [selectedNodeUid, setSelectedNodeUid] = React.useState<string | null>(null);
+  // Folder drill-down path (root → … → current), stored as uids so a tree
+  // reload re-resolves fresh node objects. [] = root folder grid. Supports
+  // arbitrary nesting depth, like the QBank Content tab.
+  const [folderUidPath, setFolderUidPath] = React.useState<string[]>([]);
   const [folderVideos, setFolderVideos] = React.useState<VideoResource[]>([]);
   const [folderLoading, setFolderLoading] = React.useState(false);
   // Sort ("more options" layer). Content search lives in the global
@@ -130,10 +131,9 @@ export function VideosStudio({
   // Playlist: list of other videos in the same folder (for "up next").
   const [playlist, setPlaylist] = React.useState<VideoResource[]>([]);
 
-  // Sidebar open/close for mobile.
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
-
-  // Swipe-back gesture to navigate to Learn hub (disabled when watching a video)
+  // Swipe-back gesture to navigate to Learn hub — disabled while watching
+  // a video or while a folder subpage is open (the NavigationStack owns the
+  // drag there and pops one level per swipe).
   const swipeDismissProps = useSwipeBackDismiss({
     onDismiss: () => {
       if (activeVideo) closeVideo();
@@ -141,7 +141,7 @@ export function VideosStudio({
     },
     direction: "horizontal",
     rtl,
-    disabled: !!activeVideo,
+    disabled: !!activeVideo || folderUidPath.length > 0,
   });
 
   /* ── Load tree (manifest) only — folder videos load on demand ── */
@@ -150,8 +150,11 @@ export function VideosStudio({
       try {
         const treeData = await loadVideoTree();
         setTree(treeData);
-        // Auto-select the first leaf folder if none selected
-        setSelectedNodeUid((curr) => curr || findFirstLeaf(treeData)?.uid || null);
+        // Drop drill-down levels whose nodes vanished (admin removed a folder).
+        setFolderUidPath((curr) => {
+          const pruned = curr.filter((uid) => findNodeByUid(treeData, uid) !== null);
+          return pruned.length === curr.length ? curr : pruned;
+        });
         // Warm every leaf's videos in the background so the first paint and
         // later folder switches read from cache instead of chaining serial
         // network round trips (tree → leaf JSON → thumbnails).
@@ -173,18 +176,31 @@ export function VideosStudio({
     return () => window.removeEventListener("osler-content-invalidated", handler);
   }, [loadTreeData]);
 
-  // Load videos in the selected folder. Branch nodes aggregate every
+  // The current drill-down folder (last path entry). Uids re-resolve
+  // against the latest tree so reloads never serve stale node objects.
+  const pathNodes = React.useMemo(
+    () =>
+      folderUidPath
+        .map((uid) => findNodeByUid(tree, uid))
+        .filter((n): n is ContentTreeNode => n !== null),
+    [folderUidPath, tree],
+  );
+  const currentFolder = pathNodes.at(-1) ?? null;
+  const currentUid = currentFolder?.uid ?? null;
+
+  // Load videos in the current folder. Branch nodes aggregate every
   // descendant leaf (nested folders act as playlists). Each video is
   // stamped with its leaf's uid/path so the player can rebuild the
   // playlist for "Up next". Stale responses are dropped so rapid folder
   // switches can't overwrite the grid with the wrong folder's videos.
+  // At the root ([] path) no videos load — the root shows folder cards only.
   const folderReqRef = React.useRef(0);
   React.useEffect(() => {
-    if (!selectedNodeUid) {
+    if (!currentUid) {
       setFolderVideos([]);
       return;
     }
-    const node = findNodeByUid(tree, selectedNodeUid);
+    const node = findNodeByUid(tree, currentUid);
     if (!node) {
       setFolderVideos([]);
       return;
@@ -219,7 +235,7 @@ export function VideosStudio({
         if (folderReqRef.current !== req) return;
         setFolderLoading(false);
       });
-  }, [selectedNodeUid, tree, contentFilter]);
+  }, [currentUid, tree, contentFilter]);
 
   // Open initial video if provided — resolve it from the folder lists on
   // demand (the hub itself never fetches every video up front).
@@ -303,17 +319,316 @@ export function VideosStudio({
     }
   }, [displayVideos]);
 
+  // Root nodes visible under the content-language filter. Branches stay
+  // intact so the user can always drill in; leaf packs filter by lang.
+  const filteredRoots = React.useMemo(() => {
+    if (contentFilter === "all") return tree;
+    return tree.filter((node) => node.items.length > 0 || (node.lang ?? "en") === contentFilter);
+  }, [tree, contentFilter]);
+
+  const visibleChildren = React.useCallback(
+    (node: ContentTreeNode): ContentTreeNode[] => {
+      if (contentFilter === "all") return node.items;
+      return node.items.filter((child) => child.items.length > 0 || (child.lang ?? "en") === contentFilter);
+    },
+    [contentFilter],
+  );
+
+  const pushFolder = React.useCallback((node: ContentTreeNode) => {
+    haptic("selection");
+    setFolderUidPath((p) => (p[p.length - 1] === node.uid ? p : [...p, node.uid]));
+  }, []);
+
+  const popFolder = React.useCallback(() => {
+    haptic("selection");
+    setFolderUidPath((p) => p.slice(0, -1));
+  }, []);
+
+  const totalVideos = React.useCallback(
+    (node: ContentTreeNode): number => node.itemCount ?? node.questionCount ?? collectLeaves(node).length,
+    [],
+  );
+
   /* ── Render: Hub loading skeleton (initial tree fetch only) ── */
   if (treeLoading) {
     return <HubSkeleton statCount={0} cardCount={6} />;
   }
 
-  /* ── Render: Hub view ── */
-  const selectedNode = selectedNodeUid ? findNodeByUid(tree, selectedNodeUid) : null;
-  const breadcrumb = selectedNodeUid ? findPath(tree, selectedNodeUid) : [];
+  // Sort control + offline download for a folder level header. Per-pack
+  // content URLs come from the lib helper — branch nodes collect every
+  // leaf descendant. Content search lives in the global search bar, not here.
+  const renderLevelActions = (node: ContentTreeNode) => (
+    <div className="flex items-center gap-2 shrink-0">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5" aria-label={t("videos.sort")}>
+            <ArrowDownUp className="size-3.5" />
+            <span className="hidden sm:inline">
+              {sortMode === "default"
+                ? t("videos.sortDefault")
+                : sortMode === "longest"
+                  ? t("videos.sortLongest")
+                  : sortMode === "shortest"
+                    ? t("videos.sortShortest")
+                    : t("videos.sortTitle")}
+            </span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {([
+            ["default", t("videos.sortDefault")],
+            ["longest", t("videos.sortLongest")],
+            ["shortest", t("videos.sortShortest")],
+            ["title", t("videos.sortTitle")],
+          ] as const).map(([mode, label]) => (
+            <DropdownMenuItem
+              key={mode}
+              onClick={() => {
+                haptic("selection");
+                setSortMode(mode);
+              }}
+            >
+              {label}
+              {sortMode === mode && <Check className="size-3.5 ms-auto" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ContentCacheButton packId={node.uid} urls={collectPackUrls(node)} />
+    </div>
+  );
 
-  // Per-pack content URLs for the offline download button (lib helper —
-  // branch nodes collect every leaf descendant).
+  // One folder card — branches drill deeper, leaf packs open their videos.
+  // Same canonical card recipe as the QBank Content tab.
+  const renderFolderCard = (node: ContentTreeNode, idx: number) => {
+    const isBranch = node.items.length > 0;
+    const videoCount = totalVideos(node);
+    return (
+      <button
+        key={node.uid}
+        type="button"
+        onClick={() => pushFolder(node)}
+        aria-label={node.title}
+        className="osler-fade-in text-start bg-card border border-border rounded-xl p-5 hover:border-primary/40 hover:shadow-e2 transition-all group flex flex-col gap-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
+        style={{ animationDelay: `${Math.min(idx, 10) * 0.04}s` }}
+      >
+        <div className="flex items-center gap-3.5">
+          <div
+            className="size-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `color-mix(in oklch, ${VIDEO_COLOR} 12%, transparent)`, color: VIDEO_COLOR }}
+          >
+            {isBranch ? <Folder className="size-6" /> : <VideoIcon className="size-6" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-sm truncate text-foreground leading-snug">{node.title}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isBranch ? (
+                <>
+                  {t("videos.subfolders", { n: node.items.length })}
+                  {" · "}
+                  {t("videos.videosCount", { n: videoCount })}
+                </>
+              ) : (
+                t("videos.videosCount", { n: videoCount })
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground/50">
+            {isBranch ? t("videos.openFolder") : t("videos.play")}
+          </span>
+          <ChevronRight className={cn("size-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0", rtl && "rtl-flip-x")} />
+        </div>
+      </button>
+    );
+  };
+
+  // Video grid for the current folder — while a new folder loads, keep
+  // showing the previous folder's cards instead of flashing the skeleton;
+  // the skeleton only shows on a genuinely empty grid.
+  const renderVideoGrid = () => {
+    if (folderLoading && folderVideos.length === 0) {
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="osler-card--default">
+              <Skeleton className="aspect-video w-full rounded-lg mb-3" />
+              <Skeleton className="h-4 w-3/4 mb-2" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (displayVideos.length === 0) {
+      return <ComingSoonState icon={VideoIcon} />;
+    }
+    return (
+      // Same card animation as the dashboard grids: a shared stagger
+      // container orchestrates per-card fadeUp entrances (no hand-rolled
+      // per-card delays), with a subtle hover lift + tap scale.
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+      >
+        {displayVideos.map((video, idx) => {
+          const lang = video.lang ?? "en";
+          return (
+            <motion.button
+              key={video.id}
+              type="button"
+              variants={fadeUp}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.99 }}
+              onClick={() => { haptic("light"); openVideo(video); }}
+              {...ctxLinkAttrs(routeFor("videos", { video: video.id }), video.title)}
+              dir={lang === "ar" ? "rtl" : undefined}
+              lang={lang}
+              className={cn(
+                "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-e2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                lang === "ar" && "osler-content-ar"
+              )}
+            >
+              {/* Thumbnail */}
+              <div className="relative aspect-video bg-muted overflow-hidden">
+                <VideoThumb video={video} eager={idx < 6} alt={video.title} />
+                {/* Play overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-90" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div
+                    className="size-12 rounded-full flex items-center justify-center backdrop-blur-sm bg-black/40 border border-white/30 group-hover:scale-110 group-hover:bg-black/60 transition-all"
+                    style={{ color: "white" }}
+                  >
+                    <Play className="size-5 ms-0.5" fill="currentColor" />
+                  </div>
+                </div>
+                {/* Duration badge */}
+                {video.duration != null && (
+                  <div className="absolute bottom-2 end-2 px-1.5 py-0.5 rounded text-[11px] font-medium tabular-nums bg-black/70 text-white">
+                    {formatDuration(video.duration)}
+                  </div>
+                )}
+                {/* Specialty badge */}
+                {video.specialty && (
+                  <div className="absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/60 text-white backdrop-blur-sm">
+                    {video.specialty}
+                  </div>
+                )}
+              </div>
+
+              {/* Meta */}
+              <div className="p-3">
+                <h3 className="text-sm font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+                  {video.title}
+                </h3>
+                {video.instructor && (
+                  <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">
+                    {video.instructor}
+                  </p>
+                )}
+                {video.tags && video.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {video.tags.slice(0, 3).map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
+                      >
+                        <Tag className="size-2" />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.button>
+          );
+        })}
+      </motion.div>
+    );
+  };
+
+  // Root level — folder cards only (videos appear once inside a folder),
+  // matching the QBank / Flashcards hub pattern.
+  const homeView = (
+    <div className="osler-page__inner--wide">
+      <PageHeader
+        inline
+        inlineIcon={PlayCircle}
+        inlineIconColor={VIDEO_COLOR}
+        title={t("videos.title")}
+        subtitle={t("videos.subtitle")}
+      />
+      <div className="mt-4">
+        {tree.length === 0 ? (
+          <ComingSoonState icon={VideoIcon} />
+        ) : filteredRoots.length === 0 ? (
+          <EmptyState icon={Folder} title={t("videos.empty")} description={t("videos.emptyDesc")} />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredRoots.map((node, idx) => renderFolderCard(node, idx))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Current drill-down level — child folders on top, aggregated videos below.
+  const levelChildren = currentFolder ? visibleChildren(currentFolder) : [];
+  const parentLabel = pathNodes.length > 1 ? (pathNodes.at(-2)?.title ?? t("videos.allFolders")) : t("videos.allFolders");
+  const subpageView = currentFolder ? (
+    <div className="osler-page__inner--wide">
+      <button
+        type="button"
+        onClick={popFolder}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+      >
+        <ArrowLeft className={cn("size-3.5", rtl && "rtl-flip-x")} />
+        {parentLabel}
+      </button>
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="size-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `color-mix(in oklch, ${VIDEO_COLOR} 12%, transparent)`, color: VIDEO_COLOR }}
+          >
+            {currentFolder.items.length > 0 ? <Folder className="size-6" /> : <VideoIcon className="size-6" />}
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate">{currentFolder.title}</h1>
+            <p className="text-sm text-muted-foreground">
+              {currentFolder.items.length > 0 ? (
+                <>
+                  {t("videos.subfolders", { n: levelChildren.length })}
+                  {" · "}
+                  {t("videos.videosCount", { n: totalVideos(currentFolder) })}
+                </>
+              ) : (
+                t("videos.videosCount", { n: totalVideos(currentFolder) })
+              )}
+            </p>
+          </div>
+        </div>
+        {renderLevelActions(currentFolder)}
+      </div>
+      {levelChildren.length > 0 && (
+        <div className="mt-6 mb-8">
+          <SectionHeading icon={Folder}>{t("videos.folders")}</SectionHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {levelChildren.map((node, idx) => renderFolderCard(node, idx))}
+          </div>
+        </div>
+      )}
+      <div className="mt-6">
+        <SectionHeading icon={VideoIcon}>
+          {levelChildren.length > 0 ? t("videos.videosInFolder") : t("videos.allVideos")}
+        </SectionHeading>
+        {renderVideoGrid()}
+      </div>
+    </div>
+  ) : null;
 
   // The player renders as an overlay above the hub (its root is
   // `fixed inset-0 z-50`) so the hub stays mounted while watching —
@@ -321,288 +636,18 @@ export function VideosStudio({
   // entrance animation (flicker).
   return (
     <>
-    <motion.div {...swipeDismissProps} className="osler-page">
-      <div className="osler-page__inner--wide">
-        {/* Page header */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={MOTION_TRANSITION.slow}
-          className="osler-page-header--inline"
-        >
-          <div
-            className="size-10 rounded-xl flex items-center justify-center shrink-0 border"
-            style={{
-              backgroundColor: `color-mix(in oklch, ${VIDEO_COLOR} 12%, transparent)`,
-              borderColor: `color-mix(in oklch, ${VIDEO_COLOR} 30%, transparent)`,
-              color: VIDEO_COLOR,
-            }}
-          >
-            <PlayCircle className="size-5" />
-          </div>
-          <div>
-            <h1 className="osler-page-header__title">
-              {t("videos.title")}
-            </h1>
-            <p className="osler-page-header__subtitle">{t("videos.subtitle")}</p>
-          </div>
-        </motion.div>
+      <motion.div {...swipeDismissProps} className="h-full">
+        <NavigationStack
+          className="h-full"
+          homeClassName="osler-page"
+          subpageClassName="osler-page"
+          rtl={rtl}
+          home={homeView}
+          subpage={subpageView}
+          onBack={() => setFolderUidPath((p) => p.slice(0, -1))}
+        />
+      </motion.div>
 
-        {/* Two-pane layout: folder tree (desktop) + video grid */}
-        <div className="flex flex-col md:flex-row gap-4 mt-4">
-          {/* Desktop sidebar: folder tree */}
-          <aside className="hidden md:flex flex-col w-64 shrink-0">
-            <div className="osler-card--compact">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2 px-2">
-                <Folder className="size-3.5" />
-                {t("videos.folders")}
-              </div>
-              <FolderTreeNav
-                tree={tree}
-                selected={selectedNodeUid}
-                selectBranches
-                onSelect={(node) => setSelectedNodeUid(node.uid)}
-                defaultExpanded={tree.map((n) => n.uid)}
-                renderExtra={(node) =>
-                  node.itemCount != null && node.itemCount > 0 ? (
-                    <span className="ml-auto text-[11px] text-muted-foreground/60 tabular-nums">
-                      {node.itemCount}
-                    </span>
-                  ) : null
-                }
-              />
-            </div>
-          </aside>
-
-          {/* Main: video grid */}
-          <main className="flex-1 min-w-0">
-            {/* Header row */}
-            <div className="flex items-center justify-between mb-3 min-h-8">
-              <div className="min-w-0">
-                {breadcrumb.length > 0 ? (
-                  <h2 className="text-sm font-semibold truncate flex items-center gap-1.5">
-                    {breadcrumb.map((node, i) => (
-                      <React.Fragment key={node.uid}>
-                        {i > 0 && <ChevronRight className={cn("size-3 text-muted-foreground", rtl && "rotate-180")} />}
-                        {i === breadcrumb.length - 1 ? (
-                          <span>{node.title}</span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => { haptic("selection"); setSelectedNodeUid(node.uid); }}
-                            className="text-muted-foreground hover:text-primary transition-colors"
-                          >
-                            {node.title}
-                          </button>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </h2>
-                ) : (
-                  <h2 className="text-sm font-semibold truncate">{t("videos.allVideos")}</h2>
-                )}
-              </div>
-              {selectedNode && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5" aria-label={t("videos.sort")}>
-                        <ArrowDownUp className="size-3.5" />
-                        <span className="hidden sm:inline">
-                          {sortMode === "default"
-                            ? t("videos.sortDefault")
-                            : sortMode === "longest"
-                              ? t("videos.sortLongest")
-                              : sortMode === "shortest"
-                                ? t("videos.sortShortest")
-                                : t("videos.sortTitle")}
-                        </span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {([
-                        ["default", t("videos.sortDefault")],
-                        ["longest", t("videos.sortLongest")],
-                        ["shortest", t("videos.sortShortest")],
-                        ["title", t("videos.sortTitle")],
-                      ] as const).map(([mode, label]) => (
-                        <DropdownMenuItem
-                          key={mode}
-                          onClick={() => {
-                            haptic("selection");
-                            setSortMode(mode);
-                          }}
-                        >
-                          {label}
-                          {sortMode === mode && <Check className="size-3.5 ms-auto" />}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <ContentCacheButton packId={selectedNode.uid} urls={collectPackUrls(selectedNode)} />
-                </div>
-              )}
-            </div>
-
-            {/* Folder quick-nav (mobile): grouped by top-level folder so the
-                hierarchy stays visible — the previous flat leaf row showed
-                e.g. "Basic Principles" with no mention of Ophthalmology.
-                Tapping a group header selects the branch (aggregated view,
-                matching the desktop tree's selectBranches); chips pick a
-                single folder. */}
-            {isMobile && (
-              <div className="flex flex-col gap-2 mb-3">
-                {tree.map((root) => {
-                  const leaves = root.items.length === 0 ? [root] : collectLeaves(root);
-                  const isRootActive = root.uid === selectedNodeUid;
-                  return (
-                    <div key={root.uid} className="osler-card--compact">
-                      <button
-                        type="button"
-                        onClick={() => { haptic("selection"); setSelectedNodeUid(root.uid); }}
-                        aria-pressed={isRootActive}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-2 py-1 rounded-lg text-sm transition-colors text-start",
-                          isRootActive ? "text-primary font-semibold" : "text-foreground hover:text-primary"
-                        )}
-                      >
-                        <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{root.title}</span>
-                        {root.itemCount != null && root.itemCount > 0 && (
-                          <span className="ms-auto text-[11px] text-muted-foreground/60 tabular-nums">
-                            {root.itemCount}
-                          </span>
-                        )}
-                      </button>
-                      {root.items.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          {leaves.map((node) => (
-                            <button
-                              key={node.uid}
-                              type="button"
-                              onClick={() => { haptic("selection"); setSelectedNodeUid(node.uid); }}
-                              aria-pressed={node.uid === selectedNodeUid}
-                              className={cn(
-                                "h-8 px-3 rounded-full text-xs font-medium border transition-colors whitespace-nowrap",
-                                node.uid === selectedNodeUid
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
-                              )}
-                            >
-                              {node.title}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Video grid — while a new folder loads, keep showing the
-                previous folder's cards instead of flashing the skeleton;
-                the skeleton only shows on a genuinely empty grid. */}
-            {folderLoading && folderVideos.length === 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="osler-card--default">
-                    <Skeleton className="aspect-video w-full rounded-lg mb-3" />
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : displayVideos.length === 0 ? (
-              <ComingSoonState icon={VideoIcon} />
-            ) : (
-              // Same card animation as the dashboard grids: a shared stagger
-              // container orchestrates per-card fadeUp entrances (no hand-rolled
-              // per-card delays), with a subtle hover lift + tap scale.
-              <motion.div
-                variants={staggerContainer}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-              >
-                {displayVideos.map((video, idx) => {
-                  const lang = video.lang ?? "en";
-                  return (
-                    <motion.button
-                      key={video.id}
-                      type="button"
-                      variants={fadeUp}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.99 }}
-                      onClick={() => { haptic("light"); openVideo(video); }}
-                      {...ctxLinkAttrs(routeFor("videos", { video: video.id }), video.title)}
-                      dir={lang === "ar" ? "rtl" : undefined}
-                      lang={lang}
-                      className={cn(
-                        "text-start group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-e2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        lang === "ar" && "osler-content-ar"
-                      )}
-                    >
-                      {/* Thumbnail */}
-                      <div className="relative aspect-video bg-muted overflow-hidden">
-                        <VideoThumb video={video} eager={idx < 6} alt={video.title} />
-                        {/* Play overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-90" />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div
-                            className="size-12 rounded-full flex items-center justify-center backdrop-blur-sm bg-black/40 border border-white/30 group-hover:scale-110 group-hover:bg-black/60 transition-all"
-                            style={{ color: "white" }}
-                          >
-                            <Play className="size-5 ms-0.5" fill="currentColor" />
-                          </div>
-                        </div>
-                        {/* Duration badge */}
-                        {video.duration != null && (
-                          <div className="absolute bottom-2 end-2 px-1.5 py-0.5 rounded text-[11px] font-medium tabular-nums bg-black/70 text-white">
-                            {formatDuration(video.duration)}
-                          </div>
-                        )}
-                        {/* Specialty badge */}
-                        {video.specialty && (
-                          <div className="absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/60 text-white backdrop-blur-sm">
-                            {video.specialty}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Meta */}
-                      <div className="p-3">
-                        <h3 className="text-sm font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
-                          {video.title}
-                        </h3>
-                        {video.instructor && (
-                          <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">
-                            {video.instructor}
-                          </p>
-                        )}
-                        {video.tags && video.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {video.tags.slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                className="inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border"
-                              >
-                                <Tag className="size-2" />
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </motion.button>
-                  );
-                })}
-              </motion.div>
-            )}
-          </main>
-        </div>
-      </div>
-    </motion.div>
       {activeVideo && (
         <VideoPlayerView
           video={activeVideo}
@@ -1049,10 +1094,16 @@ function VideoPlayerView({
         )}
       </header>
 
-      {/* Body: Main stage (Player + Metadata) + Right Sidebar (Up Next Playlist & Chapters) */}
+      {/* Body: Main stage (Player + Metadata) + Right Sidebar (Up Next Playlist & Chapters).
+          Phones get ONE scroll surface (the Body) so nested scrollers can't
+          trap touches and leave Up Next covering the player; the player
+          itself sticks to the top while the list scrolls underneath. */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
-        {/* Main Stage Column */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-y-auto lg:overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4">
+        {/* Main Stage Column — flows with the outer scroller on phones,
+            owns its own scroll on desktop. */}
+        <div className="flex-1 min-w-0 flex flex-col lg:overflow-y-auto lg:h-full p-3 sm:p-4 lg:p-6 space-y-4">
+          {/* Sticky player on phones — pinned while Up Next scrolls past. */}
+          <div className="sticky top-0 z-10 -mx-3 px-3 pt-3 pb-2 bg-background sm:-mx-4 sm:px-4 lg:static lg:mx-0 lg:px-0 lg:pt-0 lg:pb-0 lg:bg-transparent lg:z-auto">
           {/* Video Player Container — while prefs resolve the stage stays a
               black box (indistinguishable from player load) instead of
               mounting the default player and swapping it a beat later. */}
@@ -1068,6 +1119,7 @@ function VideoPlayerView({
             ) : (
               <div ref={containerRef} className="absolute inset-0 w-full h-full" />
             )}
+          </div>
           </div>
 
           {/* YouTube-like Metadata Header */}
@@ -1162,19 +1214,20 @@ function VideoPlayerView({
           </div>
         </div>
 
-        {/* Right Sidebar: Up Next Playlist */}
-        <aside className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-s border-border bg-card flex flex-col h-auto lg:h-full overflow-hidden">
+        {/* Right Sidebar: Up Next Playlist — natural height on phones (the
+            Body scrolls), internally scrolled fixed column on desktop. */}
+        <aside className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-s border-border bg-card flex flex-col lg:h-full lg:overflow-hidden">
           <div className="p-3 sm:p-4 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-bold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
               <ListVideo className="size-4 text-primary" />
               {t("videos.upNext")}
             </h3>
             <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
-              {playlist.length} {t("videos.videosCount", { n: playlist.length })}
+              {t("videos.videosCount", { n: playlist.length })}
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+          <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[max(env(safe-area-inset-bottom,0px),1rem)] lg:pb-2">
             {playlist.map((v) => {
               const isActive = v.id === video.id;
               return (
@@ -1233,25 +1286,6 @@ function VideoPlayerView({
 }
 
 /* ── Tree helpers ──────────────────────────────────────────────────── */
-
-function findFirstLeaf(nodes: ContentTreeNode[]): ContentTreeNode | null {
-  for (const n of nodes) {
-    if (n.items.length === 0) return n;
-    const child = findFirstLeaf(n.items);
-    if (child) return child;
-  }
-  return null;
-}
-
-/** Root-to-node path for breadcrumbs, or [] when the uid is unknown. */
-function findPath(nodes: ContentTreeNode[], uid: string): ContentTreeNode[] {
-  for (const n of nodes) {
-    if (n.uid === uid) return [n];
-    const sub = findPath(n.items, uid);
-    if (sub.length > 0) return [n, ...sub];
-  }
-  return [];
-}
 
 function collectLeaves(node: ContentTreeNode): ContentTreeNode[] {
   if (node.items.length === 0) return [node];

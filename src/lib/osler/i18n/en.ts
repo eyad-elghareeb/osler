@@ -903,6 +903,11 @@ export const en = {
     "videos.autoplay": "Autoplay",
     "videos.prevTitle": "Previous video (P)",
     "videos.nextTitle": "Next video (N)",
+    "videos.allFolders": "All folders",
+    "videos.subfolders": "{n} folders",
+    "videos.videosInFolder": "Videos in this folder",
+    "videos.openFolder": "Open folder",
+    "videos.emptyDesc": "No videos match the current content-language filter.",
 
     "profile.title": "Profile",
     "profile.user": "User",
