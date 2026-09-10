@@ -22,6 +22,7 @@ import {
   MOTION_TRANSITION,
 } from "@/lib/osler/motion";
 import { isBlurEffectsEnabled, applyBlurEffectsFlag } from "@/lib/osler/native";
+import { applyPerformanceTier } from "@/lib/osler/performance";
 
 export function AnimationsProvider({ children }: { children: React.ReactNode }) {
   const enabled = useAnimationsEnabled();
@@ -37,20 +38,10 @@ export function AnimationsProvider({ children }: { children: React.ReactNode }) 
     applyAnimationsFlag(isAnimationsEnabled());
   }, []);
 
-  // Low-end device detection (once): weak CPUs / little RAM / data-saver
-  // get `data-perf="low"` on <html>, which view-transitions.ts reads to
-  // skip heavy transition effects. It no longer gates blur CSS — an
-  // explicit blur opt-in from Settings → Native Features always wins.
+  // Mark constrained devices before speculative route and modal warm-ups
+  // begin. The same marker lets navigation skip costly full-page snapshots.
   React.useEffect(() => {
-    const nav = navigator as Navigator & {
-      deviceMemory?: number;
-      connection?: { saveData?: boolean };
-    };
-    const weak =
-      (nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency <= 4) ||
-      (nav.deviceMemory !== undefined && nav.deviceMemory <= 2) ||
-      nav.connection?.saveData === true;
-    if (weak) document.documentElement.setAttribute("data-perf", "low");
+    applyPerformanceTier();
   }, []);
 
   // Blur effects preference (once): <html> ships with data-blur="off" so the

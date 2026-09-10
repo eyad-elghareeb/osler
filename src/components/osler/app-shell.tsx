@@ -137,6 +137,7 @@ import { loadContentByUid } from "@/lib/osler/content";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 import { warmLazySurfaces } from "./lazy-tools";
+import { isConstrainedDevice } from "@/lib/osler/performance";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -158,6 +159,10 @@ export function AppShell({ children }: AppShellProps) {
   // requestIdleCallback keeps this off the critical path.
   React.useEffect(() => {
     const warm = () => {
+      // A Galaxy Tab A-class device has little CPU/RAM headroom after the
+      // initial render. Keep its first navigation intent-driven; capable
+      // devices retain the complete route + overlay warm-up for instant opens.
+      if (isConstrainedDevice()) return;
       prefetchAll();
       if (navigator.onLine) warmLazySurfaces();
     };

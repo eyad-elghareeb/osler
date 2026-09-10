@@ -1,4 +1,6 @@
 
+import { isConstrainedDevice } from "@/lib/osler/performance";
+
 /**
  * Osler Background Precaching Engine
  *
@@ -235,8 +237,15 @@ export async function startBackgroundPrecaching(options?: { force?: boolean }): 
           const saveData =
             typeof navigator !== "undefined" &&
             (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
-          const urls = new Set<string>([...APP_ROUTES, ...CORE_STATIC_ASSETS, ...activeRouteAssets()]);
-          if (!saveData) {
+          // On constrained devices cache the page the learner is actually
+          // using. The next destination is still warmed by explicit hover,
+          // touch, or focus intent; avoiding a 10-route sweep leaves the main
+          // thread, network, and storage quota available for the session.
+          const constrained = isConstrainedDevice();
+          const currentRoute = window.location.pathname || "/";
+          const routes = constrained ? [currentRoute] : APP_ROUTES;
+          const urls = new Set<string>([...routes, ...CORE_STATIC_ASSETS, ...activeRouteAssets()]);
+          if (!saveData && !constrained) {
             let budget = MAX_WARM_URLS;
             for (const route of APP_ROUTES) {
               if (budget <= 0) break;
