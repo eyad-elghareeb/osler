@@ -905,7 +905,6 @@ export const en = {
     "videos.nextTitle": "Next video (N)",
     "videos.allFolders": "All folders",
     "videos.subfolders": "{n} folders",
-    "videos.videosInFolder": "Videos in this folder",
     "videos.openFolder": "Open folder",
     "videos.emptyDesc": "No videos match the current content-language filter.",
 

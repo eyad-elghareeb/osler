@@ -906,7 +906,6 @@ export const ar = {
     "videos.nextTitle": "الفيديو التالي (N)",
     "videos.allFolders": "كل المجلدات",
     "videos.subfolders": "{n} مجلدات",
-    "videos.videosInFolder": "فيديوهات هذا المجلد",
     "videos.openFolder": "فتح المجلد",
     "videos.emptyDesc": "لا توجد فيديوهات مطابقة لفلتر لغة المحتوى الحالي.",
 

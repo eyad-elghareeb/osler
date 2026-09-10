@@ -575,7 +575,9 @@ export function VideosStudio({
     </div>
   );
 
-  // Current drill-down level — child folders on top, aggregated videos below.
+  // Current drill-down level — branch folders show child folders only;
+  // videos live at their leaf pack (no aggregated video dump at branch
+  // levels, so a folder reads as an organizer, not a mixed listing).
   const levelChildren = currentFolder ? visibleChildren(currentFolder) : [];
   const parentLabel = pathNodes.length > 1 ? (pathNodes.at(-2)?.title ?? t("videos.allFolders")) : t("videos.allFolders");
   const subpageView = currentFolder ? (
@@ -614,19 +616,19 @@ export function VideosStudio({
         {renderLevelActions(currentFolder)}
       </div>
       {levelChildren.length > 0 && (
-        <div className="mt-6 mb-8">
+        <div className="mt-6">
           <SectionHeading icon={Folder}>{t("videos.folders")}</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {levelChildren.map((node, idx) => renderFolderCard(node, idx))}
           </div>
         </div>
       )}
-      <div className="mt-6">
-        <SectionHeading icon={VideoIcon}>
-          {levelChildren.length > 0 ? t("videos.videosInFolder") : t("videos.allVideos")}
-        </SectionHeading>
-        {renderVideoGrid()}
-      </div>
+      {levelChildren.length === 0 && (
+        <div className="mt-6">
+          <SectionHeading icon={VideoIcon}>{t("videos.allVideos")}</SectionHeading>
+          {renderVideoGrid()}
+        </div>
+      )}
     </div>
   ) : null;
 
