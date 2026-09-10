@@ -121,7 +121,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
-                <OslerMark className="size-9 rounded-lg shadow-e1" />
+                <OslerMark variant="line" className="size-6 text-primary shrink-0" />
                 <span className="text-sm font-semibold">{t("app.name")}</span>
               </div>
               {!isLast && (

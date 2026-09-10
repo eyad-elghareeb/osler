@@ -359,7 +359,7 @@ export function AppShell({ children }: AppShellProps) {
               aria-label={t("app.name")}
               className="flex items-center gap-2.5 shrink-0"
             >
-              <OslerMark className="size-8 rounded-lg shrink-0" />
+              <OslerMark variant="line" className="size-6 text-primary shrink-0" />
               <div className="hidden lg:block leading-tight text-start">
                 <div className="text-sm font-semibold">{t("app.name")}</div>
                 <div className="text-[11px] text-muted-foreground">
@@ -733,7 +733,7 @@ function MobileScrollAwayBar({
           aria-label={t("app.name")}
           className="flex items-center gap-2.5 shrink-0 min-w-0"
         >
-          <OslerMark className="size-8 rounded-lg shrink-0" />
+          <OslerMark variant="line" className="size-6 text-primary shrink-0" />
           <div className="hidden sm:block leading-tight text-start min-w-0">
             <div className="text-sm font-semibold truncate">{t("app.name")}</div>
             <div className="text-[11px] text-muted-foreground truncate">

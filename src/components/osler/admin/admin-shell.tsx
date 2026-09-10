@@ -317,7 +317,7 @@ function AdminShellInner({ children }: AdminShellProps) {
             prefetch={false}
             className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
           >
-            <OslerMark className="size-8 rounded-lg shadow-e1" />
+            <OslerMark variant="line" className="size-6 text-primary shrink-0" />
             <div className="hidden sm:block leading-tight text-start">
               <div className="text-sm font-semibold">
                 {t("app.name")} · {t("admin.shell.brandAdmin")}
@@ -438,7 +438,7 @@ function AdminShellInner({ children }: AdminShellProps) {
             <div className="flex h-full flex-col">
               <div className="h-14 shrink-0 border-b border-border flex items-center px-4">
                 <div className="flex items-center gap-2.5">
-                  <OslerMark className="size-7 rounded-lg" />
+                  <OslerMark variant="line" className="size-5 text-primary shrink-0" />
                   <div className="leading-tight">
                     <div className="text-sm font-semibold">
                       {t("admin.shell.brandAdmin")}
