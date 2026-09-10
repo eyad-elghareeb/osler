@@ -20,8 +20,18 @@ import { startBackgroundPrecaching, initBackgroundSyncListeners } from "@/lib/os
  *
  * Registration is deferred until after the page is interactive to avoid
  * competing with first-paint network requests, followed by silent idle precaching.
+ *
+ * When a deploy lands while the app is open, the new worker activates
+ * (skipWaiting) but this page keeps running the old JS — so the provider
+ * tracks the worker's build id and fires `APP_UPDATE_EVENT` when a newer
+ * build takes control, letting the shell prompt for a reload.
  */
+export const APP_UPDATE_EVENT = "osler-app-update-available";
+
 export function SerwistProvider({ children }: { children: React.ReactNode }) {
+  // Last seen SW build id — a change means a deploy activated mid-session.
+  const swBuildRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -43,6 +53,30 @@ export function SerwistProvider({ children }: { children: React.ReactNode }) {
       if (document.visibilityState === "visible") update();
     };
 
+    // Ask the controlling worker for its build id; when a newer build
+    // takes control mid-session, tell the shell so it can prompt for a
+    // reload instead of running stale code.
+    const querySwBuild = () => {
+      try {
+        const ctrl = navigator.serviceWorker.controller;
+        if (!ctrl || cancelled) return;
+        const onMsg = (e: MessageEvent) => {
+          if ((e.data as { type?: string })?.type !== "SW_BUILD") return;
+          navigator.serviceWorker.removeEventListener("message", onMsg);
+          const id = (e.data as { buildId?: unknown }).buildId;
+          if (typeof id !== "string" || !id) return;
+          if (swBuildRef.current && swBuildRef.current !== id) {
+            window.dispatchEvent(new CustomEvent(APP_UPDATE_EVENT));
+          }
+          swBuildRef.current = id;
+        };
+        navigator.serviceWorker.addEventListener("message", onMsg);
+        ctrl.postMessage({ type: "GET_SW_BUILD" });
+      } catch {
+        // ignore — update detection is best-effort
+      }
+    };
+
     const register = () => {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
@@ -51,6 +85,8 @@ export function SerwistProvider({ children }: { children: React.ReactNode }) {
           registration = reg;
           updateTimer = window.setInterval(update, 60 * 60 * 1000);
           document.addEventListener("visibilitychange", onVisibilityChange);
+          querySwBuild();
+          navigator.serviceWorker.addEventListener("controllerchange", querySwBuild);
           // Existing installations already control this page. Fresh installs
           // trigger controllerchange and use the listener initialized above.
           void startBackgroundPrecaching();
@@ -70,6 +106,9 @@ export function SerwistProvider({ children }: { children: React.ReactNode }) {
       if (updateTimer !== null) window.clearInterval(updateTimer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("load", register);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("controllerchange", querySwBuild);
+      }
     };
   }, []);
 

@@ -8,6 +8,9 @@
 export const en = {
     "app.name": "Osler",
     "app.tagline": "Medical Study Platform",
+    "app.updateAvailableTitle": "Update available",
+    "app.updateAvailableBody": "A new version is ready. Reload to get the latest fixes.",
+    "app.reload": "Reload",
 
     "offline.surface.title": "Not available offline yet",
     "offline.surface.body": "This feature needs to load once while online. Reconnect, reopen the app, then try again.",

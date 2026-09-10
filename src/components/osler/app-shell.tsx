@@ -56,6 +56,9 @@ import type { StringKey } from "@/lib/osler/i18n";
 import { isTextInput } from "@/lib/osler/shortcuts";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { APP_UPDATE_EVENT } from "./serwist-provider";
 import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 import {
   haptic,
@@ -203,6 +206,29 @@ export function AppShell({ children }: AppShellProps) {
   React.useEffect(() => {
     startContentVersionSync();
   }, []);
+
+  // Prompt for a reload when a newer app build takes control (a deploy
+  // landed while the app was open) — otherwise this page keeps running
+  // stale code and fresh fixes look like they never shipped.
+  React.useEffect(() => {
+    const onAppUpdate = () => {
+      toast({
+        title: t("app.updateAvailableTitle"),
+        description: t("app.updateAvailableBody"),
+        duration: 30000,
+        action: (
+          <ToastAction
+            altText={t("app.reload")}
+            onClick={() => { haptic("light"); window.location.reload(); }}
+          >
+            {t("app.reload")}
+          </ToastAction>
+        ),
+      });
+    };
+    window.addEventListener(APP_UPDATE_EVENT, onAppUpdate);
+    return () => window.removeEventListener(APP_UPDATE_EVENT, onAppUpdate);
+  }, [t]);
 
 
   const handleViewChange = React.useCallback(

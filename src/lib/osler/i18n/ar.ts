@@ -15,6 +15,9 @@ export const ar = {
 
     "app.name": "أوسلر",
     "app.tagline": "منصة المذاكرة الطبية",
+    "app.updateAvailableTitle": "تحديث متوفر",
+    "app.updateAvailableBody": "نسخة جديدة جاهزة. أعد تحميل الصفحة للحصول على أحدث الإصلاحات.",
+    "app.reload": "إعادة التحميل",
 
     "common.search": "بحث",
     "common.searchPlaceholder": "ابحث في المقالات والحالات والأدوية…",
