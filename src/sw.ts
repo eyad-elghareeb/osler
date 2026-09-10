@@ -79,6 +79,15 @@ const cacheableResponse = {
   cacheWillUpdate: async ({ response }: { response?: Response }) =>
     response?.status === 200 ? response : null,
 };
+// Thumbnails load via <img> (no-cors), so cross-origin posters arrive as
+// opaque responses with status 0 — the strict rule above would never cache
+// them and every visit would refetch every tile. Accept opaque here so
+// repeat visits paint from cache; a cached opaque 404 still fires the img
+// onError path, so VideoThumb's fallback chain keeps working.
+const cacheableImageResponse = {
+  cacheWillUpdate: async ({ response }: { response?: Response }) =>
+    response?.status === 200 || response?.status === 0 ? response : null,
+};
 
 // Shared by both content fallbacks below: one registry, one 180-entry /
 // 14-day bound for the runtime content cache.
@@ -185,7 +194,7 @@ const runtimeCaching: RuntimeCaching[] = [
     handler: new StaleWhileRevalidate({
       cacheName: IMAGE_CACHE,
       plugins: [
-        cacheableResponse,
+        cacheableImageResponse,
         new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * DAY_SECONDS }),
       ],
     }),

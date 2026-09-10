@@ -152,6 +152,12 @@ export function VideosStudio({
         setTree(treeData);
         // Auto-select the first leaf folder if none selected
         setSelectedNodeUid((curr) => curr || findFirstLeaf(treeData)?.uid || null);
+        // Warm every leaf's videos in the background so the first paint and
+        // later folder switches read from cache instead of chaining serial
+        // network round trips (tree → leaf JSON → thumbnails).
+        void Promise.all(treeData.flatMap(collectLeaves).map((leaf) => loadNodeVideos(leaf))).catch(() => {
+          // Best-effort only — the hub loads each folder on demand anyway.
+        });
       } catch (e) {
         console.error("Failed to load videos tree:", e);
       } finally {
