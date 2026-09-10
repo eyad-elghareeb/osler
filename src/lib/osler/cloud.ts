@@ -1032,9 +1032,18 @@ export function startCloudSync(session: CloudSession): () => void {
           ingestQuota(pushedResult.quota);
           lastSyncAt = Date.now();
           notifySyncStatus("synced", lastSyncAt);
+        } else {
+          // Every requested kind is gated off on this instance — nothing
+          // left to push, so the cycle is done, not stuck.
+          lastSyncAt = Date.now();
+          notifySyncStatus("synced", lastSyncAt);
         }
       } else {
+        // Pull-only cycle (startup / poke / foreground backstop): the pull
+        // above already converged state, so report completion instead of
+        // leaving the UI in "syncing" until the next push happens.
         lastSyncAt = Date.now();
+        notifySyncStatus("synced", lastSyncAt);
       }
 
       for (const kind of dirtyKindsDuringSync) {

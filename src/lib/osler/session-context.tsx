@@ -483,6 +483,10 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
         // Only NOW is it safe to clear the conflict — the network call has
         // either succeeded or thrown, and the dialog has surfaced the error.
         setPendingConflict(null);
+        // pushAll/pullAll/mergeNow run outside the sync loop so they never
+        // emit a status themselves — close the "syncing" opened above (or
+        // the loop's own) so the shell dot can't stick.
+        notifySyncStatus("synced", Date.now());
       } catch (err) {
         // Re-surface the conflict so the user can retry — silent failure
         // here would leave the device in a half-applied state.
