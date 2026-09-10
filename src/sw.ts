@@ -187,10 +187,16 @@ const runtimeCaching: RuntimeCaching[] = [
     },
   },
   // Thumbnails + content images: stale-while-revalidate so a cached image
-  // paints instantly and refreshes in the background. Offline-friendly and
-  // keeps YouTube hqdefault (remote) from blocking hub first paint.
+  // paints instantly and refreshes in the background. Same-origin only:
+  // cross-origin posters (YouTube thumbnails) must bypass the worker —
+  // routing them through respondWith turned their fetch failures into hard
+  // no-response rejections for every tile (see console: "A ServiceWorker
+  // passed a promise to FetchEvent.respondWith() that rejected"). The
+  // browser fetches those directly with its normal HTTP cache instead.
   {
-    matcher: ({ request, url }) => request.destination === "image" || url.pathname.includes("/images/"),
+    matcher: ({ request, url }) =>
+      url.origin === self.location.origin &&
+      (request.destination === "image" || url.pathname.includes("/images/")),
     handler: new StaleWhileRevalidate({
       cacheName: IMAGE_CACHE,
       plugins: [
