@@ -179,9 +179,27 @@ describe("mergeKind — bookmarks", () => {
   });
 });
 
+describe("mergeKind — videos", () => {
+  it("unions watched videos and keeps the newest mark/unmark counters", () => {
+    const remote = { "vid-1": { a: 100 }, "vid-2": { a: 200, d: 300 } };
+    const local = { "vid-2": { a: 400 }, "vid-3": { a: 500 } };
+    const r = mergeKind(remote, local, "videos");
+    expect(r.records["vid-1"]).toEqual({ a: 100 });
+    expect(r.records["vid-2"]).toEqual({ a: 400, d: 300 });
+    expect(r.records["vid-3"]).toEqual({ a: 500 });
+    expect(r.changed).toBe(true);
+  });
+
+  it("reports no change on a no-op re-push", () => {
+    const doc = { "vid-1": { a: 100 }, "vid-2": { a: 200, d: 300 } };
+    const r = mergeKind(doc, doc, "videos");
+    expect(r.changed).toBe(false);
+  });
+});
+
 describe("SYNC_KINDS", () => {
   it("covers every kind merged by the worker (session-bound data rides in `sessions`)", () => {
-    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "articleHighlights", "bookmarks", "achievements", "settings"]);
+    expect(SYNC_KINDS).toEqual(["qbank", "flashcards", "sessions", "notes", "articleHighlights", "bookmarks", "videos", "achievements", "settings"]);
   });
 });
 

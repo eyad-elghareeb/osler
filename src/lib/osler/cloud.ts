@@ -857,6 +857,7 @@ const EVENT_TO_KIND: Record<string, SyncKind> = {
   "osler-notes-changed": "notes",
   "osler-article-highlights-changed": "articleHighlights",
   "osler-bookmarks-changed": "bookmarks",
+  "osler-video-watch-changed": "videos",
   "osler-achievements-changed": "achievements",
   "osler-settings-changed": "settings",
   "osler-quiz-settings-changed": "settings",

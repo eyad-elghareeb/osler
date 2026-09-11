@@ -23,6 +23,7 @@ export const SYNC_KINDS = [
   "notes",
   "articleHighlights",
   "bookmarks",
+  "videos",
   "achievements",
   "settings",
 ] as const;
@@ -182,11 +183,12 @@ function mergeUnion(remote: Record<string, any>, local: Record<string, any>): Me
   return { records: out, changed, json };
 }
 
-/** Two-phase last-writer-wins set (bookmarks): `Record<path, { a: addedAt,
- *  d?: deletedAt }>`. Each counter is a grow-only max, so the merge converges
- *  regardless of push order; a path is live iff `a > (d ?? 0)`. This is what
- *  lets a bookmark removed on one device STAY removed everywhere, while a
- *  later re-add (newer `a`) revives it. Legacy `1` values migrate to {a: 0}. */
+/** Two-phase last-writer-wins set (bookmarks, per-video watched state):
+ *  `Record<key, { a: addedAt, d?: deletedAt }>`. Each counter is a grow-only
+ *  max, so the merge converges regardless of push order; a key is live iff
+ *  `a > (d ?? 0)`. This is what lets a bookmark removed on one device STAY
+ *  removed everywhere, while a later re-add (newer `a`) revives it. Legacy
+ *  `1` values migrate to {a: 0}. */
 function mergeBookmarkEntries(remote: Record<string, any>, local: Record<string, any>): MergeResult {
   const out: Record<string, any> = { ...remote };
   let changed = false;
@@ -214,6 +216,7 @@ export function mergeKind(remote: Record<string, any>, local: Record<string, any
   const cfg = TIMESTAMP_KIND[kind];
   if (cfg) return mergeBy(remote, local, cfg);
   if (kind === "bookmarks") return mergeBookmarkEntries(remote, local);
+  if (kind === "videos") return mergeBookmarkEntries(remote, local);
   if (kind === "settings") return mergeUnion(remote, local);
   return mergeItemArrays(remote, local);
 }

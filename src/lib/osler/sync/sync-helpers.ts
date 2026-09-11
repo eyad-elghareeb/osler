@@ -1,4 +1,4 @@
-import { storage } from "@/lib/osler/storage";
+import { storage, videoWatch } from "@/lib/osler/storage";
 import type { SyncPayload } from "./sync-protocol";
 
 export async function buildExportPayload(): Promise<SyncPayload> {
@@ -39,6 +39,12 @@ export async function buildExportPayload(): Promise<SyncPayload> {
   const articleHighlights = storage.exportArticleHighlights();
   for (const [articleId, items] of Object.entries(articleHighlights)) {
     data[`osler_article_highlights_${articleId}`] = items;
+  }
+
+  // Video watch state (videoId → two-phase LWW entry; safe to union-merge)
+  const videoWatchState = videoWatch.state();
+  if (Object.keys(videoWatchState).length > 0) {
+    data["osler_video_watch"] = videoWatchState;
   }
 
   return {

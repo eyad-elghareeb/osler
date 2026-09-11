@@ -7,7 +7,7 @@ import type { EngineType } from "./types";
 import type { AchievementRecord } from "./achievements";
 
 const DB_NAME = "osler-db-v1";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 /** Hard limits on imported sync/backup payloads. A single oversized record
  *  can OOM the tab or freeze the main thread during JSON.parse + IndexedDB
@@ -133,6 +133,114 @@ export const articleBookmarks = {
     }
   },
 };
+/* ── Video watch state (per-video "watched", synced like bookmarks) ──── *
+ *  Stored in the `videoWatch` IndexedDB store as `{ key: videoId,
+ *  value: { a: markedAt, d?: unmarkedAt } }` — the same two-phase LWW set
+ *  shape as article bookmarks: both counters are grow-only, so marks and
+ *  unmarks converge across devices and a later unmark always out-ranks a
+ *  legacy mark. Reads are synchronous off the hydrated memory cache;
+ *  writes update the cache first, then persist (achievements pattern). */
+
+/** Watch state for one video — reuses the BookmarkEntry two-phase shape. */
+export type VideoWatchEntry = BookmarkEntry;
+
+export const VIDEO_WATCH_EVENT = "osler-video-watch-changed";
+
+const VIDEO_WATCH_STORE = "videoWatch";
+
+function readVideoWatchState(): Record<string, VideoWatchEntry> {
+  const out: Record<string, VideoWatchEntry> = {};
+  for (const [k, v] of memoryCache) {
+    if (!k.startsWith(`${VIDEO_WATCH_STORE}:`)) continue;
+    const e = v as VideoWatchEntry | null;
+    if (e && typeof e === "object" && typeof e.a === "number") {
+      out[k.replace(`${VIDEO_WATCH_STORE}:`, "")] = { a: e.a, ...(typeof e.d === "number" && e.d > 0 ? { d: e.d } : {}) };
+    }
+  }
+  return out;
+}
+
+function isWatchedEntry(e: VideoWatchEntry | null | undefined): boolean {
+  return !!e && e.a > (e.d ?? 0);
+}
+
+/** Live (non-unmarked) watched video ids — the UI view of the set. */
+function liveWatchedIds(state: Record<string, VideoWatchEntry>): string[] {
+  return Object.entries(state)
+    .filter(([, e]) => isWatchedEntry(e))
+    .map(([id]) => id);
+}
+
+export const videoWatch = {
+  /** Watched video ids (unmarked removals excluded). */
+  live(): string[] {
+    return liveWatchedIds(readVideoWatchState());
+  },
+
+  /** Full two-phase state — for sync snapshots and backups. */
+  state(): Record<string, VideoWatchEntry> {
+    return readVideoWatchState();
+  },
+
+  isWatched(id: string): boolean {
+    return isWatchedEntry(getCached<VideoWatchEntry>(VIDEO_WATCH_STORE, id));
+  },
+
+  /** Mark a video watched; idempotent (no counter bump when already live). */
+  async mark(id: string): Promise<boolean> {
+    if (!isSafeImportKey(id) || videoWatch.isWatched(id)) return false;
+    const cur = getCached<VideoWatchEntry>(VIDEO_WATCH_STORE, id);
+    const entry: VideoWatchEntry = { a: Date.now(), ...(cur?.d ? { d: cur.d } : {}) };
+    setCached(VIDEO_WATCH_STORE, id, entry);
+    await idbPut(VIDEO_WATCH_STORE, id, entry).catch(console.warn);
+    dispatchChange(VIDEO_WATCH_EVENT);
+    return true;
+  },
+
+  /** Remove the watched mark (tombstoned so it syncs across devices). */
+  async unmark(id: string): Promise<boolean> {
+    if (!isSafeImportKey(id) || !videoWatch.isWatched(id)) return false;
+    const cur = getCached<VideoWatchEntry>(VIDEO_WATCH_STORE, id);
+    const entry: VideoWatchEntry = { a: cur?.a ?? 0, d: Date.now() };
+    setCached(VIDEO_WATCH_STORE, id, entry);
+    await idbPut(VIDEO_WATCH_STORE, id, entry).catch(console.warn);
+    dispatchChange(VIDEO_WATCH_EVENT);
+    return true;
+  },
+
+  /** Toggle a video; reports whether it is now watched. */
+  async toggle(id: string): Promise<boolean> {
+    if (videoWatch.isWatched(id)) {
+      await videoWatch.unmark(id);
+      return false;
+    }
+    await videoWatch.mark(id);
+    return true;
+  },
+
+  /** Max-merge a remote watch doc into the local state (used by pulls). */
+  async merge(state: Record<string, VideoWatchEntry>): Promise<boolean> {
+    const local = readVideoWatchState();
+    const changed: Array<{ key: string; value: VideoWatchEntry }> = [];
+    for (const [id, inc] of Object.entries(state)) {
+      if (typeof id !== "string" || !isSafeImportKey(id) || !inc || typeof inc !== "object") continue;
+      const cur = local[id] ?? { a: 0 };
+      const mergedA = Math.max(cur.a ?? 0, Number(inc.a) || 0);
+      const mergedD = Math.max(cur.d ?? 0, Number(inc.d) || 0);
+      const merged: VideoWatchEntry = { a: mergedA, ...(mergedD > 0 ? { d: mergedD } : {}) };
+      if (JSON.stringify(local[id]) !== JSON.stringify(merged)) {
+        local[id] = merged;
+        changed.push({ key: id, value: merged });
+      }
+    }
+    if (changed.length) {
+      for (const e of changed) setCached(VIDEO_WATCH_STORE, e.key, e.value);
+      await idbPutBatch(VIDEO_WATCH_STORE, changed).catch(console.warn);
+      dispatchChange(VIDEO_WATCH_EVENT);
+    }
+    return changed.length > 0;
+  },
+};
 
 /** Every content kind synced to the cloud, mirroring the worker's SYNC_KINDS.
  *  The GET response also carries a `quota` field, which callers must skip when
@@ -145,6 +253,7 @@ export const SYNC_KINDS = [
   "notes",
   "articleHighlights",
   "bookmarks",
+  "videos",
   "achievements",
   "settings",
 ] as const;
@@ -226,6 +335,11 @@ function openDB(): Promise<IDBDatabase> {
         const notesStore = db.createObjectStore("notes", { keyPath: "id" });
         notesStore.createIndex("byUpdatedAt", "updatedAt");
         notesStore.createIndex("byPack", "packUid");
+      }
+      // v7: per-video watched state — two-phase LWW entries keyed by videoId,
+      // synced like bookmarks (records: Record<videoId, { a, d? }>).
+      if (!db.objectStoreNames.contains("videoWatch")) {
+        db.createObjectStore("videoWatch", { keyPath: "key" });
       }
       // v6: retire session-bound stores — written drafts and qbank highlights
       // live inside the session record (active + saved), never per-pack stores.
@@ -814,6 +928,7 @@ export const storage = {
     dispatchChange("osler-article-highlights-changed");
     dispatchChange("osler-achievements-changed");
     dispatchChange("osler-settings-changed");
+    dispatchChange(VIDEO_WATCH_EVENT);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
     }
@@ -1035,6 +1150,9 @@ export const storage = {
     if (shouldExport("bookmarks")) {
       snapshot.bookmarks = { records: readBookmarkState() as unknown as Record<string, unknown> };
     }
+    if (shouldExport("videos")) {
+      snapshot.videos = { records: readVideoWatchState() as unknown as Record<string, unknown> };
+    }
     if (shouldExport("achievements")) {
       snapshot.achievements = { records: achievements.getAll() as unknown as Record<string, unknown> };
     }
@@ -1114,6 +1232,12 @@ export const storage = {
       if (articleBookmarks.merge(bookmarkRecords as Record<string, BookmarkEntry>)) {
         window.dispatchEvent(new CustomEvent("osler-bookmarks-changed"));
       }
+    }
+
+    // videos: two-phase LWW union, newest mark/unmark counters win.
+    const videoRecords = snapshot.videos?.records;
+    if (videoRecords && typeof videoRecords === "object") {
+      await videoWatch.merge(videoRecords as Record<string, VideoWatchEntry>);
     }
 
     // achievements: union by id, newest unlockedAt wins.
@@ -1322,14 +1446,20 @@ export const storage = {
         dispatchChange("osler-achievements-changed");
       }
     }
+
+    // 6. Video watch state (videoId → two-phase LWW entry)
+    const videoWatchMap = data["osler_video_watch"];
+    if (videoWatchMap && typeof videoWatchMap === "object" && !Array.isArray(videoWatchMap)) {
+      await videoWatch.merge(videoWatchMap as Record<string, VideoWatchEntry>);
+    }
   },
 
   /**
    * Cheap snapshot of the local data: per-kind record counts + max
    * timestamp. Used by the account-switch / guest-upgrade conflict
    * detection so the UI can decide whether to prompt the user.
-   * (Bookmarks are localStorage-backed and merge by union on both the P2P
-   * and cloud paths, so they can never surprise-merge — they're excluded
+   * (Bookmarks and video-watch state merge by grow-only union on both the
+   * P2P and cloud paths, so they can never surprise-merge — they're excluded
    * from the conflict heuristic.)
    */
   getLocalDataSummary(): DataSummary {
