@@ -25,6 +25,7 @@ import {
   MessageSquareWarning,
   Share2,
   Link2,
+  List,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import {
@@ -787,9 +788,9 @@ function MobileHub({
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
-  // Folders start expanded so the hub reads exactly like the old flat
-  // list — collapsing is opt-in per folder.
-  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+  // Folders start collapsed — expanding is opt-in per folder, so the hub
+  // opens as a compact scan of section names instead of an endless list.
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
   const metaByFile = React.useMemo(
     () => new Map(allArticles.map((a) => [a.file, a])),
@@ -798,7 +799,7 @@ function MobileHub({
 
   const toggleFolder = React.useCallback((uid: string) => {
     haptic("selection");
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(uid)) next.delete(uid);
       else next.add(uid);
@@ -814,7 +815,7 @@ function MobileHub({
   return (
     <div className="osler-page">
       {/* Filter pills */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
+      <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2 max-w-xl mx-auto">
           <button
             onClick={() => selectFilter("all")}
@@ -851,7 +852,7 @@ function MobileHub({
               <p className="text-sm text-muted-foreground">{t("library.noBookmarks")}</p>
             </div>
           ) : (
-            <div className="space-y-1.5 mt-3">
+            <div className="space-y-1 mt-2.5">
               {bookmarkedArticles.map((a) => (
                 <MobileArticleRow
                   key={a.file}
@@ -867,7 +868,7 @@ function MobileHub({
         ) : allArticles.length === 0 ? (
           <ComingSoonState icon={BookOpen} className="py-16" />
         ) : tree.length === 0 ? (
-          <div className="space-y-1.5 mt-3">
+          <div className="space-y-1 mt-2.5">
             {allArticles.map((a) => (
               <MobileArticleRow
                 key={a.file}
@@ -888,7 +889,7 @@ function MobileHub({
               metaByFile={metaByFile}
               activeFile={activeFile}
               bookmarks={bookmarks}
-              collapsed={collapsed}
+              expanded={expanded}
               onToggleFolder={toggleFolder}
               onOpenArticle={onOpenArticle}
               onToggleBookmark={onToggleBookmark}
@@ -932,7 +933,7 @@ function MobileArticleRow({
       }}
       {...ctxLinkAttrs(routeFor("library", { article: a.file }), a.title)}
       className={cn(
-        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-start transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
         a.file === activeFile && "border-primary/40 bg-primary/5",
         a.lang === "ar" && "osler-content-ar",
@@ -940,12 +941,12 @@ function MobileArticleRow({
       dir={a.lang === "ar" ? "rtl" : undefined}
     >
       <div className={cn(
-        "size-10 rounded-lg flex items-center justify-center shrink-0",
+        "size-8 rounded-md flex items-center justify-center shrink-0",
         a.contentType === "pdf"
           ? "bg-warning-soft text-warning"
           : "bg-primary/10 text-primary"
       )}>
-        {a.contentType === "pdf" ? <FileText className="size-5" /> : <BookOpen className="size-5" />}
+        {a.contentType === "pdf" ? <FileText className="size-4" /> : <BookOpen className="size-4" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="font-medium text-sm truncate">{a.title}</div>
@@ -992,7 +993,7 @@ function MobileTreeNode({
   metaByFile,
   activeFile,
   bookmarks,
-  collapsed,
+  expanded,
   onToggleFolder,
   onOpenArticle,
   onToggleBookmark,
@@ -1002,7 +1003,7 @@ function MobileTreeNode({
   metaByFile: Map<string, ArticleMeta>;
   activeFile: string | null;
   bookmarks: Set<string>;
-  collapsed: Set<string>;
+  expanded: Set<string>;
   onToggleFolder: (uid: string) => void;
   onOpenArticle: (file: string) => void;
   onToggleBookmark: (file: string) => void;
@@ -1024,14 +1025,14 @@ function MobileTreeNode({
     );
   }
 
-  const isCollapsed = collapsed.has(node.uid);
+  const isCollapsed = !expanded.has(node.uid);
   const count = countFolderArticles(node);
   return (
-    <div className={cn(depth === 0 ? "mt-5 first:mt-3" : "mt-3")}>
+    <div className={cn(depth === 0 ? "mt-4 first:mt-2" : "mt-2.5")}>
       <button
         onClick={() => onToggleFolder(node.uid)}
         aria-expanded={!isCollapsed}
-        className="flex items-center gap-2 px-0.5 mb-2 min-h-[44px] w-full text-start rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="flex items-center gap-2 px-0.5 mb-1.5 min-h-[44px] w-full text-start rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <Folder className="size-3.5 text-muted-foreground shrink-0" />
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
@@ -1057,7 +1058,7 @@ function MobileTreeNode({
             transition={MOTION_TRANSITION.fast}
             className="overflow-hidden"
           >
-            <div className={cn("space-y-1.5", depth > 0 && "ms-2 border-s border-border ps-3")}>
+            <div className={cn("space-y-1", depth > 0 && "ms-2 border-s border-border ps-3")}>
               {node.items.map((child) => (
                 <MobileTreeNode
                   key={child.uid}
@@ -1066,7 +1067,7 @@ function MobileTreeNode({
                   metaByFile={metaByFile}
                   activeFile={activeFile}
                   bookmarks={bookmarks}
-                  collapsed={collapsed}
+                  expanded={expanded}
                   onToggleFolder={onToggleFolder}
                   onOpenArticle={onOpenArticle}
                   onToggleBookmark={onToggleBookmark}
@@ -1348,7 +1349,7 @@ function SidebarContent({
       <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
         {fullScreen && (
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold">Choose an article</span>
+            <span className="text-sm font-semibold">{t("library.chooseArticle")}</span>
             {onClose && (
               <button
                 onClick={onClose}
@@ -1376,7 +1377,7 @@ function SidebarContent({
               )}
               title={t("library.tableOfContents")}
             >
-              <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              <List className="size-3.5" />
             </button>
             <button
               onClick={() => onTabChange("bookmarks")}
@@ -1432,8 +1433,8 @@ function SidebarContent({
       </div>
 
       <div className="px-3 py-2 border-t border-border text-[11px] text-muted-foreground flex items-center justify-between">
-        <span>{articleCount} articles</span>
-        <span>{bookmarks.size} bookmarked</span>
+        <span>{t("library.articlesCount", { n: articleCount })}</span>
+        <span>{t("library.bookmarkedCount", { n: bookmarks.size })}</span>
       </div>
     </div>
   );

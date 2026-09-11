@@ -522,7 +522,9 @@ export function articlesFromManifestTree(tree: ContentTreeNode[]): ArticleMeta[]
 /**
  * Expand article files into selectable leaf nodes while preserving the
  * manifest's folder hierarchy. The library hub and in-session picker both use
- * this shape so folders never collapse into a flat article list.
+ * this shape so folders never collapse into a flat article list. Folders
+ * whose entire subtree holds exactly one article are replaced by that
+ * article — a level that never branches is visual noise, not structure.
  */
 export function buildArticleDisplayTree(
   tree: ContentTreeNode[],
@@ -567,7 +569,16 @@ export function buildArticleDisplayTree(
     return out;
   }
 
-  return enrich(tree);
+  function flattenSingleArticleFolders(nodes: ContentTreeNode[]): ContentTreeNode[] {
+    return nodes.flatMap((node) => {
+      if (node.items.length === 0) return [node];
+      const items = flattenSingleArticleFolders(node.items);
+      if (items.length === 1 && items[0].items.length === 0) return items;
+      return [{ ...node, items }];
+    });
+  }
+
+  return flattenSingleArticleFolders(enrich(tree));
 }
 
 /** Return all articles across all library leaf nodes, with metadata only (no html). */

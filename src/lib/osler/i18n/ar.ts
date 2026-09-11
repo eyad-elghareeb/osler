@@ -844,6 +844,8 @@ export const ar = {
     "library.relatedArticles": "مقالات ذات صلة",
     "library.bookmarked": "المحفوظة",
     "library.all": "الكل",
+    "library.chooseArticle": "اختر مقالًا",
+    "library.bookmarkedCount": "{n} محفوظة",
     "library.articlesCount": "{n} مقالات",
     "library.oneArticle": "مقال واحد",
     "library.noResults": "لا توجد مقالات مطابقة لبحثك",

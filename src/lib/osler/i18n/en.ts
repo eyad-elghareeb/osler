@@ -843,6 +843,8 @@ export const en = {
     "library.relatedArticles": "Related articles",
     "library.bookmarked": "Bookmarked",
     "library.all": "All",
+    "library.chooseArticle": "Choose an article",
+    "library.bookmarkedCount": "{n} bookmarked",
     "library.articlesCount": "{n} articles",
     "library.oneArticle": "1 article",
     "library.noResults": "No articles match your search",
