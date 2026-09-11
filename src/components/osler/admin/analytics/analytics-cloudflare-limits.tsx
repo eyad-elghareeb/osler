@@ -106,7 +106,16 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
     return order(a.role) - order(b.role) || a.name.localeCompare(b.name, undefined, { numeric: true });
   });
   // Older Workers omit `connected`/`sources` — treat everything as estimated.
-  const connected = data.connected === true;
+  const hasLiveSource = Boolean(
+    data.sources && (
+      data.sources.workerRequests === "live" ||
+      data.sources.d1Storage === "live" ||
+      data.sources.r2ClassAOps === "live" ||
+      data.sources.r2ClassBOps === "live" ||
+      data.sources.workerCpuTime === "live"
+    )
+  );
+  const connected = data.connected === true || hasLiveSource;
   const cpuLive = data.sources?.workerCpuTime === "live";
   const isApproachingLimits =
     metrics.workerRequests.status !== "healthy" ||

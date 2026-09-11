@@ -220,13 +220,19 @@ interface Env {
   QBANK_STATS_MIN_SAMPLE?: string;
   /** Cloudflare account ID (32 hex chars) for live GraphQL usage queries. */
   CF_ACCOUNT_ID?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
   /** API token with Account Analytics:Read (a SECRET — set via
    *  `wrangler secret put CF_ANALYTICS_TOKEN`, never in wrangler.toml).
    *  Enables live quota numbers in GET /v1/admin/analytics/cloudflare-limits;
    *  without it the endpoint serves D1-derived estimates. */
   CF_ANALYTICS_TOKEN?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CF_API_TOKEN?: string;
+  CLOUDFLARE_ANALYTICS_TOKEN?: string;
   /** R2 bucket name for live ops/storage queries (default "osler-content"). */
   CF_R2_BUCKET?: string;
+  CLOUDFLARE_R2_BUCKET?: string;
+  R2_BUCKET?: string;
 }
 
 // ── D1 shard routing ─────────────────────────────────────────────────────────
@@ -3359,11 +3365,19 @@ async function cfGraphql(token: string, query: string, variables: Record<string,
       body: JSON.stringify({ query, variables }),
       signal: ctrl.signal,
     });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { data?: any; errors?: unknown[] };
-    if (!body || (Array.isArray(body.errors) && body.errors.length > 0)) return null;
+    if (!res.ok) {
+      console.warn(`[cfGraphql] HTTP ${res.status}: ${res.statusText}`);
+      return null;
+    }
+    const body = (await res.json()) as { data?: any; errors?: Array<{ message?: string }> };
+    if (!body) return null;
+    if (Array.isArray(body.errors) && body.errors.length > 0) {
+      console.warn("[cfGraphql] GraphQL errors:", body.errors.map((e) => e?.message).filter(Boolean).join("; "));
+      return body.data ?? null;
+    }
     return body.data ?? null;
-  } catch {
+  } catch (err: any) {
+    console.warn("[cfGraphql] Fetch error:", err?.message || err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -3394,7 +3408,10 @@ async function cfD1Databases(token: string, account: string): Promise<D1DbUsage[
       headers: { Authorization: `Bearer ${token}` },
       signal: ctrl.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[cfD1Databases] HTTP ${res.status}: ${res.statusText}`);
+      return null;
+    }
     const body = await res.json() as { success?: boolean; result?: Array<{ name?: unknown; file_size?: unknown }> };
     if (!body?.success || !Array.isArray(body.result)) return null;
     const databases: D1DbUsage[] = [];
@@ -3405,7 +3422,8 @@ async function cfD1Databases(token: string, account: string): Promise<D1DbUsage[
       }
     }
     return databases.length ? databases : null;
-  } catch {
+  } catch (err: any) {
+    console.warn("[cfD1Databases] Fetch error:", err?.message || err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -3428,67 +3446,114 @@ function r2ActionClass(action: unknown): "A" | "B" | "free" {
 }
 
 async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: string, nowIso: string): Promise<CfLiveUsage> {
-  const token = (env.CF_ANALYTICS_TOKEN ?? "").trim();
-  const account = (env.CF_ACCOUNT_ID ?? "").trim();
+  const token = (
+    env.CF_ANALYTICS_TOKEN ??
+    env.CLOUDFLARE_API_TOKEN ??
+    env.CF_API_TOKEN ??
+    env.CLOUDFLARE_ANALYTICS_TOKEN ??
+    ""
+  ).trim();
+  const account = (
+    env.CF_ACCOUNT_ID ??
+    env.CLOUDFLARE_ACCOUNT_ID ??
+    ""
+  ).trim();
   if (!token || !account) return CF_LIVE_NONE;
   const t = now();
   if (cfLiveCache && t - cfLiveCache.at < CF_LIVE_TTL_MS) return cfLiveCache.data;
-  const bucket = (env.CF_R2_BUCKET ?? "").trim() || "osler-content";
-  const weekAgoIso = new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const bucket = (
+    env.CF_R2_BUCKET ??
+    env.CLOUDFLARE_R2_BUCKET ??
+    env.R2_BUCKET ??
+    ""
+  ).trim() || "osler-content";
+  const weekAgoDate = new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [inv, cpu, ops, stor, d1Dbs] = await Promise.all([
     cfGraphql(token,
-      `query W($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
+      `query W($a: String!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
       { a: account, s: dayStartIso, e: nowIso }),
     cfGraphql(token,
-      `query C($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){c:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){quantiles{cpuTimeP50}}}}}`,
+      `query C($a: String!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){c:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){quantiles{cpuTimeP50}}}}}`,
       { a: account, s: dayStartIso, e: nowIso }),
     cfGraphql(token,
-      `query R($a: string!, $m: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){r:r2OperationsAdaptiveGroups(limit:10000,filter:{datetime_geq:$m,datetime_leq:$e,bucketName:$b}){sum{requests}dimensions{actionType}}}}}`,
+      `query R($a: String!, $m: Time, $e: Time, $b: String){viewer{accounts(filter:{accountTag:$a}){r:r2OperationsAdaptiveGroups(limit:10000,filter:{datetime_geq:$m,datetime_leq:$e,bucketName:$b}){sum{requests}dimensions{actionType}}}}}`,
       { a: account, m: monthStartIso, e: nowIso, b: bucket }),
     cfGraphql(token,
-      `query S($a: string!, $w: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:100,filter:{datetime_geq:$w,datetime_leq:$e,bucketName:$b}){max{payloadSize}}}}}`,
-      { a: account, w: weekAgoIso, e: nowIso, b: bucket }),
+      `query S($a: String!, $w: Date, $b: String){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:100,filter:{date_geq:$w,bucketName:$b}){max{payloadSize}}}}}`,
+      { a: account, w: weekAgoDate, b: bucket }),
     cfD1Databases(token, account),
   ]);
   const out: CfLiveUsage = { ...CF_LIVE_NONE };
   try {
-    const rows = inv?.viewer?.accounts?.[0]?.w;
-    const sum = Array.isArray(rows) ? rows[0]?.sum : rows?.sum;
-    const req = Number(sum?.requests);
-    if (Number.isFinite(req) && req >= 0) { out.workersRequestsToday = Math.round(req); out.connected = true; }
-  } catch { /* estimated fallback */ }
-  try {
-    const rows = cpu?.viewer?.accounts?.[0]?.c;
-    const q = (Array.isArray(rows) ? rows[0]?.quantiles : rows?.quantiles) ?? {};
-    // cpuTimeP50 is reported in MICROseconds (a healthy worker reads in the
-    // thousands here while errors stay zero) — convert to ms for the 10ms
-    // CPU limit comparison.
-    const p50 = Number(q?.cpuTimeP50);
-    if (Number.isFinite(p50) && p50 >= 0) { out.cpuP50Ms = Math.round(p50 / 10) / 100; out.connected = true; }
-  } catch { /* estimated fallback */ }
-  try {
-    const groups = ops?.viewer?.accounts?.[0]?.r;
-    if (Array.isArray(groups) && groups.length > 0) {
-      let a = 0, b = 0, seen = false;
-      for (const g of groups) {
-        const n = Number(g?.sum?.requests);
-        if (!Number.isFinite(n) || n < 0) continue;
-        seen = true;
-        const cls = r2ActionClass(g?.dimensions?.actionType);
-        if (cls === "A") a += n; else if (cls === "B") b += n;
+    const acct = inv?.viewer?.accounts?.[0];
+    if (acct) {
+      out.connected = true;
+      const rows = acct.w;
+      if (Array.isArray(rows)) {
+        if (rows.length === 0) {
+          out.workersRequestsToday = 0;
+        } else {
+          const req = Number(rows[0]?.sum?.requests);
+          if (Number.isFinite(req) && req >= 0) {
+            out.workersRequestsToday = Math.round(req);
+          }
+        }
       }
-      if (seen) { out.r2ClassAOpsMonth = Math.round(a); out.r2ClassBOpsMonth = Math.round(b); out.connected = true; }
     }
   } catch { /* estimated fallback */ }
   try {
-    const groups = stor?.viewer?.accounts?.[0]?.s;
-    if (Array.isArray(groups)) {
-      let best: number | null = null;
-      for (const g of groups) {
-        const v = Number(g?.max?.payloadSize);
-        if (Number.isFinite(v) && v >= 0 && (best === null || v > best)) best = v;
+    const acctC = cpu?.viewer?.accounts?.[0];
+    if (acctC) {
+      out.connected = true;
+      const rows = acctC.c;
+      if (Array.isArray(rows)) {
+        if (rows.length === 0) {
+          out.cpuP50Ms = 0;
+        } else {
+          const q = (rows[0]?.quantiles) ?? {};
+          const p50 = Number(q?.cpuTimeP50);
+          if (Number.isFinite(p50) && p50 >= 0) {
+            out.cpuP50Ms = Math.round(p50 / 10) / 100;
+          }
+        }
       }
-      if (best !== null) { out.r2Bytes = Math.round(best); out.connected = true; }
+    }
+  } catch { /* estimated fallback */ }
+  try {
+    const acctR = ops?.viewer?.accounts?.[0];
+    if (acctR) {
+      out.connected = true;
+      const groups = acctR.r;
+      if (Array.isArray(groups)) {
+        let a = 0, b = 0;
+        for (const g of groups) {
+          const n = Number(g?.sum?.requests);
+          if (!Number.isFinite(n) || n < 0) continue;
+          const cls = r2ActionClass(g?.dimensions?.actionType);
+          if (cls === "A") a += n; else if (cls === "B") b += n;
+        }
+        out.r2ClassAOpsMonth = Math.round(a);
+        out.r2ClassBOpsMonth = Math.round(b);
+      }
+    }
+  } catch { /* estimated fallback */ }
+  try {
+    const acctS = stor?.viewer?.accounts?.[0];
+    if (acctS) {
+      out.connected = true;
+      const groups = acctS.s;
+      if (Array.isArray(groups)) {
+        let best: number | null = null;
+        for (const g of groups) {
+          const v = Number(g?.max?.payloadSize);
+          if (Number.isFinite(v) && v >= 0 && (best === null || v > best)) best = v;
+        }
+        if (best !== null) {
+          out.r2Bytes = Math.round(best);
+        } else if (groups.length === 0) {
+          out.r2Bytes = 0;
+        }
+      }
     }
   } catch { /* estimated fallback */ }
   // D1 storage is a REST fetch, not GraphQL — the helper never throws, so a
@@ -3764,6 +3829,14 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
     const highestStatusWeight = Math.max(...allStatuses.map((s) => statusWeights[s] ?? 0));
     const overallStatus = highestStatusWeight >= 3 ? "exceeded" : highestStatusWeight === 2 ? "critical" : highestStatusWeight === 1 ? "warning" : "healthy";
 
+    const isLiveConnected = live.connected ||
+      live.workersRequestsToday !== null ||
+      live.cpuP50Ms !== null ||
+      live.r2ClassAOpsMonth !== null ||
+      live.r2ClassBOpsMonth !== null ||
+      live.r2Bytes !== null ||
+      measuredD1Bytes !== null;
+
     return json({
       status: overallStatus,
       resetAt: startOfTomorrow,
@@ -3771,8 +3844,8 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       // Live wiring state: the panel shows a Live badge vs the connect-steps
       // banner off this. Older workers omit these fields — the UI treats a
       // missing `sources` as all-estimated.
-      connected: live.connected,
-      liveAt: live.connected ? live.at : null,
+      connected: isLiveConnected,
+      liveAt: isLiveConnected ? (live.at ?? t) : null,
       sources: {
         workerRequests: live.workersRequestsToday !== null ? "live" : "estimated",
         d1Writes: "estimated",
