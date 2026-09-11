@@ -19,6 +19,7 @@ import {
   BookmarkX,
   ArrowLeft,
   FileText,
+  Folder,
   Printer,
   ExternalLink,
   MessageSquareWarning,
@@ -536,6 +537,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
       rtl={rtl}
       home={
         <MobileHub
+          tree={displayTree}
           allArticles={allArticles}
           bookmarks={bookmarks}
           bookmarkedArticles={bookmarkedArticles}
@@ -767,6 +769,7 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
 /* ── Mobile Hub ──────────────────────────────────────────────────── */
 
 function MobileHub({
+  tree,
   allArticles,
   bookmarks,
   bookmarkedArticles,
@@ -774,6 +777,7 @@ function MobileHub({
   onOpenArticle,
   onToggleBookmark,
 }: {
+  tree: ContentTreeNode[];
   allArticles: ArticleMeta[];
   bookmarks: Set<string>;
   bookmarkedArticles: ArticleMeta[];
@@ -783,19 +787,29 @@ function MobileHub({
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = React.useState<"all" | "bookmarked">("all");
+  // Folders start expanded so the hub reads exactly like the old flat
+  // list — collapsing is opt-in per folder.
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
 
-  const displayArticles = filter === "bookmarked" ? bookmarkedArticles : allArticles;
+  const metaByFile = React.useMemo(
+    () => new Map(allArticles.map((a) => [a.file, a])),
+    [allArticles],
+  );
 
-  // Group by specialty
-  const grouped = React.useMemo(() => {
-    const map = new Map<string, ArticleMeta[]>();
-    for (const a of displayArticles) {
-      const key = a.specialty ?? "General";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(a);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [displayArticles]);
+  const toggleFolder = React.useCallback((uid: string) => {
+    haptic("selection");
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  }, []);
+
+  const selectFilter = React.useCallback((f: "all" | "bookmarked") => {
+    haptic("selection");
+    setFilter(f);
+  }, []);
 
   return (
     <div className="osler-page">
@@ -803,7 +817,7 @@ function MobileHub({
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 max-w-xl mx-auto">
           <button
-            onClick={() => setFilter("all")}
+            onClick={() => selectFilter("all")}
             className={cn(
               "px-3 py-1 rounded-full text-xs font-medium transition-colors",
               filter === "all"
@@ -814,7 +828,7 @@ function MobileHub({
             {t("library.all")} ({allArticles.length})
           </button>
           <button
-            onClick={() => setFilter("bookmarked")}
+            onClick={() => selectFilter("bookmarked")}
             className={cn(
               "px-3 py-1 rounded-full text-xs font-medium transition-colors",
               filter === "bookmarked"
@@ -830,103 +844,238 @@ function MobileHub({
       </div>
 
       <div className="px-4 pb-4" data-walkthrough="library-tree">
-        {filter === "all" && allArticles.length === 0 ? (
+        {filter === "bookmarked" ? (
+          bookmarkedArticles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <BookOpen className="size-10 text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground">{t("library.noBookmarks")}</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5 mt-3">
+              {bookmarkedArticles.map((a) => (
+                <MobileArticleRow
+                  key={a.file}
+                  article={a}
+                  activeFile={activeFile}
+                  isBookmarked={bookmarks.has(a.file)}
+                  onOpenArticle={onOpenArticle}
+                  onToggleBookmark={onToggleBookmark}
+                />
+              ))}
+            </div>
+          )
+        ) : allArticles.length === 0 ? (
           <ComingSoonState icon={BookOpen} className="py-16" />
-        ) : grouped.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <BookOpen className="size-10 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">
-              {filter === "bookmarked" ? t("library.noBookmarks") : t("library.empty")}
-            </p>
+        ) : tree.length === 0 ? (
+          <div className="space-y-1.5 mt-3">
+            {allArticles.map((a) => (
+              <MobileArticleRow
+                key={a.file}
+                article={a}
+                activeFile={activeFile}
+                isBookmarked={bookmarks.has(a.file)}
+                onOpenArticle={onOpenArticle}
+                onToggleBookmark={onToggleBookmark}
+              />
+            ))}
           </div>
         ) : (
-          grouped.map(([specialty, articles]) => (
-            <div key={specialty} className="mt-5 first:mt-3">
-              <div className="flex items-center gap-2 mb-2.5 px-0.5">
-                <FileText className="size-3.5 text-muted-foreground" />
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {specialty}
-                </h3>
-                <span className="text-[11px] text-muted-foreground/40 ms-auto tabular-nums">
-                  {articles.length === 1 ? t("library.oneArticle") : t("library.articlesCount", { n: articles.length })}
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {articles.map((a) => {
-                  const isBookmarked = bookmarks.has(a.file);
-                  return (
-                    <div
-                      key={a.file}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onOpenArticle(a.file)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onOpenArticle(a.file);
-                        }
-                      }}
-                      {...ctxLinkAttrs(routeFor("library", { article: a.file }), a.title)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
-                        a.file === activeFile && "border-primary/40 bg-primary/5",
-                        a.lang === "ar" && "osler-content-ar",
-                      )}
-                      dir={a.lang === "ar" ? "rtl" : undefined}
-                     
-                    >
-                      <div className={cn(
-                        "size-10 rounded-lg flex items-center justify-center shrink-0",
-                        a.contentType === "pdf"
-                          ? "bg-warning-soft text-warning"
-                          : "bg-primary/10 text-primary"
-                      )}>
-                        {a.contentType === "pdf" ? <FileText className="size-5" /> : <BookOpen className="size-5" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">{a.title}</div>
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                          {a.readTimeMin && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="size-3" />
-                              {a.readTimeMin} min
-                            </span>
-                          )}
-                          {a.system && (
-                            <span className="truncate">{a.system}</span>
-                          )}
-                        </div>
-                      </div>
-                      <ContentCacheButton packId={`library:${a.file}`} urls={[contentFileUrl("library", a.file)]} />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleBookmark(a.file);
-                        }}
-                        className={cn(
-                          "size-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                          isBookmarked
-                            ? "text-primary bg-primary/10"
-                            : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/60"
-                        )}
-                        aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
-                      >
-                        {isBookmarked ? (
-                          <BookmarkCheck className="size-4" />
-                        ) : (
-                          <Bookmark className="size-4" />
-                        )}
-                      </button>
-                      <ChevronRight className="size-4 text-muted-foreground/30 shrink-0" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          tree.map((node) => (
+            <MobileTreeNode
+              key={node.uid}
+              node={node}
+              depth={0}
+              metaByFile={metaByFile}
+              activeFile={activeFile}
+              bookmarks={bookmarks}
+              collapsed={collapsed}
+              onToggleFolder={toggleFolder}
+              onOpenArticle={onOpenArticle}
+              onToggleBookmark={onToggleBookmark}
+            />
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+/** Recursive leaf-article count for a folder node's count badge. */
+function countFolderArticles(node: ContentTreeNode): number {
+  if (node.items.length === 0) return 1;
+  return node.items.reduce((n, child) => n + countFolderArticles(child), 0);
+}
+function MobileArticleRow({
+  article: a,
+  activeFile,
+  isBookmarked,
+  onOpenArticle,
+  onToggleBookmark,
+}: {
+  article: ArticleMeta;
+  activeFile: string | null;
+  isBookmarked: boolean;
+  onOpenArticle: (file: string) => void;
+  onToggleBookmark: (file: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenArticle(a.file)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenArticle(a.file);
+        }
+      }}
+      {...ctxLinkAttrs(routeFor("library", { article: a.file }), a.title)}
+      className={cn(
+        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-start transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "bg-card border border-border hover:border-primary/30 hover:bg-primary/[0.02]",
+        a.file === activeFile && "border-primary/40 bg-primary/5",
+        a.lang === "ar" && "osler-content-ar",
+      )}
+      dir={a.lang === "ar" ? "rtl" : undefined}
+    >
+      <div className={cn(
+        "size-10 rounded-lg flex items-center justify-center shrink-0",
+        a.contentType === "pdf"
+          ? "bg-warning-soft text-warning"
+          : "bg-primary/10 text-primary"
+      )}>
+        {a.contentType === "pdf" ? <FileText className="size-5" /> : <BookOpen className="size-5" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{a.title}</div>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+          {a.readTimeMin && (
+            <span className="flex items-center gap-1">
+              <Clock className="size-3" />
+              {a.readTimeMin} min
+            </span>
+          )}
+          {a.system && (
+            <span className="truncate">{a.system}</span>
+          )}
+        </div>
+      </div>
+      <ContentCacheButton packId={`library:${a.file}`} urls={[contentFileUrl("library", a.file)]} />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleBookmark(a.file);
+        }}
+        className={cn(
+          "size-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+          isBookmarked
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/60"
+        )}
+        aria-label={isBookmarked ? t("article.bookmarkRemove") : t("article.bookmarkAdd")}
+      >
+        {isBookmarked ? (
+          <BookmarkCheck className="size-4" />
+        ) : (
+          <Bookmark className="size-4" />
+        )}
+      </button>
+      <ChevronRight className="size-4 text-muted-foreground/30 shrink-0" />
+    </div>
+  );
+}
+
+function MobileTreeNode({
+  node,
+  depth,
+  metaByFile,
+  activeFile,
+  bookmarks,
+  collapsed,
+  onToggleFolder,
+  onOpenArticle,
+  onToggleBookmark,
+}: {
+  node: ContentTreeNode;
+  depth: number;
+  metaByFile: Map<string, ArticleMeta>;
+  activeFile: string | null;
+  bookmarks: Set<string>;
+  collapsed: Set<string>;
+  onToggleFolder: (uid: string) => void;
+  onOpenArticle: (file: string) => void;
+  onToggleBookmark: (file: string) => void;
+}) {
+  const { t, rtl } = useI18n();
+
+  // Article leaf — the same card the flat list always used, so folder
+  // contents feel exactly like the hub always did.
+  if (node.items.length === 0) {
+    const article = metaByFile.get(node.uid) ?? { file: node.uid, title: node.title };
+    return (
+      <MobileArticleRow
+        article={article}
+        activeFile={activeFile}
+        isBookmarked={bookmarks.has(article.file)}
+        onOpenArticle={onOpenArticle}
+        onToggleBookmark={onToggleBookmark}
+      />
+    );
+  }
+
+  const isCollapsed = collapsed.has(node.uid);
+  const count = countFolderArticles(node);
+  return (
+    <div className={cn(depth === 0 ? "mt-5 first:mt-3" : "mt-3")}>
+      <button
+        onClick={() => onToggleFolder(node.uid)}
+        aria-expanded={!isCollapsed}
+        className="flex items-center gap-2 px-0.5 mb-2 min-h-[44px] w-full text-start rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <Folder className="size-3.5 text-muted-foreground shrink-0" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
+          {node.title}
+        </h3>
+        <span className="text-[11px] text-muted-foreground/40 ms-auto tabular-nums shrink-0">
+          {count === 1 ? t("library.oneArticle") : t("library.articlesCount", { n: count })}
+        </span>
+        <ChevronRight
+          className={cn(
+            "size-4 text-muted-foreground/40 shrink-0 transition-transform",
+            rtl && "rtl-flip-x",
+            !isCollapsed && "rotate-90",
+          )}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={MOTION_TRANSITION.fast}
+            className="overflow-hidden"
+          >
+            <div className={cn("space-y-1.5", depth > 0 && "ms-2 border-s border-border ps-3")}>
+              {node.items.map((child) => (
+                <MobileTreeNode
+                  key={child.uid}
+                  node={child}
+                  depth={depth + 1}
+                  metaByFile={metaByFile}
+                  activeFile={activeFile}
+                  bookmarks={bookmarks}
+                  collapsed={collapsed}
+                  onToggleFolder={onToggleFolder}
+                  onOpenArticle={onOpenArticle}
+                  onToggleBookmark={onToggleBookmark}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
