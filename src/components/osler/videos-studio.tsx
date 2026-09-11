@@ -804,6 +804,15 @@ function VideoPlayerView({
     void settings.set("video-autoplay", String(next));
   };
 
+  const switchPlayer = () => {
+    haptic("selection");
+    setInvidiousStart(undefined);
+    const next = !invidiousMode;
+    cachedAltHost = next;
+    setInvidiousMode(next);
+    void settings.set("video-alt-host", String(next));
+  };
+
   const isYouTube = video.source.type === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
 
@@ -1056,43 +1065,20 @@ function VideoPlayerView({
           </Button>
         )}
         {playlist.length > 1 && (
-          <button
-            type="button"
-            onClick={toggleAutoplay}
-            aria-pressed={autoplay}
-            className={cn(
-              "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
-              autoplay
-                ? "bg-primary/10 text-primary border-primary/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border"
-            )}
-            title={t("videos.autoplay")}
-          >
-            <ListVideo className="size-3.5" />
-            <span className="hidden md:inline">{t("videos.autoplay")}</span>
-          </button>
+          <PlayerAutoplayToggle
+            autoplay={autoplay}
+            onToggle={toggleAutoplay}
+            labelClassName="hidden md:inline"
+            className="hidden sm:flex"
+          />
         )}
         {isYouTube && INVIDIOUS_HOST && (
-          <button
-            onClick={() => {
-              haptic("selection");
-              setInvidiousStart(undefined);
-              const next = !invidiousMode;
-              cachedAltHost = next;
-              setInvidiousMode(next);
-              void settings.set("video-alt-host", String(next));
-            }}
-            className={cn(
-              "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
-              invidiousMode
-                ? "bg-primary text-primary-foreground border-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border"
-            )}
-            title={t("videos.switchPlayer")}
-          >
-            <ExternalLink className="size-3.5" />
-            <span className="hidden md:inline">{invidiousMode ? t("videos.altHost") : t("videos.standard")}</span>
-          </button>
+          <PlayerSourceToggle
+            invidiousMode={invidiousMode}
+            onToggle={switchPlayer}
+            labelClassName="hidden md:inline"
+            className="hidden sm:flex"
+          />
         )}
       </header>
 
@@ -1219,14 +1205,37 @@ function VideoPlayerView({
         {/* Right Sidebar: Up Next Playlist — natural height on phones (the
             Body scrolls), internally scrolled fixed column on desktop. */}
         <aside className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-s border-border bg-card flex flex-col lg:h-full lg:overflow-hidden">
-          <div className="p-3 sm:p-4 border-b border-border flex items-center justify-between">
-            <h3 className="text-sm font-bold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
-              <ListVideo className="size-4 text-primary" />
-              {t("videos.upNext")}
-            </h3>
-            <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
-              {t("videos.videosCount", { n: playlist.length })}
-            </span>
+          <div className="p-3 sm:p-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold tracking-tight uppercase text-muted-foreground flex items-center gap-2">
+                <ListVideo className="size-4 text-primary" />
+                {t("videos.upNext")}
+              </h3>
+              <span className="text-xs font-mono text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
+                {t("videos.videosCount", { n: playlist.length })}
+              </span>
+            </div>
+            {/* Phone-only playback prefs — the top bar only fits back +
+                title + prev/next at 390px, so autoplay and the player
+                switch live here next to the playlist they govern. */}
+            {(playlist.length > 1 || (isYouTube && INVIDIOUS_HOST)) && (
+              <div className="flex sm:hidden items-center gap-2 mt-2.5">
+                {playlist.length > 1 && (
+                  <PlayerAutoplayToggle
+                    autoplay={autoplay}
+                    onToggle={toggleAutoplay}
+                    className="h-9"
+                  />
+                )}
+                {isYouTube && INVIDIOUS_HOST && (
+                  <PlayerSourceToggle
+                    invidiousMode={invidiousMode}
+                    onToggle={switchPlayer}
+                    className="h-9"
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[max(env(safe-area-inset-bottom,0px),1rem)] lg:pb-2">
@@ -1284,6 +1293,72 @@ function VideoPlayerView({
       </div>
 
     </div>
+  );
+}
+
+/* ── Player toggle pills (top bar on sm+, Up Next header on phones) ── */
+
+function PlayerAutoplayToggle({
+  autoplay,
+  onToggle,
+  labelClassName,
+  className,
+}: {
+  autoplay: boolean;
+  onToggle: () => void;
+  labelClassName?: string;
+  className?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={autoplay}
+      className={cn(
+        "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
+        autoplay
+          ? "bg-primary/10 text-primary border-primary/30"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border",
+        className,
+      )}
+      title={t("videos.autoplay")}
+    >
+      <ListVideo className="size-3.5" />
+      <span className={labelClassName}>{t("videos.autoplay")}</span>
+    </button>
+  );
+}
+
+function PlayerSourceToggle({
+  invidiousMode,
+  onToggle,
+  labelClassName,
+  className,
+}: {
+  invidiousMode: boolean;
+  onToggle: () => void;
+  labelClassName?: string;
+  className?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={invidiousMode}
+      className={cn(
+        "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
+        invidiousMode
+          ? "bg-primary text-primary-foreground border-primary"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border",
+        className,
+      )}
+      title={t("videos.switchPlayer")}
+    >
+      <ExternalLink className="size-3.5" />
+      <span className={labelClassName}>{invidiousMode ? t("videos.altHost") : t("videos.standard")}</span>
+    </button>
   );
 }
 
