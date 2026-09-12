@@ -321,6 +321,10 @@ export const analytics = {
   jsError: (message: string, detail?: Record<string, unknown>) =>
     track({
       type: "js_error",
+      // Attach the current route so the admin errors panel can group by
+      // affected path. Previously js_error events carried no path, so every
+      // row stored NULL and the "affected paths" count was useless.
+      path: typeof window !== "undefined" ? normalizePath(window.location.pathname) : undefined,
       // Scrub PII from the error message before it enters the buffer.
       // The worker also scrubs, but this prevents PII from hitting the wire.
       detail: { message: scrubPiiClient(message.slice(0, 500)), ...detail },

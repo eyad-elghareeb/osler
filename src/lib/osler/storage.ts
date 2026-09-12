@@ -290,6 +290,19 @@ function byteSizeOf(value: unknown, seen: WeakSet<object> = new WeakSet()): numb
   return n;
 }
 
+/** Adopt a freshly opened connection: cache it and cooperate with upgrades
+ *  from other tabs (e.g. a newer bundle bumping DB_VERSION) by closing ours
+ *  so their upgrade isn't blocked. Our next openDB() re-opens at the new
+ *  version. Without this, upgrades stall whenever an older tab is open. */
+function hookConnection(db: IDBDatabase): IDBDatabase {
+  dbInstance = db;
+  db.onversionchange = () => {
+    if (dbInstance === db) dbInstance = null;
+    try { db.close(); } catch { /* already closed */ }
+  };
+  return db;
+}
+
 function openDB(): Promise<IDBDatabase> {
   if (dbInstance) return Promise.resolve(dbInstance);
   if (dbReady) return dbReady;
@@ -299,6 +312,12 @@ function openDB(): Promise<IDBDatabase> {
       reject(new Error("IndexedDB not available in SSR"));
       return;
     }
+    const fail = (e: unknown): void => {
+      // Don't cache failures — a transient IDB error must not poison the
+      // tab forever; the next caller retries with a fresh open.
+      dbReady = null;
+      reject(e instanceof Error ? e : new Error(String(e)));
+    };
     const req = indexedDB.open(DB_NAME, DB_VERSION);
 
     req.onupgradeneeded = () => {
@@ -348,11 +367,38 @@ function openDB(): Promise<IDBDatabase> {
     };
 
     req.onsuccess = () => {
-      dbInstance = req.result;
-      resolve(dbInstance);
+      resolve(hookConnection(req.result));
     };
 
-    req.onerror = () => reject(req.error);
+    // Another tab holds the DB open — our upgrade waits until it closes.
+    // Previously a silent stall; our own tabs now close via onversionchange.
+    req.onblocked = () => {
+      console.warn("IndexedDB upgrade blocked by another open tab; waiting…");
+    };
+
+    req.onerror = () => {
+      const err = req.error;
+      // Stale-tab skew: another tab already upgraded past our DB_VERSION
+      // (e.g. a v6 bundle open while disk is at v7 after a deploy — the
+      // exact VersionError rows in the analytics errors panel). Re-open
+      // WITHOUT a version so no upgrade is attempted and this tab recovers
+      // read access instead of dying.
+      if (err?.name === "VersionError") {
+        try {
+          const retry = indexedDB.open(DB_NAME);
+          retry.onsuccess = () => resolve(hookConnection(retry.result));
+          retry.onerror = () => fail(retry.error);
+          retry.onblocked = () => {
+            console.warn("IndexedDB open blocked by another tab; waiting…");
+          };
+          return;
+        } catch (e) {
+          fail(e);
+          return;
+        }
+      }
+      fail(err);
+    };
   });
 
   return dbReady;

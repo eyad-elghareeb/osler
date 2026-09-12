@@ -62,6 +62,11 @@ function shouldSkipTransition(): boolean {
   if (isFirefoxEngine()) return true;
   if (prefersReducedMotion() || !isViewTransitionsSupported() || vtInFlight) return true;
   try {
+    // startViewTransition() throws / skips with InvalidStateError when the
+    // document is hidden (e.g. a navigation kicked off from a background
+    // tab, or the tab hid mid-flight). Those skips surfaced as js_error
+    // telemetry — run directly instead.
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return true;
     if (!isAnimationsEnabled()) return true;
     if (typeof document !== "undefined" && document.documentElement.getAttribute("data-perf") === "low") return true;
   } catch {
@@ -168,14 +173,23 @@ export function withViewTransition<T>(
     // Clean up the direction attribute after the transition finishes so it
     // doesn't leak into the next navigation. Skipped transitions reject
     // `finished` with an AbortError (a newer navigation superseded this one)
-    // — swallow it so it never surfaces as an unhandled rejection.
-    if (transition?.finished) {
-      transition.finished
-        .catch(() => {})
-        .finally(() => {
-          vtInFlight = false;
-          root.removeAttribute(VT_DIR_ATTR);
-        });
+    // — swallow it so it never surfaces as an unhandled rejection. The same
+    // applies to `ready` and `updateCallbackDone`: a tab hidden mid-flight
+    // rejects them with InvalidStateError ("Transition was aborted because
+    // of invalid state"), which previously landed in js_error telemetry.
+    if (transition) {
+      transition.updateCallbackDone?.catch(() => {});
+      transition.ready?.catch(() => {});
+      if (transition?.finished) {
+        transition.finished
+          .catch(() => {})
+          .finally(() => {
+            vtInFlight = false;
+            root.removeAttribute(VT_DIR_ATTR);
+          });
+      } else {
+        vtInFlight = false;
+      }
     } else {
       vtInFlight = false;
     }

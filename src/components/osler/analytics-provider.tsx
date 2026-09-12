@@ -212,6 +212,17 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     if (!ready) return;
 
     const onError = (event: ErrorEvent) => {
+      // Opaque cross-origin script errors (third-party embeds without CORS —
+      // empty filename, line/col 0) carry zero diagnostic value and were the
+      // bulk of js_error rows. Drop them client-side instead of storing noise.
+      if (
+        event.message === "Script error." &&
+        !event.filename &&
+        !event.lineno &&
+        !event.colno
+      ) {
+        return;
+      }
       analytics.jsError(event.message || "(unknown error)", {
         filename: event.filename?.split("/").slice(-2).join("/"),
         lineno: event.lineno,
