@@ -24,18 +24,21 @@ export function getPerformanceTier(): PerformanceTier {
   const constrainedHardware =
     (nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency <= 4) ||
     (nav.deviceMemory !== undefined && nav.deviceMemory <= 2);
-  // Firefox on Android does not expose deviceMemory. Treat coarse-pointer
-  // Android tablets as constrained when memory is unavailable and the device
-  // is not clearly a high-end desktop-class target. This covers Galaxy Tab
-  // A-class hardware without penalizing phones that already have compact UI.
+  // Firefox on Android does not expose deviceMemory. Use the model string for
+  // the known Galaxy Tab A 10.1 (SM-T580/T585) target, plus independently
+  // reported low memory/core counts. Unknown Android tablets stay standard so
+  // capable tablets keep their full motion and prefetch experience.
   const userAgent = nav.userAgent ?? "";
   const isAndroidTablet =
     /Android/i.test(userAgent) &&
     nav.maxTouchPoints > 0 &&
     Math.min(window.innerWidth, window.innerHeight) >= 600;
+  const knownLowEndAndroidTablet = /\bSM-T58[05]\b/i.test(userAgent);
   const constrainedAndroidTablet =
     isAndroidTablet &&
-    (nav.deviceMemory === undefined || (nav.hardwareConcurrency ?? 0) <= 8);
+    (knownLowEndAndroidTablet ||
+      (nav.deviceMemory !== undefined && nav.deviceMemory <= 2) ||
+      (nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency <= 4));
 
   return constrainedNetwork || constrainedHardware || constrainedAndroidTablet
     ? "constrained"

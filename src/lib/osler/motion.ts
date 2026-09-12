@@ -35,8 +35,12 @@ export function isAnimationsEnabled(): boolean {
 
 export function setAnimationsEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
-  if (enabled) localStorage.removeItem(ANIMATIONS_KEY);
-  else localStorage.setItem(ANIMATIONS_KEY, "false");
+  try {
+    if (enabled) localStorage.removeItem(ANIMATIONS_KEY);
+    else localStorage.setItem(ANIMATIONS_KEY, "false");
+  } catch {
+    // Private browsing and storage-disabled contexts should not break Settings.
+  }
   applyAnimationsFlag(enabled && !isConstrainedDevice());
   window.dispatchEvent(new CustomEvent(ANIMATIONS_EVENT));
 }

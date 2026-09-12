@@ -590,9 +590,27 @@ async function requestBodyText(request: Request, maxTextBytes: number): Promise<
     if (buf.byteLength > maxTextBytes) throw new Error("Request body is too large");
     return await gunzipBytesBounded(new Uint8Array(buf), maxTextBytes);
   }
-  const text = await request.text();
-  if (text.length > maxTextBytes) throw new Error("Request body is too large");
-  return text;
+  const body = request.body;
+  if (!body) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > maxTextBytes) {
+        try { await reader.cancel(); } catch {}
+        throw new Error("Request body is too large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 async function readJson(request: Request): Promise<any> {
@@ -6352,13 +6370,11 @@ export default {
         if (!/^[a-zA-Z0-9._-]+$/.test(model)) return json({ error: "Invalid model name" }, 400, origin, log);
         if (!/^(generateContent|streamGenerateContent|countTokens)$/.test(endpoint)) {
           const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(decryptedKey)}`, { method: "GET", headers: { "content-type": "application/json" } });
-          const text = await r.text();
-          return new Response(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json", ...cors(origin) } as any });
+          return new Response(r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json", "cache-control": "no-store", ...cors(origin), ...SECURITY_HEADERS } as any });
         }
         const url2 = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${encodeURIComponent(decryptedKey)}`;
         const r = await fetch(url2, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body.body ?? {}) });
-        const text = await r.text();
-        return new Response(text, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json", "cache-control": "no-store", ...cors(origin), ...SECURITY_HEADERS } as any });
+        return new Response(r.body, { status: r.status, headers: { "content-type": r.headers.get("content-type") || "application/json", "cache-control": "no-store", ...cors(origin), ...SECURITY_HEADERS } as any });
       }
 
       // ── Sync ──
