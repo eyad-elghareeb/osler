@@ -35,15 +35,36 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
   React.useEffect(() => {
     const cb = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", cb);
-    document.body.style.overflow = "hidden";
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const previousBodyStyle = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      inset: body.style.inset,
+    };
+
+    body.style.overflow = "hidden";
     // Also prevent touch scroll behind the modal on iOS
-    document.body.style.position = "fixed";
-    document.body.style.inset = "0";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.inset = "";
     return () => {
       window.removeEventListener("keydown", cb);
-      document.body.style.overflow = "";
-      document.body.style.position = "";
-      document.body.style.inset = "";
+      body.style.overflow = previousBodyStyle.overflow;
+      body.style.position = previousBodyStyle.position;
+      body.style.top = previousBodyStyle.top;
+      body.style.left = previousBodyStyle.left;
+      body.style.right = previousBodyStyle.right;
+      body.style.width = previousBodyStyle.width;
+      body.style.inset = previousBodyStyle.inset;
+      window.scrollTo(0, scrollY);
     };
   }, [onClose]);
 

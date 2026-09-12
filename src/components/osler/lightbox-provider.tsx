@@ -45,6 +45,11 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
     const handler = (e: MouseEvent) => {
       const target = e.target instanceof HTMLImageElement ? e.target : null;
       if (!target) return;
+      if (e.defaultPrevented) return;
+      // Images inside links/buttons belong to that control. Opening a lightbox
+      // from the document-level fallback would hijack navigation and taps on
+      // image-backed cards, thumbnails, and upload controls.
+      if (target.closest("a, button, [role=\"button\"], [data-lightbox=\"false\"]")) return;
       if (target.width < 64 && target.height < 64) return;
       openLightbox(target.src, target.alt);
     };

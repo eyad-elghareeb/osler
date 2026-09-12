@@ -9,6 +9,7 @@ import {
   type ViewTransitionDirection,
 } from "@/lib/osler/native";
 import { warmViewData } from "@/lib/osler/precache";
+import { isConstrainedDevice } from "@/lib/osler/performance";
 
 /**
  * Stable order for top-level Osler views. Used to calculate slide directions.
@@ -135,6 +136,10 @@ export function useOslerRouter() {
 
   const prefetch = React.useCallback(
     (view: OslerView, params?: OslerRouteParams) => {
+      // On constrained tablets, speculative code/data work competes with the
+      // tap that triggered this intent. The route still loads normally after
+      // navigation; capable devices retain eager hover/focus prefetching.
+      if (isConstrainedDevice()) return;
       try {
         const targetPath = routeFor(view, params);
         router.prefetch(targetPath);
