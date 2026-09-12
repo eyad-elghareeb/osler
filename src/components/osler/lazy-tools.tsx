@@ -96,6 +96,11 @@ export const SessionStartDialog = withChunkBoundary(dynamic(
   { ssr: false, loading: nullFallback },
 ));
 
+export const AutoResumeSessionDialog = withChunkBoundary(dynamic(
+  () => resilientImport(() => import("@/components/osler/resume-session-dialog").then((m) => ({ default: m.AutoResumeSessionDialog }))),
+  { ssr: false, loading: nullFallback },
+));
+
 export const PdfExportDialog = withChunkBoundary(dynamic(
   () => resilientImport(() => import("@/components/osler/pdf-export-dialog").then((m) => ({ default: m.PdfExportDialog }))),
   { ssr: false, loading: nullFallback },

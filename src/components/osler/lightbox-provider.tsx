@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { AnimatePresence } from "framer-motion";
-import { ImageLightbox } from "@/components/ui/image-lightbox";
+import dynamic from "next/dynamic";
+
+const ImageLightbox = dynamic(
+  () => import("@/components/ui/image-lightbox").then((module) => ({ default: module.ImageLightbox })),
+  { ssr: false, loading: () => null },
+);
 
 interface LightboxState {
   src: string;

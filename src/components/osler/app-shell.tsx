@@ -134,8 +134,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
-import { AutoResumeSessionDialog } from "./resume-session-dialog";
-import { warmLazySurfaces } from "./lazy-tools";
+import { AutoResumeSessionDialog, warmLazySurfaces } from "./lazy-tools";
 import { isConstrainedDevice } from "@/lib/osler/performance";
 
 const GlobalSearchPanel = dynamic(
