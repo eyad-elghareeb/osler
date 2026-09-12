@@ -1074,11 +1074,28 @@ async function getDocumentsBatch(
 
   const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
   for (const kind of requestedKinds) {
-    const records: Record<string, any> = {};
-    let updatedAt = 0;
     const rowsForKind = (grouped.get(kind) ?? []).sort((a, b) =>
       (splitSegmentKind(a.kind)?.index ?? 0) - (splitSegmentKind(b.kind)?.index ?? 0),
     );
+    // Preserve getDocument's exact plain-kind behavior: one row is returned
+    // as-is, including its parsed value and its own updated_at timestamp.
+    if (!SEGMENTED_KINDS.has(kind)) {
+      const row = rowsForKind[0];
+      if (!row || !row.payload) {
+        docs[kind] = { records: {}, updatedAt: 0 };
+        continue;
+      }
+      try {
+        const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
+        docs[kind] = { records: JSON.parse(json), updatedAt: row.updated_at };
+      } catch {
+        docs[kind] = { records: {}, updatedAt: 0 };
+      }
+      continue;
+    }
+
+    const records: Record<string, any> = {};
+    let updatedAt = 0;
     for (const row of rowsForKind) {
       try {
         const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
@@ -1097,7 +1114,7 @@ async function getAllDocuments(env: Env, user: SyncUser): Promise<Record<string,
 
 async function getSelectedDocuments(env: Env, user: SyncUser, kinds: string[]): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
   const validKinds = new Set<string>(SYNC_KINDS);
-  const kindsToFetch = kinds.filter((kind) => validKinds.has(kind));
+  const kindsToFetch = [...new Set(kinds.filter((kind) => validKinds.has(kind)))];
   return getDocumentsBatch(env, user, kindsToFetch);
 }
 
