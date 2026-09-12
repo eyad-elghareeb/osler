@@ -1031,20 +1031,74 @@ async function getDocument(env: Env, user: SyncUser, kind: string): Promise<{ re
   } catch { return { records: {}, updatedAt: 0 }; }
 }
 
-async function getAllDocuments(env: Env, user: SyncUser): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+type StoredDocumentRow = {
+  kind: string;
+  payload: string;
+  compressed: number;
+  updated_at: number;
+};
+
+/** Read several logical documents with one D1 query. Segmented kinds are
+ * assembled in memory in segment order, matching getDocument's behavior.
+ * This keeps sync pulls and account exports from issuing one D1 round trip per
+ * logical kind. */
+async function getDocumentsBatch(
+  env: Env,
+  user: SyncUser,
+  requestedKinds: readonly string[],
+): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+  if (requestedKinds.length === 0) return {};
+  const shard = userSyncShard(user);
+  await ensureShardSchema(env, "sync", shard);
+  const db = syncDb(env, shard);
+  const requested = new Set(requestedKinds);
+  const segmentedKinds = requestedKinds.filter((kind) => SEGMENTED_KINDS.has(kind));
+  const plainKinds = requestedKinds.filter((kind) => !SEGMENTED_KINDS.has(kind));
+  const clauses = [
+    ...plainKinds.map(() => "kind = ?"),
+    ...segmentedKinds.flatMap(() => ["kind = ?", "kind LIKE ?"]),
+  ];
+  const bindings: string[] = [user.id, ...plainKinds, ...segmentedKinds.flatMap((kind) => [kind, `${kind}${":"}%`])];
+  const rows = await db
+    .prepare(`SELECT kind, payload, compressed, updated_at FROM progress_documents WHERE user_id = ? AND (${clauses.join(" OR ")})`)
+    .bind(...bindings)
+    .all<StoredDocumentRow>();
+  const grouped = new Map<string, StoredDocumentRow[]>();
+  for (const row of rows.results || []) {
+    const base = baseKindOfRow(row.kind);
+    if (!requested.has(base)) continue;
+    const group = grouped.get(base) ?? [];
+    group.push(row);
+    grouped.set(base, group);
+  }
+
   const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
-  const results = await Promise.all(SYNC_KINDS.map((kind) => getDocument(env, user, kind)));
-  SYNC_KINDS.forEach((kind, i) => { docs[kind] = results[i]; });
+  for (const kind of requestedKinds) {
+    const records: Record<string, any> = {};
+    let updatedAt = 0;
+    const rowsForKind = (grouped.get(kind) ?? []).sort((a, b) =>
+      (splitSegmentKind(a.kind)?.index ?? 0) - (splitSegmentKind(b.kind)?.index ?? 0),
+    );
+    for (const row of rowsForKind) {
+      try {
+        const json = row.compressed ? await gunzipBytes(base64ToBytes(row.payload)) : row.payload;
+        Object.assign(records, JSON.parse(json));
+      } catch { /* skip corrupt rows without discarding the whole kind */ }
+      updatedAt = Math.max(updatedAt, Number(row.updated_at) || 0);
+    }
+    docs[kind] = { records, updatedAt };
+  }
   return docs;
+}
+
+async function getAllDocuments(env: Env, user: SyncUser): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
+  return getDocumentsBatch(env, user, SYNC_KINDS);
 }
 
 async function getSelectedDocuments(env: Env, user: SyncUser, kinds: string[]): Promise<Record<string, { records: Record<string, any>; updatedAt: number }>> {
   const validKinds = new Set<string>(SYNC_KINDS);
   const kindsToFetch = kinds.filter((kind) => validKinds.has(kind));
-  const docs: Record<string, { records: Record<string, any>; updatedAt: number }> = {};
-  const results = await Promise.all(kindsToFetch.map((kind) => getDocument(env, user, kind)));
-  kindsToFetch.forEach((kind, i) => { docs[kind] = results[i]; });
-  return docs;
+  return getDocumentsBatch(env, user, kindsToFetch);
 }
 
 async function getSyncHead(env: Env, user: SyncUser): Promise<{ timestamps: Record<string, number>; counts: Record<string, number>; usedBytes: number }> {
