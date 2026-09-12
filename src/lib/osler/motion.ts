@@ -26,7 +26,11 @@ const ANIMATIONS_EVENT = "osler-animations-changed";
 export function isAnimationsEnabled(): boolean {
   if (typeof window === "undefined") return true;
   if (isConstrainedDevice()) return false;
-  return localStorage.getItem(ANIMATIONS_KEY) !== "false";
+  try {
+    return localStorage.getItem(ANIMATIONS_KEY) !== "false";
+  } catch {
+    return true;
+  }
 }
 
 export function setAnimationsEnabled(enabled: boolean): void {
@@ -47,7 +51,7 @@ export function applyAnimationsFlag(enabled: boolean): void {
 
 /** React hook — re-renders when the user toggles animations in Settings. */
 export function useAnimationsEnabled(): boolean {
-  const [enabled, setEnabled] = React.useState(true);
+  const [enabled, setEnabled] = React.useState(() => isAnimationsEnabled());
   React.useEffect(() => {
     const update = () => setEnabled(isAnimationsEnabled());
     update();
