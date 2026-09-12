@@ -24,8 +24,22 @@ export function getPerformanceTier(): PerformanceTier {
   const constrainedHardware =
     (nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency <= 4) ||
     (nav.deviceMemory !== undefined && nav.deviceMemory <= 2);
+  // Firefox on Android does not expose deviceMemory. Treat coarse-pointer
+  // Android tablets as constrained when memory is unavailable and the device
+  // is not clearly a high-end desktop-class target. This covers Galaxy Tab
+  // A-class hardware without penalizing phones that already have compact UI.
+  const userAgent = nav.userAgent ?? "";
+  const isAndroidTablet =
+    /Android/i.test(userAgent) &&
+    nav.maxTouchPoints > 0 &&
+    Math.min(window.innerWidth, window.innerHeight) >= 600;
+  const constrainedAndroidTablet =
+    isAndroidTablet &&
+    (nav.deviceMemory === undefined || (nav.hardwareConcurrency ?? 0) <= 8);
 
-  return constrainedNetwork || constrainedHardware ? "constrained" : "standard";
+  return constrainedNetwork || constrainedHardware || constrainedAndroidTablet
+    ? "constrained"
+    : "standard";
 }
 
 export function isConstrainedDevice(): boolean {

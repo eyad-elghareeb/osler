@@ -1387,6 +1387,19 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   [data-blur="off"] [class*="bg-background/"] { background-color: var(--background) !important; }
 }
 
+/* Budget Android tablets (including Firefox, which does not expose
+ * navigator.deviceMemory) opt out of expensive shadow layers. The surface
+ * colors and borders remain unchanged, while card grids need less GPU paint
+ * work during scroll and navigation. */
+html[data-perf="low"] [class*="shadow-"],
+html[data-perf="low"] .osler-surface-hero,
+html[data-perf="low"] .osler-noise::before {
+  box-shadow: none !important;
+}
+html[data-perf="low"] .osler-noise::before {
+  display: none !important;
+}
+
 /* ── Increased-contrast preference ───────────────────────────────────────
  * Users who ask for more contrast get stronger neutral tokens everywhere
  * (borders, inputs, secondary text). !important so the override wins over

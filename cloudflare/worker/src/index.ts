@@ -5526,7 +5526,10 @@ export default {
         // which can exhaust the free-tier 100k requests/day under classroom load.
         if (cacheable) {
           const req = new Request(request.url, { method: "GET" });
-          try { await caches.default.put(req, response.clone()); } catch {}
+          // Edge-cache population is post-response work. Waiting here adds a
+          // second network/storage operation to every cold asset request even
+          // though the caller can already consume the R2 stream.
+          ctx.waitUntil(caches.default.put(req, response.clone()).catch(() => {}));
         }
         return response;
       }
@@ -5579,7 +5582,10 @@ export default {
         };
         const response = new Response(obj.body, { status: 200, headers: manifestHeaders as any });
         if (versioned) {
-          try { await caches.default.put(cacheReq, response.clone()); } catch {}
+          // Versioned manifests are immutable; populate the edge cache after
+          // returning the R2 response so cold loads do not pay cache-write
+          // latency on the critical path.
+          ctx.waitUntil(caches.default.put(cacheReq, response.clone()).catch(() => {}));
         }
         return response;
       }

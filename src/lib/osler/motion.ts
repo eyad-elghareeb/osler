@@ -16,6 +16,7 @@
 
 import * as React from "react";
 import { type Variants, type Transition } from "framer-motion";
+import { isConstrainedDevice } from "@/lib/osler/performance";
 
 /* ───────────────────────── Storage ────────────────────────────── */
 
@@ -24,6 +25,7 @@ const ANIMATIONS_EVENT = "osler-animations-changed";
 
 export function isAnimationsEnabled(): boolean {
   if (typeof window === "undefined") return true;
+  if (isConstrainedDevice()) return false;
   return localStorage.getItem(ANIMATIONS_KEY) !== "false";
 }
 
@@ -31,7 +33,7 @@ export function setAnimationsEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   if (enabled) localStorage.removeItem(ANIMATIONS_KEY);
   else localStorage.setItem(ANIMATIONS_KEY, "false");
-  applyAnimationsFlag(enabled);
+  applyAnimationsFlag(enabled && !isConstrainedDevice());
   window.dispatchEvent(new CustomEvent(ANIMATIONS_EVENT));
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -47,7 +48,6 @@ import { useImmersiveMode } from "./immersive-mode";
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { PwaInstallButton } from "./pwa-install-button";
 import { LightboxProvider } from "./lightbox-provider";
-import { GlobalSearchPanel } from "./global-search-panel";
 import { ContentContextMenu } from "./content-context-menu";
 import { SwipeableSheetContent } from "./ui-primitives";
 import type { SearchResult } from "@/lib/osler/search";
@@ -133,11 +133,15 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 
 import { useOslerSession } from "@/lib/osler/session-context";
 import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
-import { loadContentByUid } from "@/lib/osler/content";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
 import { AutoResumeSessionDialog } from "./resume-session-dialog";
 import { warmLazySurfaces } from "./lazy-tools";
 import { isConstrainedDevice } from "@/lib/osler/performance";
+
+const GlobalSearchPanel = dynamic(
+  () => import("./global-search-panel").then((module) => ({ default: module.GlobalSearchPanel })),
+  { ssr: false, loading: () => null },
+);
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -296,6 +300,7 @@ export function AppShell({ children }: AppShellProps) {
         return;
       case "pack": {
         try {
+          const { loadContentByUid } = await import("@/lib/osler/content");
           const content = await loadContentByUid(r.payload.uid);
           if (content.type === "osce") navigate("osce", { uid: r.payload.uid });
           else if (content.type === "flashcard") navigate("flashcards", { uid: r.payload.uid });
