@@ -341,7 +341,7 @@ function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
       <div
         role="listbox"
         aria-multiselectable
-        className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+        className="grid [content-visibility:auto] [contain-intrinsic-size:auto_640px] grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
       >
         {items.map((node, idx) => (
           <GridTile
@@ -492,7 +492,7 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
       </div>
 
       {/* Rows */}
-      <div role="listbox" aria-multiselectable>
+      <div role="listbox" aria-multiselectable className="[content-visibility:auto] [contain-intrinsic-size:auto_640px]">
         {items.map((node, idx) => (
           <ListRow
             key={node.id}

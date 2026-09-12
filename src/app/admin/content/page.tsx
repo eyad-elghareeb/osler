@@ -7,7 +7,11 @@ import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useAdminIdentity } from "@/components/osler/admin/admin-context";
 import { LoadingState } from "@/components/osler/ui-primitives";
-import { ContentStudio } from "@/components/osler/admin/content-studio/content-studio";
+
+const ContentStudio = dynamic(
+  () => import("@/components/osler/admin/content-studio/content-studio").then((m) => ({ default: m.ContentStudio })),
+  { ssr: false, loading: () => <LoadingState className="h-full" /> },
+);
 
 // The editor (and its structured-editor dependency tree) only loads when an
 // `?id=` edit is actually opened — landing on the hub pulls just the studio.

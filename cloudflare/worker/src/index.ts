@@ -3467,20 +3467,19 @@ async function fetchCfLiveUsage(env: Env, dayStartIso: string, monthStartIso: st
     env.R2_BUCKET ??
     ""
   ).trim() || "osler-content";
-  const weekAgoDate = new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [inv, cpu, ops, stor, d1Dbs] = await Promise.all([
     cfGraphql(token,
-      `query W($a: String!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
+      `query W($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests errors}}}}}`,
       { a: account, s: dayStartIso, e: nowIso }),
     cfGraphql(token,
-      `query C($a: String!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){c:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){quantiles{cpuTimeP50}}}}}`,
+      `query C($a: string!, $s: Time, $e: Time){viewer{accounts(filter:{accountTag:$a}){c:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){quantiles{cpuTimeP50}}}}}`,
       { a: account, s: dayStartIso, e: nowIso }),
     cfGraphql(token,
-      `query R($a: String!, $m: Time, $e: Time, $b: String){viewer{accounts(filter:{accountTag:$a}){r:r2OperationsAdaptiveGroups(limit:10000,filter:{datetime_geq:$m,datetime_leq:$e,bucketName:$b}){sum{requests}dimensions{actionType}}}}}`,
+      `query R($a: string!, $m: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){r:r2OperationsAdaptiveGroups(limit:10000,filter:{datetime_geq:$m,datetime_leq:$e,bucketName:$b}){sum{requests}dimensions{actionType}}}}}`,
       { a: account, m: monthStartIso, e: nowIso, b: bucket }),
     cfGraphql(token,
-      `query S($a: String!, $w: Date, $b: String){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:100,filter:{date_geq:$w,bucketName:$b}){max{payloadSize}}}}}`,
-      { a: account, w: weekAgoDate, b: bucket }),
+      `query S($a: string!, $w: Time, $e: Time, $b: string){viewer{accounts(filter:{accountTag:$a}){s:r2StorageAdaptiveGroups(limit:10000,filter:{datetime_geq:$w,datetime_leq:$e,bucketName:$b}){max{payloadSize}}}}}`,
+      { a: account, w: new Date(t - 7 * 24 * 60 * 60 * 1000).toISOString(), e: nowIso, b: bucket }),
     cfD1Databases(token, account),
   ]);
   const out: CfLiveUsage = { ...CF_LIVE_NONE };

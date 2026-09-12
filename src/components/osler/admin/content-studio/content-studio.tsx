@@ -44,6 +44,7 @@ import {
   type AdminCapabilities,
 } from "@/components/osler/admin/admin-api";
 import { EmptyState, LoadingState } from "@/components/osler/ui-primitives";
+import { loadCategoryTree } from "@/lib/osler/content";
 
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
 
@@ -80,6 +81,7 @@ import {
   type DroppedFile,
 } from "@/components/osler/admin/content-dropzone";
 import { useContentActions } from "./use-content-actions";
+import { buildManifestAdminTree } from "./manifest-tree";
 
 // ── Main component ──────────────────────────────────────────────────────────
 
@@ -96,6 +98,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   const [unifiedObjects, setUnifiedObjects] = React.useState<ContentObject[]>([]);
   const [unifiedR2ByCat, setUnifiedR2ByCat] = React.useState<Record<string, R2Item[]>>({});
   const [unifiedStagedByCat, setUnifiedStagedByCat] = React.useState<Record<string, R2Item[]>>({});
+  const [manifestTree, setManifestTree] = React.useState<ContentTreeNode[]>([]);
+  const [hydrated, setHydrated] = React.useState(false);
   const [unifiedLoading, setUnifiedLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [r2Missing, setR2Missing] = React.useState(false);
@@ -152,9 +156,10 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   const [uploadJob, setUploadJob] = React.useState<UploadProgress | null>(null);
 
   // ── Load unified tree (managed objects + loose R2 keys) ──────────────
-  const loadUnified = React.useCallback(async () => {
-    setUnifiedLoading(true);
+  const loadUnified = React.useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    if (!background) setUnifiedLoading(true);
     setR2Missing(false);
+    let hydrationCompleted = false;
     try {
       const res = await adminApi.listAllContent("all");
       setUnifiedObjects(res);
@@ -194,21 +199,52 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
       }
       setUnifiedR2ByCat(r2ByCat);
       setUnifiedStagedByCat(stagedByCat);
+      hydrationCompleted = true;
     } catch (err: any) {
       if (err?.status === 503) {
         setR2Missing(true);
         setUnifiedObjects([]);
         setUnifiedR2ByCat({});
         setUnifiedStagedByCat({});
+        hydrationCompleted = true;
         return;
       }
       toast({ title: t("admin.toast.failedLoadContent"), variant: "destructive" });
     } finally {
-      setUnifiedLoading(false);
+      if (hydrationCompleted) setHydrated(true);
+      if (!background) setUnifiedLoading(false);
     }
   }, [capabilities.manageUsers, toast, t]);
 
-  React.useEffect(() => { loadUnified(); }, [loadUnified]);
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function loadManifestFirst() {
+      const results = await Promise.all(
+        CATEGORIES.map(async (category) => {
+          try {
+            const nodes = await loadCategoryTree(category.contentType as Parameters<typeof loadCategoryTree>[0]);
+            return { category, nodes };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      const roots = results
+        .filter((result): result is NonNullable<typeof result> => result !== null)
+        .map(({ category, nodes }) => buildManifestAdminTree(category.folder, t(category.labelKey as any), nodes));
+
+      if (cancelled) return;
+      if (roots.length > 0) {
+        setManifestTree(roots);
+        setUnifiedLoading(false);
+      }
+      void loadUnified({ background: roots.length > 0 });
+    }
+
+    void loadManifestFirst();
+    return () => { cancelled = true; };
+  }, [loadUnified, t]);
 
   // ── Build the unified tree ────────────────────────────────────────────
   const unifiedTree = React.useMemo(() => {
@@ -224,7 +260,7 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
       managedByCat.get(cat)!.push(obj);
     }
 
-    return CATEGORIES.map((cat) => ({
+    const hydratedTree = CATEGORIES.map((cat) => ({
       id: `unified-root-${cat.folder}`,
       name: t(cat.labelKey as any),
       kind: "folder" as const,
@@ -238,7 +274,8 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
         t(cat.labelKey as any),
       ),
     }));
-  }, [unifiedObjects, unifiedR2ByCat, unifiedStagedByCat, statusFilter, t]);
+    return hydrated || manifestTree.length === 0 ? hydratedTree : manifestTree;
+  }, [hydrated, manifestTree, unifiedObjects, unifiedR2ByCat, unifiedStagedByCat, statusFilter, t]);
 
   // ── Derived: current category + path ──────────────────────────────────
   const { currentCategory, currentPathWithinCat } = React.useMemo(() => {
