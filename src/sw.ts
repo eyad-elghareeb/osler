@@ -407,6 +407,20 @@ async function precacheContent(
   urls: string[]
 ) {
   const cache = await caches.open(CONTENT_CACHE);
+  // Snapshot once: calling cache.keys() inside the file loop made a pack with
+  // N files rescan the growing cache N times. Keep the same pathname-based
+  // superseded-version eviction semantics with an in-memory index instead.
+  const cachedByPath = new Map<string, Request[]>();
+  for (const key of await cache.keys()) {
+    try {
+      const pathname = new URL(key.url).pathname;
+      const entries = cachedByPath.get(pathname) ?? [];
+      entries.push(key);
+      cachedByPath.set(pathname, entries);
+    } catch {
+      // Ignore malformed cache keys; Cache API normally returns valid URLs.
+    }
+  }
   let done = 0;
   const total = urls.length;
   const results: { url: string; ok: boolean; status?: number; error?: string }[] = [];
@@ -423,24 +437,17 @@ async function precacheContent(
       // one entry per published version without bound. Pathnames are unique
       // per file (pack path + filename), so same-pathname eviction is safe.
       const u = new URL(url, self.location.origin);
-      const keys = await cache.keys();
+      const superseded = cachedByPath.get(u.pathname) ?? [];
       await Promise.all(
-        keys
-          .filter((k) => {
-            if (k.url === url) return true;
-            try {
-              return new URL(k.url).pathname === u.pathname;
-            } catch {
-              return false;
-            }
-          })
-          .map((k) => cache.delete(k))
+        superseded.map((key) => cache.delete(key))
       );
+      cachedByPath.delete(u.pathname);
       const res = await fetch(url);
       if (!res.ok) {
         results.push({ url, ok: false, status: res.status });
       } else {
         await cache.put(url, res.clone());
+        cachedByPath.set(u.pathname, [new Request(url)]);
         results.push({ url, ok: true });
       }
     } catch (e) {
