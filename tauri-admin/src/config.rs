@@ -288,6 +288,7 @@ fn generate_instance_sync(opts: InstanceOptions, template_root: Option<PathBuf>)
     for root_file in [
         "package.json",
         "package-lock.json",
+        ".nvmrc",
         "tsconfig.json",
         "next.config.ts",
         "tailwind.config.ts",
@@ -603,7 +604,11 @@ fn chrono_now_iso() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{configure_worker_toml, is_generator_excluded};
+    use super::{
+        configure_worker_toml, generate_instance_sync, is_generator_excluded, InstanceCloudOptions,
+        InstanceOptions,
+    };
+    use std::path::PathBuf;
 
     #[test]
     fn generated_worker_config_keeps_canonical_bindings() {
@@ -688,5 +693,107 @@ mod tests {
         ] {
             assert!(is_generator_excluded(p), "should exclude: {}", p);
         }
+    }
+
+    #[test]
+    fn generator_creates_a_runnable_local_instance() {
+        let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("tauri-admin should live below the framework root")
+            .to_path_buf();
+        let target = std::env::temp_dir().join(format!(
+            "osler-admin-generator-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+        let result = generate_instance_sync(
+            InstanceOptions {
+                target_dir: target.to_string_lossy().into_owned(),
+                site_name: "Test School".into(),
+                short_name: "Test School".into(),
+                tagline: "A test instance".into(),
+                github_repo: "https://github.com/example/osler".into(),
+                organisation: "Test Organisation".into(),
+                enabled_engines: vec!["quiz".into()],
+                default_theme: "dark".into(),
+                default_lang: "en".into(),
+                include_sample_content: true,
+                cloud: None,
+            },
+            Some(source_root),
+        )
+        .expect("generator should create a local instance");
+
+        assert!(result["files"].as_array().is_some_and(|files| !files.is_empty()));
+        assert!(target.join("package.json").is_file());
+        assert!(target.join(".nvmrc").is_file());
+        assert!(target.join("src/app/not-found.tsx").is_file());
+        assert!(target.join("cloudflare/worker/src/index.ts").is_file());
+        assert!(target.join("public/osler.config.json").is_file());
+        assert!(target
+            .join("public/osler-content/qbank/welcome/questions.json")
+            .is_file());
+        assert!(!target.join("tauri-admin").exists());
+        assert!(!target.join("node_modules").exists());
+
+        std::fs::remove_dir_all(target).expect("test instance should be removable");
+
+        let cloud_target = std::env::temp_dir().join(format!(
+            "osler-admin-cloud-generator-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after epoch")
+                .as_nanos()
+        ));
+        generate_instance_sync(
+            InstanceOptions {
+                target_dir: cloud_target.to_string_lossy().into_owned(),
+                site_name: "Cloud School".into(),
+                short_name: "Cloud School".into(),
+                tagline: "A cloud test instance".into(),
+                github_repo: "https://github.com/example/osler".into(),
+                organisation: "Cloud Organisation".into(),
+                enabled_engines: vec!["quiz".into(), "library".into()],
+                default_theme: "light".into(),
+                default_lang: "en".into(),
+                include_sample_content: false,
+                cloud: Some(InstanceCloudOptions {
+                    enabled: true,
+                    worker_url: String::new(),
+                    worker_name: "cloud-school-worker".into(),
+                    project_name: "cloud-school".into(),
+                    d1_name: "cloud-school-db".into(),
+                    r2_name: "cloud-school-content".into(),
+                    allowed_origin: "https://cloud-school.pages.dev".into(),
+                    turnstile_site_key: String::new(),
+                }),
+            },
+            Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()),
+        )
+        .expect("generator should create a cloud instance");
+        let cloud_package = std::fs::read_to_string(cloud_target.join("package.json"))
+            .expect("cloud package should exist");
+        let cloud_worker = std::fs::read_to_string(
+            cloud_target.join("cloudflare/worker/wrangler.toml"),
+        )
+        .expect("cloud worker config should exist");
+        let cloud_email = std::fs::read_to_string(
+            cloud_target.join("cloudflare/email-worker/wrangler.toml"),
+        )
+        .expect("cloud email config should exist");
+        let cloud_config = std::fs::read_to_string(cloud_target.join("public/osler.config.json"))
+            .expect("cloud Osler config should exist");
+        assert!(cloud_package.contains("cloud-school"));
+        assert!(cloud_worker.contains("cloud-school-worker"));
+        assert!(cloud_worker.contains("cloud-school-db"));
+        assert!(cloud_worker.contains("cloud-school-content"));
+        assert!(cloud_email.contains("cloud-school-worker-email"));
+        assert!(cloud_config.contains("\"enabled\": true"));
+        assert!(!cloud_target.join("public/osler-content/qbank/welcome").exists());
+        std::fs::remove_dir_all(cloud_target).expect("cloud test instance should be removable");
     }
 }

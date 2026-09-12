@@ -456,20 +456,15 @@ The Instance Generator (`views/instance.js`) scaffolds a **brand-new Osler proje
 
 | Path | Source | Notes |
 |---|---|---|
-| `<target>/package.json` | Copied from `tauri-admin/default-osler-config.json` template | Adjusted with the new project name |
+| `<target>/package.json` | Copied from the bundled Osler framework template | Cloud mode receives the selected Pages deploy script |
 | `<target>/public/osler.config.json` | Generated from wizard-style inputs | Site identity + engines + theme + language |
-| `<target>/public/osler-content/qbank/` | Empty folder + `.gitkeep` | |
-| `<target>/public/osler-content/flashcard/` | Empty folder + `.gitkeep` | |
-| `<target>/public/osler-content/osce/` | Empty folder + `.gitkeep` | |
-| `<target>/public/osler-content/library/` | Empty folder + `.gitkeep` | |
-| `<target>/public/osler-content/videos/` | Empty folder + `.gitkeep` | |
-| `<target>/public/osler-content/manifest.json` | Empty `{"categories": []}` skeleton | Will be regenerated after first content addition |
+| `<target>/public/osler-content/{category}/` | Empty category folder | Each category receives an empty manifest |
+| `<target>/public/osler-content/{category}/manifest.json` | Generated skeleton | Regenerate after adding content |
 | `<target>/README.md` | Generated template | Includes the project name, deploy instructions, link to upstream |
 | `<target>/.gitignore` | Standard Node.js + Next.js template | Includes `.next/`, `node_modules/`, `.env*` |
-| `<target>/.nvmrc` | `22` | |
-| `<target>/.osler-admin/` | Empty folder | Will hold `deploy.json` after first deploy config |
+| `<target>/.nvmrc` | Copied from the framework template | Keeps the recommended Node.js version visible to the owner |
 
-> The Instance Generator does **not** copy `src/`, `cloudflare/worker/`, or `tauri-admin/` — those come from your existing Osler checkout. The generator creates a **config + content skeleton** that you'd typically commit on top of a fresh fork.
+> The current Instance Generator copies the complete runnable framework (`src/`, `scripts/`, `cloudflare/`, `public/`, and `functions/`) while excluding dependencies, secrets, build output, and the admin tooling itself. It then writes the instance-specific config, manifests, README, and content structure.
 
 ### Inputs
 
@@ -485,10 +480,9 @@ The Instance Generator view collects:
 
 ### What it does NOT do
 
-- Does **not** run `npm install` (you do that after)
-- Does **not** run `git init` (you do that after, or fork first then run the generator into the fork)
-- Does **not** deploy anything
-- Does **not** create the Cloudflare Worker project (you copy `cloudflare/worker/` from upstream separately)
+- Does **not** initialize a Git repository or create a GitHub repository
+- Does **not** create a Cloudflare account or approve the browser login
+- Does **not** create Google OAuth credentials for you; follow the guided callback instructions in the Ready step
 
 ### Typical workflow
 
@@ -497,8 +491,7 @@ The Instance Generator view collects:
 3. **Configure → Instance Generator** → pick a sibling folder as the target
 4. Fill in site identity + engines → generate
 5. Open the new project folder — it now has `public/osler.config.json` + content stubs
-6. Copy `src/`, `cloudflare/`, `tauri-admin/` from the upstream into the new project (or just commit your config + content on top of the existing fork)
-7. Run `npm install` → `npm run generate-manifests` → `npm run dev`
+6. For local-only mode, the admin installs the root dependencies automatically. For command-line use, run `npm install` → `npm run generate-manifests` → `npm run dev`.
 
 ---
 
@@ -516,7 +509,7 @@ Step 5 of the Instance Generator ("Ready") includes a **Finish setup** card that
 The flow:
 
 1. **Health check** - one click verifies `GET /v1/health` against the deployed Worker.
-2. **Google Sign-In** - step 3 collects the OAuth Client ID + Secret (optional); after deploy they are written as Worker secrets automatically. If skipped, the Ready card shows the exact **Authorized redirect URI** (`https://<worker>/v1/auth/google/callback`) to register in Google Cloud Console, plus inputs to save the credentials later. The Google button goes live on the login screen immediately, with no redeploy needed.
+2. **Google Sign-In** - leave the OAuth Client ID + Secret empty during deployment. The Ready card shows the exact **Authorized redirect URI** (`https://<worker>/v1/auth/google/callback`) to register in Google Cloud Console, plus inputs to save the credentials afterward. The values are written as Worker secrets and the Google button goes live on the login screen immediately, with no redeploy needed.
 3. **First admin** - register an account in the new instance, enter the username in the Ready card, click **Promote to admin**, reload.
 
 

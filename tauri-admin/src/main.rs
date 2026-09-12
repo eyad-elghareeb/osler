@@ -35,6 +35,7 @@ fn main() {
             // Build / start
             commands::run_build,
             commands::run_start,
+            commands::install_project_dependencies,
             commands::stop_runner,
             commands::runner_status,
             // Git — basic (status/add/commit/push/pull/remote)

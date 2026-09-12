@@ -37,6 +37,7 @@
       "../functions": "template/functions",
       "../package.json": "template/package.json",
       "../package-lock.json": "template/package-lock.json",
+      "../.nvmrc": "template/.nvmrc",
       "../tsconfig.json": "template/tsconfig.json",
       "../next.config.ts": "template/next.config.ts",
       "../postcss.config.mjs": "template/postcss.config.mjs",

@@ -404,6 +404,59 @@ pub fn run_start(
     Ok(json!({ "started": true, "kind": "start" }))
 }
 
+/// Install the generated instance's root dependencies before a local run.
+/// The generator intentionally excludes node_modules, so a fresh target needs
+/// this explicit step even when it is not being deployed to Cloudflare.
+#[tauri::command]
+pub async fn install_project_dependencies(
+    target_dir: Option<String>,
+    state: State<'_, ProjectRoot>,
+) -> Result<Value, String> {
+    let root = if let Some(td) = target_dir {
+        PathBuf::from(td)
+    } else {
+        root_or_err(&state)?
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        if root.join("node_modules/next/package.json").is_file() {
+            return Ok(json!({ "installed": true, "skipped": true }));
+        }
+        let npm = which::which("npm")
+            .map_err(|_| "npm was not found on PATH. Install Node.js 20.9 or newer, then try again.".to_string())?;
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut command = std::process::Command::new("cmd");
+            command.args(["/C", "npm", "install"]);
+            command
+        } else {
+            let mut command = std::process::Command::new(npm);
+            command.arg("install");
+            command
+        };
+        cmd.current_dir(&root);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let output = crate::deploy::run_cmd_timeout(cmd, 900)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let detail = stderr
+                .lines()
+                .rev()
+                .chain(stdout.lines().rev())
+                .find(|line| !line.trim().is_empty())
+                .unwrap_or("npm install failed");
+            return Err(format!("npm install failed: {}", detail.trim()));
+        }
+        Ok(json!({ "installed": true, "skipped": false }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub fn stop_runner(_runner: State<'_, RunnerState>) -> Result<Value, String> {
     {

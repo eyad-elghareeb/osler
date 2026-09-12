@@ -177,6 +177,13 @@ function ensureWorkerDeps() {
   runFail("npm install", { cwd: WORKER_DIR });
 }
 
+function ensureFrontendDeps() {
+  const nextPackage = path.join(ROOT, "node_modules", "next", "package.json");
+  if (fs.existsSync(nextPackage)) return;
+  step("Installing frontend dependencies");
+  runFail("npm install", { cwd: ROOT });
+}
+
 function requireAuth() {
   step("Checking Cloudflare auth");
   const res = runFail("npx wrangler whoami", { cwd: ROOT, quiet: true });
@@ -364,6 +371,7 @@ async function main() {
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log(`Origin: ${args.origin}   Pages: ${args.project}   D1: ${args.d1}   R2: ${args.r2}   Worker: ${args.workerName}`);
 
+  ensureFrontendDeps();
   requireAuth();
 
   if (!args.skipWorker) {

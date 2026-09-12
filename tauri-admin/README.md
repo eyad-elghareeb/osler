@@ -62,6 +62,18 @@ The **Instance Generator** view walks through the same steps as [SELF-HOSTING.md
 4. **Automated deploy** — scaffolds the complete runnable instance, creates D1 + R2, preserves the canonical Worker bindings (including realtime Durable Object and cron), applies migrations to the selected D1 database, generates + writes `JWT_SECRET`, deploys the Worker twice so its callback URL is live, records the discovered Worker URL in `osler.config.json`, then builds and deploys Pages.
 5. **Finish setup** — the wizard only unlocks this step after a successful deployment and a saved Worker URL. Verify backend health, register the exact Google callback URI in Google Cloud Console before saving both OAuth credentials, then register and promote the first admin account.
 
+### Google Sign-In setup for a non-technical administrator
+
+The safe order is important because Google’s callback URL uses the Worker URL, which is only known after deployment:
+
+1. In the wizard, expand **Google Sign-In** but leave the Client ID and Client Secret empty until the Worker has deployed.
+2. On the **Ready** step, click **Open Google Cloud Console** and select or create a Google Cloud project.
+3. Open **APIs & Services → OAuth consent screen**, choose **External** (or **Internal** for a Google Workspace organisation), complete the app details, and add the `openid`, `email`, and `profile` scopes. If the External app remains in testing, add the intended administrators as test users.
+4. Open **Credentials → Create credentials → OAuth client ID**, choose **Web application**, and add the exact callback shown by Osler under **Authorized redirect URIs**. It must be the Worker URL ending in `/v1/auth/google/callback`; do not use the Pages URL, add a trailing slash, or add query parameters.
+5. Copy the generated Client ID and Client Secret into Osler and click **Save Google secrets**. The values are sent directly to Worker secrets and are not stored in the generated project.
+
+If Google reports `redirect_uri_mismatch`, compare the URI character-for-character with the Ready-step value, then save the secrets again after correcting it.
+
 ## Maintaining an existing instance
 
 After selecting an instance directory, use **Cloud services** in the sidebar for a guided maintenance checklist:
@@ -84,7 +96,7 @@ Use **Instance updater** to compare an instance with the upstream source. It pre
 | `project_state` | — | `{ root, hasPackageJson, hasContentDir, gitRemote, gitBranch }` |
 | `list_files` | — | `{ items: [...] }` (recursive tree) |
 | `load_file` / `save_file` / `create_file` / `create_folder` / `delete_path` / `move_path` / `rename_path` | — | File CRUD |
-| `run_build` / `run_start` / `stop_runner` / `runner_status` | — | Build/start runner |
+| `install_project_dependencies` / `run_build` / `run_start` / `stop_runner` / `runner_status` | `{ targetDir? }` for install | Install a fresh instance, then build/start runner |
 | `git_*` | — | Status, stage, commit, push, pull, branches, clone |
 | `read_config` / `write_config` / `config_exists` | — | `osler.config.json` |
 | `generate_instance` | `{ opts }` | Scaffolds a new instance |

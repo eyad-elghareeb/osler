@@ -317,6 +317,7 @@ pub async fn setup_check_health(worker_url: String) -> Result<Value, String> {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EmailWorkerSetup {
     pub gmail_user: String,
     pub gmail_app_password: String,
@@ -336,6 +337,28 @@ pub struct EmailWorkerSetup {
     /// via EMAIL_WORKER_URL + EMAIL_WORKER_TOKEN), which works on every plan.
     #[serde(default)]
     pub use_service_binding: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EmailWorkerSetup;
+    use serde_json::json;
+
+    #[test]
+    fn email_setup_accepts_frontend_camel_case_fields() {
+        let setup: EmailWorkerSetup = serde_json::from_value(json!({
+            "gmailUser": "admin@example.com",
+            "gmailAppPassword": "abcd efgh ijkl mnop",
+            "fromName": "Osler",
+            "appOrigin": "https://school.pages.dev",
+            "d1Name": "school-db",
+            "useServiceBinding": false
+        }))
+        .expect("frontend email setup payload should deserialize");
+
+        assert_eq!(setup.gmail_user, "admin@example.com");
+        assert_eq!(setup.d1_name.as_deref(), Some("school-db"));
+    }
 }
 
 /// Deploy the standalone Gmail relay worker (cloudflare/email-worker) inside

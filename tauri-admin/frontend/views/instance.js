@@ -184,6 +184,31 @@
       else if (state.step === 5) renderStep5Ready();
     }
 
+    function googleSetupGuide(callbackUrl = "") {
+      const guide = el("div", {
+        style: {
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+          padding: "1rem",
+          marginBottom: "1rem",
+        },
+      });
+      guide.appendChild(el("div", { style: { fontWeight: "600", fontSize: "0.8125rem", marginBottom: "0.4rem" } }, t("instance.google.setupTitle")));
+      guide.appendChild(el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: "0.5rem" } }, t("instance.google.setupIntro")));
+      const steps = [1, 2, 3, 4].map((n) => el("li", { style: { marginBottom: "0.35rem" } }, t(`instance.google.setupStep${n}`)));
+      guide.appendChild(el("ol", { style: { margin: "0 0 0.75rem 1.25rem", padding: "0", fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.55 } }, steps));
+      if (callbackUrl) {
+        guide.appendChild(el("div", { style: { fontSize: "0.6875rem", color: "var(--text-muted)", marginBottom: "0.35rem" } }, t("instance.google.callbackPrefix")));
+        guide.appendChild(el("code", { style: { display: "block", fontSize: "0.6875rem", fontFamily: "var(--font-mono)", background: "var(--surface)", padding: "0.6rem", borderRadius: "var(--radius-sm)", wordBreak: "break-all", marginBottom: "0.35rem" } }, callbackUrl));
+        guide.appendChild(el("div", { style: { fontSize: "0.6875rem", color: "var(--warning)", lineHeight: 1.5 } }, t("instance.google.callbackWarning")));
+      }
+      const consoleBtn = el("button", { class: "btn btn-sm" }, t("instance.google.openConsole"));
+      consoleBtn.addEventListener("click", () => invoke("open_external", { url: "https://console.cloud.google.com/apis/credentials" }).catch((e) => toast(t("toast.error", { msg: String(e) }), "error")));
+      guide.appendChild(consoleBtn);
+      return guide;
+    }
+
     // ── STEP 1: PREREQUISITES ──────────────────────────────────────────
     // Plain-language check for non-technical users: every missing tool gets
     // a one-click fix (download page, auto-install, or login) and a "Check
@@ -250,7 +275,7 @@
         listContainer.innerHTML = "";
         let blocksPublish = false;
         for (const item of rep.items || []) {
-          if (!item.satisfied && (item.name === "node" || item.name === "git")) blocksPublish = true;
+          if (!item.satisfied && ["node", "wrangler", "cloudflare_auth"].includes(item.name)) blocksPublish = true;
           const whyKey = PREREQ_WHY[item.name];
           const row = el(
             "div",
@@ -440,6 +465,13 @@
       tlRow.appendChild(langCell);
       card.appendChild(tlRow);
 
+      const sampleRow = el("label", { style: { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.5rem", cursor: "pointer", fontSize: "0.8125rem" } });
+      const sampleCheck = el("input", { type: "checkbox" });
+      sampleCheck.checked = state.includeSampleContent;
+      sampleCheck.addEventListener("change", () => (state.includeSampleContent = sampleCheck.checked));
+      sampleRow.append(sampleCheck, el("span", {}, t("instance.includeSample")));
+      card.appendChild(sampleRow);
+
       // Nav
       const navRow = el("div", { style: { display: "flex", justifyContent: "space-between" } });
       const prevBtn = el("button", { class: "btn btn-ghost" }, svgIcon("M15 19l-7-7 7-7", 14), t("common.prev"));
@@ -515,7 +547,11 @@
           return c;
         }
 
-        cloudGrid.appendChild(field(t("instance.cloud.projectName"), state.cloud.projectName, (v) => state.cloud.projectName = v, "my-school"));
+        cloudGrid.appendChild(field(t("instance.cloud.projectName"), state.cloud.projectName, (v) => {
+          const previous = state.cloud.projectName;
+          if (state.cloud.allowedOrigin === `https://${previous}.pages.dev`) state.cloud.allowedOrigin = `https://${v}.pages.dev`;
+          state.cloud.projectName = v;
+        }, "my-school"));
         cloudGrid.appendChild(field(t("instance.cloud.workerName"), state.cloud.workerName, (v) => state.cloud.workerName = v, "my-school-cloud"));
         cloudGrid.appendChild(field(t("instance.cloud.d1Name"), state.cloud.d1Name, (v) => state.cloud.d1Name = v, "my-school-db"));
         cloudGrid.appendChild(field(t("instance.cloud.r2Name"), state.cloud.r2Name, (v) => state.cloud.r2Name = v, "my-school-content"));
@@ -567,6 +603,7 @@
           googleCard.appendChild(
             el("div", { style: { fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.6, marginBottom: "0.75rem" } }, t("instance.google.hint"))
           );
+          googleCard.appendChild(googleSetupGuide());
           const googleGrid = el("div", { class: "grid grid-2" });
           googleGrid.appendChild(field(t("instance.google.clientId"), state.cloud.googleClientId, (v) => state.cloud.googleClientId = v, "1234567890-abc.apps.googleusercontent.com"));
           googleGrid.appendChild(field(t("instance.google.clientSecret"), state.cloud.googleClientSecret, (v) => state.cloud.googleClientSecret = v, "GOCSPX-…", "password"));
@@ -630,12 +667,28 @@
       prevBtn.addEventListener("click", () => { state.step = 2; renderStepBar(); renderCurrentStep(); });
       const nextBtn = el("button", { class: "btn btn-primary" }, state.cloud.enabled ? t("instance.deployBtn") : t("instance.generate"), svgIcon("M13 10V3L4 14h7v7l9-11h-7z", 14));
       nextBtn.addEventListener("click", () => {
-        if (state.cloud.enabled && !(state.prereqReport?.items || []).every((item) => item.satisfied)) {
+        const requiredCloudPrereqs = ["node", "wrangler", "cloudflare_auth"];
+        const missingCloudPrereq = requiredCloudPrereqs.some((name) => !(state.prereqReport?.items || []).find((item) => item.name === name)?.satisfied);
+        if (state.cloud.enabled && missingCloudPrereq) {
           toast(t("instance.prereqs.warnMissing"), "error");
           state.step = 1;
           renderStepBar();
           renderCurrentStep();
           return;
+        }
+        if (state.cloud.enabled) {
+          const resourceNames = [state.cloud.projectName, state.cloud.workerName, state.cloud.d1Name, state.cloud.r2Name];
+          if (resourceNames.some((name) => !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(name.trim()))) {
+            toast(t("instance.err.cloudName"), "error");
+            return;
+          }
+          try {
+            const origin = new URL(state.cloud.allowedOrigin.trim());
+            if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password || origin.search || origin.hash || (origin.pathname !== "/" && origin.pathname !== "")) throw new Error("invalid origin");
+          } catch {
+            toast(t("instance.err.origin"), "error");
+            return;
+          }
         }
         state.step = 4;
         renderStepBar();
@@ -744,6 +797,9 @@
           // Poll deploy logs
           pollDeployStatus(addLog, finishBtn);
         } else {
+          addLog(`📦 ${t("instance.installingDeps")}`, "#58a6ff");
+          await invoke("install_project_dependencies", { targetDir: state.targetDir });
+          addLog(`✓ ${t("instance.depsInstalled")}`, "#3fb950");
           state.provisioning = "succeeded";
           addLog("✓ [3/3] Local instance ready!", "#3fb950");
           if (finishBtn) finishBtn.disabled = false;
@@ -909,8 +965,7 @@
         if (!state.cloud.googleConfigured) {
           const gLabel = (txt) => el("div", { style: { fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0.6rem 0 0.25rem" } }, txt);
           setupCard.appendChild(el("div", { style: { fontWeight: "600", fontSize: "0.8125rem" } }, "🔐 " + t("instance.google.title")));
-          const cb = el("code", { style: { display: "block", fontSize: "0.6875rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", margin: "0.25rem 0 0.5rem", wordBreak: "break-all" } }, t("instance.google.callbackPrefix") + `${workerUrl}/v1/auth/google/callback`);
-          setupCard.appendChild(cb);
+          setupCard.appendChild(googleSetupGuide(`${workerUrl}/v1/auth/google/callback`));
           const gId = el("input", { type: "text", class: "input", value: state.cloud.googleClientId, placeholder: "…apps.googleusercontent.com", style: { marginBottom: "0.5rem" } });
           const gSecret = el("input", { type: "text", class: "input", value: state.cloud.googleClientSecret, placeholder: "GOCSPX-…" });
           setupCard.append(gLabel(t("instance.google.clientId")), gId, gLabel(t("instance.google.clientSecret")), gSecret);
@@ -968,6 +1023,12 @@
       // Direct Deploy & Management Actions
       card.appendChild(el("div", { class: "label", style: { marginBottom: "0.6rem" } }, t("instance.quickActions")));
       const actionRow = el("div", { style: { display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1.5rem" } });
+
+      if (state.cloud.enabled) {
+        const openSiteBtn = el("button", { class: "btn btn-sm btn-primary" }, t("instance.openSite"));
+        openSiteBtn.addEventListener("click", () => invoke("open_external", { url: state.cloud.allowedOrigin || `https://${state.cloud.projectName}.pages.dev` }));
+        actionRow.appendChild(openSiteBtn);
+      }
 
       const deployPagesBtn = el("button", { class: "btn btn-sm btn-primary" }, svgIcon("M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5", 14), "Deploy Pages (npm run deploy:pages)");
       deployPagesBtn.addEventListener("click", async () => {
