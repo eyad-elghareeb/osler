@@ -331,6 +331,52 @@ describe("MCP duplicate_content_object", () => {
     expect(JSON.stringify(bad.result.content[0].text)).toMatch(/no readable body/);
   });
 });
+
+describe("MCP bulk_delete_content_objects", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+
+  it("requires two-step confirm, then deletes", async () => {
+    const ctx = makeCtx();
+    const first = await call(ctx, "tools/call", { name: "bulk_delete_content_objects", arguments: { ids: [ID_A] } });
+    const text = JSON.stringify(first.result.content[0].text);
+    expect(text).toMatch(/DESTRUCTIVE ACTION/);
+    const token = text.match(/continueToken\\": \\"([0-9a-z]+)\\"/)?.[1];
+    expect(token).toBeTypeOf("string");
+    const second = await call(ctx, "tools/call", {
+      name: "bulk_delete_content_objects",
+      arguments: { ids: [ID_A], confirm: true, continueToken: token },
+    });
+    expect(second.result.structuredContent).toMatchObject({ ok: true, deleted: [ID_A] });
+  });
+
+  it("restarts the flow when the id set changes", async () => {
+    const ctx = makeCtx();
+    const first = await call(ctx, "tools/call", { name: "bulk_delete_content_objects", arguments: { ids: [ID_A] } });
+    const token = JSON.stringify(first.result.content[0].text).match(/continueToken\\": \\"([0-9a-z]+)\\"/)?.[1];
+    const ID_B = "22222222-2222-4222-8222-222222222222";
+    const retry = await call(ctx, "tools/call", {
+      name: "bulk_delete_content_objects",
+      arguments: { ids: [ID_A, ID_B], confirm: true, continueToken: token },
+    });
+    expect(JSON.stringify(retry.result.content[0].text)).toMatch(/DESTRUCTIVE ACTION/);
+  });
+
+  it("skips published items inline for content_admin", async () => {
+    const db = {
+      prepare: (_sql: string) => ({
+        bind: (..._args: unknown[]) => ({
+          first: async () => ({ id: ID_A, r2_key_base: "content/quiz/obj1", content_type: "quiz", title: "T", language: "en", status: "published", created_by: "user-1" }),
+          all: async () => ({ results: [] }),
+          run: async () => {},
+        }),
+      }),
+    } as unknown as McpCtx["env"]["DB"];
+    const ctx = makeCtx({ env: { ...makeCtx().env, DB: db } as any });
+    const r = await call(ctx, "tools/call", { name: "bulk_delete_content_objects", arguments: { ids: [ID_A] } });
+    expect(r.result.structuredContent.ok).toBe(false);
+    expect(r.result.structuredContent.skipped[0].error).toMatch(/admin privilege/);
+  });
+});
 describe("MCP batch handling", () => {
   it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];

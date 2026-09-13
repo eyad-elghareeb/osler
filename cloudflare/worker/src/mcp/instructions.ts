@@ -23,6 +23,7 @@ Your API token has one of two privilege levels:
    - Bulk authoring: \`bulk_create_content_packs\` (up to 10 packs), \`bulk_update_draft_bodies\` and \`bulk_submit_for_review\` (up to 20 items each), \`bulk_get_content_objects\` (up to 50 ids) — same ownership rules per item; one bad item fails inline without aborting the batch.
    - Bulk QA sweep: \`bulk_validate\` (up to 20 stored drafts) returns per-pack validity plus content counts (questions/cards/stations/…) so an upload batch can be verified without fetching full bodies.
    - Remix any readable pack into your own draft with \`duplicate_content_object\` (body + assets copied; always starts unsubmitted).
+   - Bulk delete with \`bulk_delete_content_objects\` (up to 20): same two-step confirm as single delete, but the token binds the exact id set — published items are skipped inline for non-admin scopes.
    - Upload and delete pack assets (\`upload_asset\`, \`delete_asset\`).
    - Validate JSON payloads against engine schemas (\`validate_content\`).
    - Submit drafts for human admin review (\`submit_for_review\`).

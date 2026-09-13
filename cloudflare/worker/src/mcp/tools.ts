@@ -206,6 +206,28 @@ async function requireConfirmation(ctx: McpCtx, toolName: string, id: string, ar
   );
 }
 
+/** Batch variant: the token binds the exact sorted id set, so adding,
+ *  removing, or swapping one target between calls restarts the flow. */
+function batchConfirmationToken(toolName: string, ids: string[]): string {
+  return confirmationToken(toolName, [...ids].sort().join(","));
+}
+
+async function requireBatchConfirmation(ctx: McpCtx, toolName: string, ids: string[], args: any, lines: string[]): Promise<void> {
+  if (args?.confirm === true && args?.continueToken === batchConfirmationToken(toolName, ids)) return;
+  throw new ToolError(
+    [
+      `⚠️ DESTRUCTIVE ACTION — ${lines.length} content object(s) will be permanently deleted:`,
+      ...lines,
+      "",
+      "This cannot be undone. To proceed:",
+      `1. Re-call \`${toolName}\` with the same "ids" plus "confirm": true`,
+      `2. Include "continueToken": "${batchConfirmationToken(toolName, ids)}"`,
+      "",
+      "The continueToken proves you re-read this warning for THESE targets; if the id set changes, the token changes.",
+    ].join("\n"),
+  );
+}
+
 const draftTitle = (body: string): string | null => {
   try {
     const j = JSON.parse(body);
@@ -1073,6 +1095,62 @@ export const TOOLS: ToolDef[] = [
       }
       await ctx.audit("mcp_delete_object", obj.id, { title: obj.title, via: "mcp" });
       return { ok: true, deletedId: obj.id };
+    },
+  },
+  {
+    name: "bulk_delete_content_objects",
+    description:
+      "Permanently delete up to 20 content objects in one call. IRREVERSIBLE — requires two-step confirm over the exact id set (call once without confirm to get the per-target damage report + continueToken, then re-call with confirm:true). Owner may delete own non-published objects; deleting published content requires admin scope — published items are skipped inline, never aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: { type: "array", description: "Content object ids. Max 20 per call.", items: { type: "string" } },
+        confirm: { type: "boolean", description: "Set true on the second call, together with continueToken, to actually delete" },
+        continueToken: str("Token from the first call's warning message"),
+      },
+      required: ["ids"],
+    },
+    async run(ctx, args) {
+      const ids: unknown[] = Array.isArray(args?.ids) ? args.ids : [];
+      if (!ids.length || ids.length > 20) throw new ToolError("ids must be an array of 1-20 content object ids");
+      const deletable: any[] = [];
+      const skipped: { id: unknown; error: string }[] = [];
+      for (const id of ids) {
+        try {
+          const obj = await loadOwnedObject(ctx, id, true);
+          if (obj.status === "published" && ctx.scope !== "admin") {
+            skipped.push({ id, error: "Deleting published content requires admin privilege" });
+          } else {
+            deletable.push(obj);
+          }
+        } catch (e: any) {
+          skipped.push({ id, error: e instanceof ToolError ? e.message : String(e?.message ?? e) });
+        }
+      }
+      if (!deletable.length) return { ok: false, deleted: [] as string[], skipped, note: "Nothing deletable in this set." };
+      const deletableIds = deletable.map((o) => o.id as string);
+      await requireBatchConfirmation(
+        ctx,
+        "bulk_delete_content_objects",
+        deletableIds,
+        args,
+        [
+          ...deletable.map((o) => `• "${o.title ?? o.id}" (${o.content_type}, status: ${o.status})${o.published_r2_key ? ` — removes student-facing ${o.published_r2_key}` : ""}`),
+          ...skipped.map((s) => `• (skipped) ${String(s.id)}: ${s.error}`),
+        ],
+      );
+      const deleted: string[] = [];
+      for (const obj of deletable) {
+        if (ctx.deleteObject) {
+          await ctx.deleteObject(obj.id);
+        } else {
+          if (obj.published_r2_key) await ctx.r2Delete(obj.published_r2_key).catch(() => {});
+          await ctx.env.DB.prepare("DELETE FROM content_objects WHERE id = ?").bind(obj.id).run();
+        }
+        await ctx.audit("mcp_delete_object", obj.id, { title: obj.title, via: "mcp" });
+        deleted.push(obj.id);
+      }
+      return { ok: true, deleted, skipped };
     },
   },
   {
