@@ -79,6 +79,24 @@ const MilkdownArticleView = dynamic(
     ),
   },
 );
+/**
+ * The EPUB book engine (epubjs + its rendition) is the heaviest reader
+ * dependency — split it like the markdown renderer so the hub never pays
+ * for it until a book actually opens.
+ */
+const EpubReader = dynamic(
+  () => import("./epub-reader").then((m) => ({ default: m.EpubReader })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full">
+        <Skeleton className="h-8 w-2/3 mb-2" />
+        <Skeleton className="h-4 w-1/3 mb-6" />
+        <SkeletonText lines={6} />
+      </div>
+    ),
+  },
+);
 import { setImmersiveMode } from "./immersive-mode";
 import { haptic } from "@/lib/osler/native";
 import { useToast } from "@/hooks/use-toast";
@@ -690,6 +708,20 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
                 </div>
               ) : activeArticle.contentType === "pdf" ? (
                 <PdfViewer url={activeArticle.fileUrl!} title={activeArticle.title} />
+              ) : activeArticle.contentType === "epub" ? (
+                <EpubReader
+                  fileUrl={activeArticle.fileUrl!}
+                  fileKey={activeFile ?? activeArticle.file}
+                  title={activeArticle.title}
+                  fontSize={(display.zoom / 100) * display.fontSize}
+                  lineHeight={LINE_HEIGHTS[display.lineSpacing]}
+                  maxWidth={display.width === "wide" ? 1200 : 768}
+                  fontFamily={
+                    display.fontFamily === "sans"
+                      ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                      : undefined
+                  }
+                />
               ) : activeArticle.contentType === "html" ? (
                 <div className="flex-1 flex flex-col bg-muted/20">
                   <iframe
@@ -946,7 +978,9 @@ function MobileArticleRow({
         "size-8 rounded-md flex items-center justify-center shrink-0",
         a.contentType === "pdf"
           ? "bg-warning-soft text-warning"
-          : "bg-primary/10 text-primary"
+          : a.contentType === "epub"
+            ? "bg-info-soft text-info"
+            : "bg-primary/10 text-primary"
       )}>
         {a.contentType === "pdf" ? <FileText className="size-4" /> : <BookOpen className="size-4" />}
       </div>
@@ -1179,6 +1213,20 @@ function MobileReader({
           </div>
         ) : article.contentType === "pdf" ? (
           <PdfViewer url={article.fileUrl!} title={article.title} />
+        ) : article.contentType === "epub" ? (
+          <EpubReader
+            fileUrl={article.fileUrl!}
+            fileKey={articlePath}
+            title={article.title}
+            fontSize={(display.zoom / 100) * display.fontSize}
+            lineHeight={LINE_HEIGHTS[display.lineSpacing]}
+            maxWidth={display.width === "wide" ? 1200 : 768}
+            fontFamily={
+              display.fontFamily === "sans"
+                ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                : undefined
+            }
+          />
         ) : article.contentType === "html" ? (
           <div className="flex-1 flex flex-col bg-muted/20">
             <iframe

@@ -24,6 +24,11 @@ const MilkdownArticleView = dynamic(
   },
 );
 import { PdfViewer } from "./pdf-viewer";
+// Split like the library reader — the epubjs chunk loads only when a book opens.
+const EpubReader = dynamic(
+  () => import("./epub-reader").then((m) => ({ default: m.EpubReader })),
+  { ssr: false, loading: () => null },
+);
 import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
 import { routeFor } from "@/lib/osler/navigation";
 import { articleBookmarks } from "@/lib/osler/storage";
@@ -359,6 +364,17 @@ export function FloatingArticleModal({
                 {article ? (
                   article.contentType === "pdf" ? (
                     <PdfViewer url={article.fileUrl!} title={article.title} />
+                  ) : article.contentType === "epub" ? (
+                    <div className="h-full min-h-[60vh] flex flex-col">
+                      <EpubReader
+                        fileUrl={article.fileUrl!}
+                        fileKey={activeId ?? article.file}
+                        title={article.title}
+                        fontSize={16}
+                        lineHeight={1.7}
+                        maxWidth={768}
+                      />
+                    </div>
                   ) : article.contentType === "html" ? (
                     <iframe
                       srcDoc={article.content}

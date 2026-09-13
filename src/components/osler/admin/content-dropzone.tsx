@@ -258,7 +258,7 @@ export async function filesToDropped(
       dropped.push({
         file,
         contentType: guessContentType(file.name),
-        title: file.name.replace(/\.(md|json)$/i, ""),
+        title: file.name.replace(/\.(md|json|epub)$/i, ""),
         language: guessLanguage(file.name) ?? "en",
         body,
         relativePath: rel,
@@ -278,7 +278,7 @@ export async function filesToDropped(
 
 function guessContentType(filename: string): ContentType {
   const lower = filename.toLowerCase();
-  if (lower.endsWith(".md")) return "library";
+  if (lower.endsWith(".md") || lower.endsWith(".epub")) return "library";
   if (lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".m4v") || lower.endsWith(".mov")) return "video";
   if (lower.includes("flashcard") || lower.includes("cards")) return "flashcard";
   if (lower.includes("osce") || lower.includes("station")) return "osce";

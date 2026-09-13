@@ -118,7 +118,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const [validationErrors, setValidationErrors] = React.useState<string[] | null>(null);
   const [showValidation, setShowValidation] = React.useState(false);
   const [mode, setMode] = React.useState<EditorMode>("form");
-  const [artifactContentType, setArtifactContentType] = React.useState<"md" | "pdf" | "html">("md");
+  const [artifactContentType, setArtifactContentType] = React.useState<"md" | "pdf" | "html" | "epub">("md");
   const [adopting, setAdopting] = React.useState(false);
   /**
    * Article sidecar metadata (library .md only). Lives OUTSIDE the markdown
@@ -207,6 +207,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     // Infer artifact content type from the key extension.
     if (key.endsWith(".md")) setArtifactContentType("md");
     else if (key.endsWith(".pdf") || text.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+    else if (key.endsWith(".epub") || text.startsWith("data:application/epub")) setArtifactContentType("epub");
     else if (key.endsWith(".html") || (text.startsWith("<") && !text.startsWith("---"))) setArtifactContentType("html");
     // Default to code mode for raw files (no form mapping unless we
     // can recognise the shape) — `parsed` comes from the single load-time
@@ -258,7 +259,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             const text = res.body;
             bodyRef.current = text;
             setBody(text);
-            if (!rawR2Key.endsWith(".md") && !rawR2Key.endsWith(".html") && !rawR2Key.endsWith(".pdf")) {
+            if (!rawR2Key.endsWith(".md") && !rawR2Key.endsWith(".html") && !rawR2Key.endsWith(".pdf") && !rawR2Key.endsWith(".epub")) {
               computeParse(text);
             }
             inferModeFromBody(text, parsedRef.current, rawR2Key);
@@ -273,7 +274,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
           if (cancelled) return;
           bodyRef.current = text;
           setBody(text);
-          if (!rawR2Key.endsWith(".md") && !rawR2Key.endsWith(".html") && !rawR2Key.endsWith(".pdf")) {
+          if (!rawR2Key.endsWith(".md") && !rawR2Key.endsWith(".html") && !rawR2Key.endsWith(".pdf") && !rawR2Key.endsWith(".epub")) {
             computeParse(text);
           }
           inferModeFromBody(text, parsedRef.current, rawR2Key);
@@ -321,6 +322,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       setMode("form");
       const b = obj.body ?? "";
       if (b.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+      else if (b.startsWith("data:application/epub")) setArtifactContentType("epub");
       else if (b.startsWith("<") && !b.startsWith("---")) setArtifactContentType("html");
       else setArtifactContentType("md");
       return;
@@ -355,6 +357,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       ? (rawR2Key?.endsWith(".md") ?? false)
         || (rawR2Key?.endsWith(".html") ?? false)
         || (rawR2Key?.endsWith(".pdf") ?? false)
+        || (rawR2Key?.endsWith(".epub") ?? false)
       : obj?.content_type === "library";
     if (isLib) return;
     if (parsedSourceRef.current === body) return; // already parsed this exact text
@@ -625,6 +628,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     ? (rawR2Key?.endsWith(".md") ?? false)
       || (rawR2Key?.endsWith(".html") ?? false)
       || (rawR2Key?.endsWith(".pdf") ?? false)
+      || (rawR2Key?.endsWith(".epub") ?? false)
     : obj?.content_type === "library";
 
   // Parsed JSON comes from the debounced parse effect — never a synchronous
@@ -649,6 +653,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
       } else {
         // Detect from body
         if (nextBody.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
+        else if (nextBody.startsWith("data:application/epub")) setArtifactContentType("epub");
         else if (nextBody.startsWith("<") && !nextBody.startsWith("---")) setArtifactContentType("html");
         else setArtifactContentType("md");
       }
@@ -694,7 +699,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     const slug = (obj.title ?? obj.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     switch (obj.content_type) {
       case "library": {
-        const ext = artifactContentType === "pdf" ? ".pdf" : artifactContentType === "html" ? ".html" : ".md";
+        const ext = artifactContentType === "pdf" ? ".pdf" : artifactContentType === "epub" ? ".epub" : artifactContentType === "html" ? ".html" : ".md";
         return `${slug}${ext}`;
       }
       case "flashcard": return `${slug}/cards.json`;
@@ -1231,11 +1236,11 @@ function isFormSupported(contentType: ContentType, parsed: any): boolean {
 }
 
 /** Best-effort contentType inference for raw R2 keys (used in raw editor mode).
- *  Returns null for library articles (.md, .html, .pdf) — those can't be
+ *  Returns null for library articles (.md, .html, .pdf, .epub) — those can't be
  *  validated standalone; returning a truthy type here made the validator
  *  JSON.parse markdown and report bogus syntax errors. */
 function inferContentTypeFromR2Key(key: string, body: string): ContentType | null {
-  if (key.endsWith(".md") || key.endsWith(".html") || key.endsWith(".pdf")) return null;
+  if (key.endsWith(".md") || key.endsWith(".html") || key.endsWith(".pdf") || key.endsWith(".epub")) return null;
   if (!key.endsWith(".json")) return null;
   try {
     const j = JSON.parse(body);

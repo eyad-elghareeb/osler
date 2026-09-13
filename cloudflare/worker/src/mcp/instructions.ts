@@ -206,7 +206,7 @@ Your API token has one of two privilege levels:
 - \`source.type\` is \`"youtube"\` (needs \`id\`), \`"mp4"\`/\`"hls"\` (needs absolute http \`url\`), or \`"r2"\` for instance-hosted media: \`"source": { "type": "r2", "key": "media/lecture.mp4" }\` — a path relative to the video's own pack folder (uploaded via the admin video editor into the pack's \`media/\` subfolder, published to student files, streamed with HTTP Range support). Prefer \`r2\` over external URLs for first-party content so packs stay portable across instances.
 
 ### 8. Library Articles with Sidecar Metadata
-- File format: \`<slug>.md\` or \`<slug>.html\`
+- File format: \`<slug>.md\` or \`<slug>.html\`; binary books: \`<slug>.pdf\` or \`<slug>.epub\` (EPUBs render in the built-in book reader with TOC, themes, and saved progress).
 - Sidecar file: \`<slug>.meta.json\` located adjacent to the article file.
 \`\`\`json
 {

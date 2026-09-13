@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlignLeft, FileText, Upload, Eye, Tags } from "lucide-react";
+import { AlignLeft, BookOpen, FileText, Upload, Eye, Tags } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
@@ -101,12 +101,15 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
     ? value.contentType
     : rawValue.startsWith("data:application/pdf;")
     ? "pdf"
+    : rawValue.startsWith("data:application/epub+zip;")
+    ? "epub"
     : rawValue.startsWith("<") && !rawValue.startsWith("---")
     ? "html"
     : "md";
 
-  const [contentType, setContentType] = React.useState<"md" | "pdf" | "html">(detectedType);
+  const [contentType, setContentType] = React.useState<"md" | "pdf" | "html" | "epub">(detectedType);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const epubFileRef = React.useRef<HTMLInputElement>(null);
 
   // Store content type in the value object so content-editor.tsx can read it
   const currentBody = typeof value === "string" ? rawValue : (value?.body ?? "");
@@ -124,7 +127,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
     setMetaDraft(metaDraftFrom(fmSplit.fields, meta));
   }, [meta]);
 
-  function emit(nextBody: string, ct: "md" | "pdf" | "html") {
+  function emit(nextBody: string, ct: "md" | "pdf" | "html" | "epub") {
     if (ct === "md") {
       onChange({ body: nextBody, contentType: ct, meta: cleanMetaDraft(metaDraft) });
       return;
@@ -152,7 +155,28 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
     }
   }
 
-  function update(next: string, ct?: "md" | "pdf" | "html") {
+  async function handleEpubUpload(file: File) {
+    try {
+      // FileReader (not btoa-spread) — EPUBs are multi-megabyte and the
+      // spread form throws a RangeError past ~100k arguments.
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(reader.error ?? new Error("FileReader error"));
+        reader.readAsDataURL(file);
+      });
+      if (!dataUri.startsWith("data:application/epub")) {
+        throw new Error("Not an EPUB file");
+      }
+      setContentType("epub");
+      update(dataUri, "epub");
+      toast({ title: `Loaded ${file.name}` });
+    } catch (err) {
+      toast({ title: `Failed to read EPUB: ${String(err)}`, variant: "destructive" });
+    }
+  }
+
+  function update(next: string, ct?: "md" | "pdf" | "html" | "epub") {
     const ct2 = ct ?? contentType;
     if (ct2 === "md") {
       emit(next, "md");
@@ -175,7 +199,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
       {/* Content type selector */}
       <div className="flex items-center gap-2 text-xs">
         <span className="text-muted-foreground font-medium uppercase tracking-wider">{t("admin.content.editor.articleType")}:</span>
-        {(["md", "pdf", "html"] as const).map((ct) => (
+        {(["md", "pdf", "html", "epub"] as const).map((ct) => (
           <button
             key={ct}
             type="button"
@@ -196,7 +220,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
                 : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
             )}
           >
-            {ct === "md" ? ".md" : ct === "pdf" ? ".pdf" : ".html"}
+            {ct === "md" ? ".md" : ct === "pdf" ? ".pdf" : ct === "epub" ? ".epub" : ".html"}
           </button>
         ))}
       </div>
@@ -316,6 +340,41 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) handlePdfUpload(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      ) : contentType === "epub" ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed border-border p-8">
+          {currentBody.startsWith("data:application/epub") ? (
+            <div className="flex flex-col items-center gap-3">
+              <BookOpen className="size-12 text-info" />
+              <p className="text-sm font-medium">{t("admin.content.editor.epubLoaded")} ({Math.round(chars / 1024)} KB base64)</p>
+              <div className="flex gap-2">
+                {!readOnly && (
+                  <Button size="sm" variant="outline" onClick={() => epubFileRef.current?.click()}>
+                    <Upload className="size-3.5 me-1.5" /> {t("admin.content.editor.replaceEpub")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <BookOpen className="size-12 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">{t("admin.content.editor.epubDropHint")}</p>
+              <Button size="sm" variant="outline" onClick={() => epubFileRef.current?.click()} disabled={readOnly}>
+                <Upload className="size-3.5 me-1.5" /> {t("admin.content.editor.uploadEpub")}
+              </Button>
+            </div>
+          )}
+          <input
+            ref={epubFileRef}
+            type="file"
+            accept="application/epub+zip,.epub"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleEpubUpload(f);
               e.target.value = "";
             }}
           />

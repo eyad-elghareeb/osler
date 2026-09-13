@@ -46,7 +46,7 @@ function libraryBaseUrl(): string {
   return contentFileUrl("library", "");
 }
 
-export type ArticleContentType = "md" | "pdf" | "html";
+export type ArticleContentType = "md" | "pdf" | "html" | "epub";
 
 /**
  * Resolve an image src used inside a library article against the article's
@@ -451,6 +451,20 @@ async function loadLeafMeta(node: ContentTreeNode): Promise<ArticleMeta[]> {
         } as ArticleMeta;
       }
 
+      if (ext === "epub") {
+        // EPUB books: list view uses the filename only (no unzip); the full
+        // OPF metadata (title/creator) is read by the book reader on open and
+        // the sidecar still overrides per-field when present.
+        const meta: ArticleMeta = {
+          file: filePath,
+          title: file.replace(/\.epub$/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          specialty: node.title,
+          lang: node.lang ?? "en",
+          contentType: "epub" as ArticleContentType,
+        };
+        return meta;
+      }
+
       if (ext === "html") {
         const res = await fetchWithLocalFallback(contentFileUrl("library", filePath), localContentUrl("library", filePath));
         if (!res.ok) return null;
@@ -507,7 +521,7 @@ export function articlesFromManifestTree(tree: ContentTreeNode[]): ArticleMeta[]
             title: slug.replace(/\b\w/g, (c) => c.toUpperCase()),
             specialty: node.title,
             lang: node.lang ?? "en",
-            contentType: ext === "pdf" || ext === "html" ? ext : "md",
+            contentType: ext === "pdf" || ext === "html" || ext === "epub" ? ext : "md",
           });
         }
       } else {
@@ -540,7 +554,7 @@ export function buildArticleDisplayTree(
           const meta = metaByFile.get(file);
           out.push({
             uid: file,
-            title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
+            title: meta?.title ?? file.replace(/\.(md|pdf|html|epub)$/, "").replace(/-/g, " "),
             type: "library",
             path: "",
             items: [],
@@ -555,7 +569,7 @@ export function buildArticleDisplayTree(
           const meta = metaByFile.get(filePath);
           return {
             uid: filePath,
-            title: meta?.title ?? file.replace(/\.(md|pdf|html)$/, "").replace(/-/g, " "),
+            title: meta?.title ?? file.replace(/\.(md|pdf|html|epub)$/, "").replace(/-/g, " "),
             type: "library" as const,
             path: node.path,
             items: [],
@@ -624,6 +638,23 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
       lang: "en",
       contentType: "pdf",
     });
+  }
+
+  if (ext === "epub") {
+    // EPUB bodies are parsed client-side by the book reader (see
+    // src/lib/osler/epub.ts) straight from `fileUrl` — the Article shell
+    // only carries identity + sidecar-merged metadata for the hub/headers.
+    const shell: Article = {
+      file: filePath.split("/").pop() ?? "",
+      title: (filePath.split("/").pop() ?? "").replace(/\.epub$/i, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      content: "",
+      html: "",
+      fileUrl: `${libraryBaseUrl()}${filePath}`,
+      lang: (await lookupNodeLangForFile(filePath)) ?? "en",
+      contentType: "epub",
+    };
+    applySidecarMeta(shell, await fetchSidecarMeta(filePath));
+    return cacheParsedArticle(key, shell);
   }
 
   if (ext === "html") {

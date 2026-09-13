@@ -1800,6 +1800,7 @@ function guessImageContentType(filename: string): string {
     case "bmp": return "image/bmp";
     case "ico": return "image/x-icon";
     case "pdf": return "application/pdf";
+    case "epub": return "application/epub+zip";
     case "mp3":
     case "m4a": return "audio/mpeg";
     case "mp4": return "video/mp4";
@@ -2018,7 +2019,7 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
       if (isArticleMetaFileName(file)) {
         // Library article sidecar metadata — merged client-side over
         // frontmatter, never listed as a content data file.
-      } else if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".pdf")) {
+      } else if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".pdf") || file.toLowerCase().endsWith(".epub")) {
         f.files.push(file);
       } else if (file.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4|webm|m4v|mov)$/i)) {
         f.images.push(file);
@@ -2215,7 +2216,7 @@ async function updateManifestIncremental(env: Env, category: string, touchedPath
         directImages.push(rel);
       } else if (!rel.includes("/")) {
         if (!isArticleMetaFileName(rel)) {
-          if (rel.match(/\.(json|md|html|htm|pdf)$/i)) directFiles.push(rel);
+          if (rel.match(/\.(json|md|html|htm|pdf|epub)$/i)) directFiles.push(rel);
           else if (rel.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4|webm|m4v|mov)$/i)) directImages.push(rel);
         }
       }
@@ -4896,7 +4897,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
             // Sidecar article metadata is not standalone content — it rides
             // along with its .md sibling and must never be adopted.
             if (isArticleMetaFileName(rel)) continue;
-            if (!rel.endsWith(".json") && !rel.endsWith(".md") && !rel.endsWith(".html") && !rel.endsWith(".pdf")) {
+            if (!rel.endsWith(".json") && !rel.endsWith(".md") && !rel.endsWith(".html") && !rel.endsWith(".pdf") && !rel.endsWith(".epub")) {
               continue;
             }
 
@@ -4924,7 +4925,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
               const text = await src.text();
 
               let contentType: string | undefined;
-              if (fileSegment.endsWith(".md") || fileSegment.endsWith(".html") || fileSegment.endsWith(".pdf")) {
+              if (fileSegment.endsWith(".md") || fileSegment.endsWith(".html") || fileSegment.endsWith(".pdf") || fileSegment.endsWith(".epub")) {
                 contentType = "library";
               } else if (fileSegment.endsWith(".json")) {
                 try {
@@ -5246,7 +5247,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       // Infer content_type. Priority: explicit body.contentType → by extension → by category.
       let contentType: string | undefined = typeof body.contentType === "string" ? body.contentType : undefined;
       if (!contentType) {
-        if (fileSegment.endsWith(".md") || fileSegment.endsWith(".html") || fileSegment.endsWith(".pdf")) contentType = "library";
+        if (fileSegment.endsWith(".md") || fileSegment.endsWith(".html") || fileSegment.endsWith(".pdf") || fileSegment.endsWith(".epub")) contentType = "library";
         else if (fileSegment.endsWith(".json")) {
           // sniff the JSON body for shape hints
           try {
@@ -5680,7 +5681,7 @@ export default {
           : ext === "bmp" ? "image/bmp" : ext === "ico" ? "image/x-icon"
           : ext === "mp3" || ext === "m4a" ? "audio/mpeg" : ext === "mp4" ? "video/mp4"
           : ext === "webm" ? "video/webm" : ext === "m4v" ? "video/x-m4v" : ext === "mov" ? "video/quicktime"
-          : ext === "m3u8" ? "application/vnd.apple.mpegurl"
+          : ext === "m3u8" ? "application/vnd.apple.mpegurl" : ext === "epub" ? "application/epub+zip"
           : ext === "css" ? "text/css" : ext === "js" ? "application/javascript"
           : "application/octet-stream";
         // HTML/SVG/JS/XML served from the Worker origin could execute script
