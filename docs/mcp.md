@@ -14,9 +14,10 @@ at the authoring surface:
 | content_admin token can | content_admin token cannot |
 |---|---|
 | create drafts, write bodies, upload assets | publish / approve |
-| validate against the platform schema | reject / schedule |
-| read published packs + manifests for reference | delete objects or edit config |
-| submit drafts to the review queue | touch users, stats, sessions |
+| validate against the platform schema | reject / schedule / unpublish |
+| inspect all managed content (read-only) | edit or delete others' content |
+| edit, submit, and delete own non-published objects | read the audit trail or edit config |
+| submit own drafts to the review queue | touch users, stats, sessions |
 
 Submitted packs land in `status = "pending"` and must be approved by an admin
 (role `admin`) through the web admin panel's review queue before students see

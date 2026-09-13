@@ -2,7 +2,7 @@
  * Osler MCP tool registry — complete content-authoring and admin management surface.
  *
  * Supports two privilege tiers:
- *   1. 'content_admin': Create drafts, upload assets, validate, submit for review, read published files.
+ *   1. 'content_admin': Create drafts, inspect all managed content, edit owned content, and submit it for review.
  *   2. 'admin': Full editing abilities — direct publishing, approvals/rejections, unpublishing,
  *      deletion, hotfixes, asset management, smart manifest sync, article metadata, and config updates.
  */
@@ -94,6 +94,13 @@ async function loadOwnedObject(ctx: McpCtx, id: unknown, allowPublished = false)
   if (!isOwner && !isAdmin && !(allowPublished && obj.status === "published")) {
     throw new ToolError("Not authorized to access this content object");
   }
+  return obj;
+}
+
+async function loadAccessibleObject(ctx: McpCtx, id: unknown) {
+  if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) throw new ToolError("Valid object id required");
+  const obj = await ctx.env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(id).first<any>();
+  if (!obj) throw new ToolError("Content object not found");
   return obj;
 }
 
@@ -218,7 +225,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "list_content_objects",
     description:
-      "List managed content objects with id, type, title, status, and dates. Admin-scoped tokens can list all users' objects.",
+      "List managed content objects with id, type, title, status, and dates. Both admin tiers can inspect all users' objects; mineOnly narrows the result to your own.",
     inputSchema: {
       type: "object",
       properties: {
@@ -237,23 +244,13 @@ export const TOOLS: ToolDef[] = [
       const where: string[] = [];
       const params: unknown[] = [];
 
-      if (ctx.scope === "admin" && !args?.mineOnly) {
-        if (status) {
-          where.push("co.status = ?");
-          params.push(status);
-        }
-      } else {
-        if (status === "published") {
-          where.push("(co.created_by = ? OR co.status = 'published')");
-          params.push(ctx.userId);
-        } else {
-          where.push("co.created_by = ?");
-          params.push(ctx.userId);
-          if (status) {
-            where.push("co.status = ?");
-            params.push(status);
-          }
-        }
+      if (args?.mineOnly) {
+        where.push("co.created_by = ?");
+        params.push(ctx.userId);
+      }
+      if (status) {
+        where.push("co.status = ?");
+        params.push(status);
       }
 
       if (like) {
@@ -277,7 +274,7 @@ export const TOOLS: ToolDef[] = [
     description: "Fetch one managed content object by id — metadata plus its body (draft, pending, or published copy).",
     inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
     async run(ctx, args) {
-      const obj = await loadOwnedObject(ctx, args?.id, true);
+      const obj = await loadAccessibleObject(ctx, args?.id);
       let bodyKey = ctx.draftKey(obj.r2_key_base);
       if (obj.status === "published") bodyKey = ctx.publishedKey(obj.r2_key_base);
       else if (obj.status === "pending") bodyKey = ctx.pendingKey(obj.r2_key_base);
@@ -418,7 +415,7 @@ export const TOOLS: ToolDef[] = [
       let contentType: string;
       let body: string | null;
       if (args?.id) {
-        const obj = await loadOwnedObject(ctx, args.id);
+        const obj = await loadAccessibleObject(ctx, args.id);
         contentType = obj.content_type;
         body = (await ctx.r2Get(ctx.draftKey(obj.r2_key_base))) ?? "";
       } else {
@@ -527,6 +524,9 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
     async run(ctx, args) {
       const obj = await loadOwnedObject(ctx, args?.id);
+      if (obj.status === "published") {
+        throw new ToolError("Published objects cannot be submitted — unpublish to draft first");
+      }
       const draft = await ctx.r2Get(ctx.draftKey(obj.r2_key_base));
       if (!draft) throw new ToolError("Draft is empty");
       await ctx.r2Put(ctx.pendingKey(obj.r2_key_base), draft);
@@ -990,7 +990,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "search_content",
-    description: "Search managed content objects by title, keywords, or status.",
+    description: "Search managed content objects by title, keywords, or status. Both admin tiers can inspect all users' objects.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1117,6 +1117,7 @@ export const TOOLS: ToolDef[] = [
       },
     },
     async run(ctx, args) {
+      requireAdmin(ctx, "get_audit_trail");
       if (!ctx.getAuditTrail) throw new ToolError("Audit trail not wired on this host");
       const page = Math.max(1, Number(args?.page) || 1);
       const action = typeof args?.action === "string" && args.action.trim() ? args.action.trim() : undefined;

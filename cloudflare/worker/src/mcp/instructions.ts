@@ -36,7 +36,7 @@ Your API token has one of two privilege levels:
    - Edit library article sidecar metadata (\`update_article_metadata\`).
    - Read and modify platform site configuration (\`read_config\`, \`update_config\`).
    - Trigger smart incremental manifest updates (\`smart_update_manifest\`).
-   - Inspect full audit trails (\`get_audit_trail\`).
+   - Admin-only: inspect full audit trails (\`get_audit_trail\`).
 
 ---
 

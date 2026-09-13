@@ -111,7 +111,11 @@ export function isValidRedirectUri(raw: string): boolean {
     if (u.hash || !u.protocol) return false;
     if (u.protocol === "https:") return !!u.hostname;
     if (u.protocol === "http:") return ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname) || u.hostname.endsWith(".localhost");
-    return /^[a-z][a-z0-9+.-]{1,31}:$/.test(u.protocol);
+    // Custom application schemes are needed by installed MCP clients, but
+    // browser-executable and ambient schemes must never become OAuth sinks.
+    const scheme = u.protocol.slice(0, -1).toLowerCase();
+    return /^[a-z][a-z0-9+.-]{1,31}$/.test(scheme)
+      && !new Set(["javascript", "data", "vbscript", "file", "blob", "about", "mailto", "tel", "sms", "intent"]).has(scheme);
   } catch {
     return false;
   }
@@ -231,6 +235,7 @@ interface AuthorizeParams {
   state: string;
   scope: string;
   codeChallenge: string;
+  codeChallengeMethod: string;
   resource: string;
 }
 
@@ -241,6 +246,7 @@ function paramsFromSearch(search: URLSearchParams): AuthorizeParams {
     state: search.get("state") ?? "",
     scope: search.get("scope") ?? "content_admin",
     codeChallenge: search.get("code_challenge") ?? "",
+    codeChallengeMethod: search.get("code_challenge_method") ?? "",
     resource: (search.get("resource") ?? "").replace(/\/$/, ""),
   };
 }
@@ -261,6 +267,7 @@ async function validateAuthorize(env: McpOAuthEnv, params: AuthorizeParams, expe
   }
   if (!uris.includes(params.redirectUri)) return { error: "invalid_request", description: "redirect_uri is not registered for this client" };
   if (!params.codeChallenge) return { error: "invalid_request", description: "PKCE code_challenge is required" };
+  if (params.codeChallengeMethod !== "S256") return { error: "invalid_request", description: "Only S256 PKCE is supported" };
   if (params.scope && !params.scope.split(/[\s+]/).every((s) => SUPPORTED_SCOPES.includes(s))) {
     return { error: "invalid_scope", description: `Only ${SUPPORTED_SCOPES.join(", ")} is supported` };
   }

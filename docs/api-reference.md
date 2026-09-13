@@ -1435,7 +1435,7 @@ There are three roles in the system:
 | Role | Description |
 | --- | --- |
 | `student` | Default. Cannot access `/v1/admin/*` at all. |
-| `content_admin` | Can create, edit, submit, and view their own content + all published content. Cannot approve/reject/publish/unpublish, cannot manage users, cannot view audit log or stats. |
+| `content_admin` | Can inspect all managed content (read-only); create drafts; edit, submit, and delete own non-published content. Cannot approve/reject/publish/unpublish, cannot edit or delete others' content, cannot manage users, cannot view audit log or stats. |
 | `admin` | Full access: all of the above plus user management, content review, direct publish, audit log, stats, session revocation. |
 
 The capabilities bitmask returned by `GET /v1/admin/me` is computed from the role:
@@ -2217,11 +2217,7 @@ List content objects with optional status filter and title search.
 
 #### Visibility rules
 
-| Caller role | What they see |
-| --- | --- |
-| `admin` | All content matching the status filter (or all statuses if `status=all`) |
-| `content_admin` with `status=published` | All published content |
-| `content_admin` with any other status | Only their own content matching that status |
+Both `admin` and `content_admin` can list all content matching the status filter (or all statuses if `status=all`). Mutations on listed objects remain ownership-scoped: a `content_admin` can only edit, submit, or delete their own objects.
 
 The result set is capped at **100 items** (a safety cap to avoid unbounded scans). Results are ordered by `updated_at DESC`.
 
@@ -2439,9 +2435,9 @@ Get a single content object's metadata and body.
 #### Visibility rules
 
 - `admin` can read any content object regardless of status.
-- `content_admin` can read: (a) any `published` content, or (b) their own content in any status. Otherwise `403`.
+- `content_admin` can read any content object regardless of status (read-only — mutations on others' objects return `403`).
 
-The `body` field is the raw text from R2: for `published` objects it comes from `content/<type>/<id>/published.json`; for all other statuses it comes from `content/<type>/<id>/draft.json`. Returns `null` if the R2 object is missing (e.g. draft was never saved).
+The `body` field is the raw text from R2: for `published` objects it comes from `content/<type>/<id>/published.json`; for `pending` objects from `content/<type>/<id>/pending.json`; for all other statuses from `content/<type>/<id>/draft.json`. Returns `null` if the R2 object is missing (e.g. draft was never saved).
 
 #### Example request
 
@@ -2607,6 +2603,7 @@ Snapshot the current draft to the pending slot and set status to `pending`. Clea
 
 - `admin` can submit any content object.
 - `content_admin` can only submit their own. `403` otherwise.
+- Published objects cannot be submitted — unpublish to draft first (`400`).
 
 #### Example request
 
@@ -2979,7 +2976,7 @@ Missing or invalid token — `401`:
 
 Permanently delete a content object and all of its R2 artifacts.
 
-- **Auth**: `admin` only
+- **Auth**: `admin`, or `content_admin` owning a non-published object
 - **Body**: none
 
 #### Path parameters

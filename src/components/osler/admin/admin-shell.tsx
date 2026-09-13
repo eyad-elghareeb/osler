@@ -164,7 +164,7 @@ function AdminShellInner({ children }: AdminShellProps) {
 
   // Fetch open support-ticket count for the tickets nav badge.
   React.useEffect(() => {
-    if (!identity?.user.role) return;
+    if (identity?.user.role !== "admin") return;
     adminApi
       .tickets(1, "open")
       .then((r) => setOpenTicketCount(r.openCount))
@@ -257,7 +257,9 @@ function AdminShellInner({ children }: AdminShellProps) {
           },
         ]
       : []),
-    { href: "/admin/tickets", icon: LifeBuoy, labelKey: "admin.nav.tickets", badge: openTicketCount },
+    ...(isAdmin
+      ? [{ href: "/admin/tickets", icon: LifeBuoy, labelKey: "admin.nav.tickets", badge: openTicketCount }]
+      : []),
   ];
   const systemItems: NavItemDef[] = [
     ...(isAdmin

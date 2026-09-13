@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useAdminSettings } from "@/components/osler/admin/admin-settings-context";
+import { useAdminIdentity } from "@/components/osler/admin/admin-context";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
@@ -96,12 +97,14 @@ type EditorMode = "form" | "code";
 export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps) {
   const { t } = useI18n();
   const { settings } = useAdminSettings();
+  const identity = useAdminIdentity();
   const { toast } = useToast();
   const router = useRouter();
 
   const isRawMode = !id && !!rawR2Key;
 
   const [obj, setObj] = React.useState<ContentObject | null>(null);
+  const canEdit = identity.user.role === "admin" || (!isRawMode && !!obj && obj.created_by === identity.user.id);
   const [loading, setLoading] = React.useState(true);
   const [body, setBody] = React.useState("");
   const [dirty, setDirty] = React.useState(false);
@@ -383,6 +386,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }, [body, isRawMode, rawR2Key, obj, computeParse]);
 
   function handleBodyChange(value: string) {
+    if (!canEdit) return;
     bodyRef.current = value;
     setBody(value);
     setDirty(true);
@@ -394,7 +398,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }
 
   async function autoSave() {
-    if (!obj || !id) return;
+    if (!canEdit || !obj || !id) return;
     if (savingRef.current) return; // a manual save is in flight and writes the latest body
     if (!dirty) return;            // nothing unsaved — a manual save already persisted it
     flushFormBody();
@@ -431,6 +435,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }
 
   async function saveDraft() {
+    if (!canEdit) return;
     haptic("light");
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSaving(true);
@@ -465,12 +470,12 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
     function handler(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        if (!saving) saveDraft();
+        if (!saving && canEdit) saveDraft();
       }
     }
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [saving, body, isRawMode, rawR2Key, id]);
+  }, [saving, body, isRawMode, rawR2Key, id, canEdit]);
 
   /** Best-effort manifest rebuild for the category a published key belongs
    *  to — keeps student-facing manifests in sync after editor-side deletes
@@ -502,7 +507,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }, [dirty]);
 
   async function promoteToManaged() {
-    if (!rawR2Key) return;
+    if (!rawR2Key || !canEdit) return;
     setAdopting(true);
     try {
       const res = await adminApi.adoptR2Key(rawR2Key);
@@ -526,7 +531,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }
 
   async function submit() {
-    if (!id) return;
+    if (!id || !canEdit) return;
     haptic("light");
     flushFormBody();
     await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
@@ -543,7 +548,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }
 
   async function doPublish(targetPath?: string) {
-    if (!id) return;
+    if (!id || !canEdit) return;
     haptic("light");
     flushFormBody();
     await adminApi.saveDraft(id, bodyRef.current).catch(() => {});
@@ -605,7 +610,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   }
 
   async function deleteContent() {
-    if (!id) return;
+    if (!id || !canEdit) return;
     haptic("warning");
     try {
       // Snapshot the hybrid key before deletion so we can rebuild that
@@ -624,6 +629,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   if (!isRawMode && !obj) return null;
 
   const isPending = !isRawMode && obj?.status === "pending";
+  const isReadOnly = isPending || !canEdit;
   const isLibrary = isRawMode
     ? (rawR2Key?.endsWith(".md") ?? false)
       || (rawR2Key?.endsWith(".html") ?? false)
@@ -638,6 +644,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
   const parseError = parseState.error;
 
   function handleFormChange(next: any) {
+    if (isReadOnly) return;
     if (isLibrary) {
       // next can be a string (legacy) or { body, contentType, meta? } —
       // `meta` carries the sidecar metadata for markdown articles.
@@ -767,11 +774,11 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                 {validating ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <ShieldCheck className="size-3 sm:me-1" />}
                 <span className="hidden sm:inline">{t("admin.content.editor.validate")}</span>
               </Button>
-              <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving || !dirty}>
+              {canEdit && <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving || !dirty}>
                 {saving ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <Save className="size-3 sm:me-1" />}
                 <span className="hidden sm:inline">{t("admin.content.saveDraft")}</span>
-              </Button>
-              {capabilities.manageContent && (
+              </Button>}
+              {capabilities.manageContent && canEdit && (
                 <Button size="xs" onClick={promoteToManaged} disabled={adopting} title={t("admin.content.editor.promote")}>
                   {adopting ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <PackagePlus className="size-3 sm:me-1" />}
                   <span className="hidden sm:inline">{t("admin.content.editor.promote")}</span>
@@ -786,15 +793,15 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                 {validating ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <ShieldCheck className="size-3 sm:me-1" />}
                 <span className="hidden sm:inline">{t("admin.content.editor.validate")}</span>
               </Button>
-              <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving} title={t("admin.content.saveDraft")}>
+              {canEdit && <Button variant="outline" size="xs" onClick={saveDraft} disabled={saving} title={t("admin.content.saveDraft")}>
                 {saving ? <Loader2 className="size-3 sm:me-1 animate-spin" /> : <Save className="size-3 sm:me-1" />}
                 <span className="hidden sm:inline">{t("admin.content.saveDraft")}</span>
-              </Button>
-              <Button variant="outline" size="xs" onClick={submit} title={t("admin.content.submit")}>
+              </Button>}
+              {canEdit && <Button variant="outline" size="xs" onClick={submit} title={t("admin.content.submit")}>
                 <Send className="size-3 sm:me-1" />
                 <span className="hidden sm:inline">{t("admin.content.submit")}</span>
-              </Button>
-              {capabilities.publishDirect && (
+              </Button>}
+              {capabilities.publishDirect && canEdit && (
                 <Button size="xs" onClick={() => { setPublishTargetPath(suggestedPath); setPublishOpen(true); }} title={t("admin.content.publishDirect")}>
                   <Upload className="size-3 sm:me-1" />
                   <span className="hidden sm:inline">{t("admin.content.publishDirect")}</span>
@@ -826,6 +833,17 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             <p className="font-medium">{t("admin.content.editor.rawBannerTitle")}</p>
             <p className="text-warning/80 mt-0.5">{t("admin.content.editor.rawBannerDesc")}</p>
           </div>
+        </div>
+      )}
+
+      {/* Pending notice — object is read-only while awaiting review */}
+      {isPending && (
+        <div className="border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs text-warning flex items-center gap-2">
+          <AlertTriangle className="size-4 shrink-0" />
+          <p className="flex-1">{t("admin.content.pendingNotice")}</p>
+          <Button variant="outline" size="xs" onClick={() => router.push("/admin/review")}>
+            {t("admin.content.goToReview")}
+          </Button>
         </div>
       )}
 
@@ -1018,16 +1036,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
 
         {/* Editor main pane */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {isPending ? (
-            <div className="flex-1 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
-              <div>
-                <p className="mb-2">{t("admin.content.pendingNotice")}</p>
-                <Button variant="outline" size="sm" onClick={() => router.push("/admin/review")}>
-                  {t("admin.content.goToReview")}
-                </Button>
-              </div>
-            </div>
-          ) : mode === "form" ? (
+          {mode === "form" ? (
             <div className={cn(
               "flex-1",
               isLibrary ? "min-h-0 p-3 sm:p-4 flex flex-col overflow-hidden" : "overflow-y-auto osler-scroll-y p-3 sm:p-4"
@@ -1036,7 +1045,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                 <LibraryArticleEditor
                   value={body}
                   onChange={handleFormChange}
-                  readOnly={isPending}
+                  readOnly={isReadOnly}
                   r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
                   rawR2Key={isRawMode ? rawR2Key : undefined}
                   meta={articleMeta}
@@ -1060,7 +1069,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                   contentType={obj?.content_type ?? inferContentTypeFromR2Key(rawR2Key ?? "", body) ?? "quiz"}
                   parsed={parsed}
                   onChange={handleFormChange}
-                  readOnly={isPending}
+                  readOnly={isReadOnly}
                   r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
                   rawR2Key={isRawMode ? rawR2Key : undefined}
                 />
@@ -1070,7 +1079,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
             <JsonCodeEditor
               value={body}
               onChange={handleBodyChange}
-              readOnly={isPending}
+              readOnly={isReadOnly}
               className="flex-1"
             />
           )}

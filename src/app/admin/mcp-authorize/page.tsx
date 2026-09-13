@@ -25,6 +25,20 @@ import { haptic } from "@/lib/osler/native";
 
 type AuthzError = "invalid_client" | "invalid_request" | "invalid_scope" | "invalid_target" | "server_error";
 
+function isSafeRedirectUri(raw: string): boolean {
+  try {
+    const uri = new URL(raw);
+    if (uri.hash) return false;
+    if (uri.protocol === "https:") return !!uri.hostname;
+    if (uri.protocol === "http:") return ["localhost", "127.0.0.1", "[::1]"].includes(uri.hostname) || uri.hostname.endsWith(".localhost");
+    const scheme = uri.protocol.slice(0, -1).toLowerCase();
+    return /^[a-z][a-z0-9+.-]{1,31}$/.test(scheme)
+      && !["javascript", "data", "vbscript", "file", "blob", "about", "mailto", "tel", "sms", "intent"].includes(scheme);
+  } catch {
+    return false;
+  }
+}
+
 const ERROR_KEYS: Record<AuthzError, string> = {
   invalid_client: "mcp.auth.error.client",
   invalid_request: "mcp.auth.error.invalid",
@@ -62,7 +76,10 @@ function McpAuthorizeInner() {
   // client with error=access_denied — no server call needed.
   const deny = () => {
     haptic("warning");
-    if (!redirectUri) return;
+    if (!isSafeRedirectUri(redirectUri)) {
+      router.replace("/admin/settings");
+      return;
+    }
     const sep = redirectUri.includes("?") ? "&" : "?";
     // OAuth callbacks land on the client's registered origin (claude.ai,
     // localhost, a custom app scheme) — a full browser navigation is
@@ -79,6 +96,11 @@ function McpAuthorizeInner() {
     try {
       const { redirect_to } = await mcpOAuth.authorize({ clientId, redirectUri, state, codeChallenge, codeChallengeMethod, scope: grantScope });
       haptic("success");
+      if (!isSafeRedirectUri(redirect_to)) {
+        setFailed(t("mcp.auth.error.invalid"));
+        setBusy(false);
+        return;
+      }
       window.location.href = redirect_to;
     } catch (e: any) {
       haptic("error");

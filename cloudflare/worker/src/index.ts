@@ -4314,7 +4314,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
 
   /* ── Support tickets ── */
   if (path.startsWith("/v1/admin/tickets")) {
-    if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+    if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
     const ticketPatch = path.match(/^\/v1\/admin\/tickets\/([^/]+)$/);
     if (request.method === "PATCH" && ticketPatch) {
       const body = await readJson(request);
@@ -5108,8 +5108,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const safeStatus = ["draft","pending","published","rejected","all"].includes(status) ? status : "published";
       const like = q ? "%" + escapeLike(q) + "%" : null;
       const where: string[] = []; const params: any[] = [];
-      if (isAdmin(session)) { if (safeStatus !== "all") { where.push("co.status = ?"); params.push(safeStatus); } }
-      else { if (safeStatus === "published") { where.push("co.status = 'published'"); } else { where.push("co.created_by = ?"); where.push("co.status = ?"); params.push(session.user.id, safeStatus); } }
+      if (safeStatus !== "all") { where.push("co.status = ?"); params.push(safeStatus); }
       if (like) { where.push("co.title LIKE ? ESCAPE '\\'"); params.push(like); }
       const whereSql = where.length ? " WHERE " + where.join(" AND ") : "";
       const [rows, total] = await Promise.all([
@@ -5303,7 +5302,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (["pending","upload-file","r2-keys","r2-key","r2-content","r2-rename","r2-rename-prefix","r2-delete-prefix","r2-folder","regenerate-manifest","validate","by-r2-key","adopt","publish-staged","discard-staged","backfill"].includes(objectId)) return json({ error: "Not found" }, 404, origin, log);
       const obj = await env.DB.prepare("SELECT * FROM content_objects WHERE id = ?").bind(objectId).first<any>();
       if (!obj) return json({ error: "Content not found" }, 404, origin, log);
-      if (!isAdmin(session) && obj.created_by !== session.user.id && obj.status !== "published") return json({ error: "Forbidden" }, 403, origin, log);
+      // Content admins may inspect any managed object. Every mutating branch
+      // below applies the stricter owner/admin check independently.
 
       if (request.method === "PUT" && action === "asset") {
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
@@ -5379,7 +5379,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         return json({ ok: true }, 200, origin, log);
       }
       if (request.method === "GET" && !action) {
-        const bodyKey = obj.status === "published" ? r2Published(obj.r2_key_base) : r2Draft(obj.r2_key_base);
+        const bodyKey = obj.status === "published"
+          ? r2Published(obj.r2_key_base)
+          : obj.status === "pending"
+            ? r2Pending(obj.r2_key_base)
+            : r2Draft(obj.r2_key_base);
         return json({ ...obj, body: await r2Get(env, bodyKey) ?? null }, 200, origin, log);
       }
       if (request.method === "GET" && action === "diff") {
@@ -5401,6 +5405,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       if (request.method === "POST" && action === "submit") {
         if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
         if (!isAdmin(session) && obj.created_by !== session.user.id) return json({ error: "Forbidden" }, 403, origin, log);
+        if (obj.status === "published") return json({ error: "Published objects cannot be submitted — unpublish to draft first" }, 400, origin, log);
         const draft = await r2Get(env, r2Draft(obj.r2_key_base));
         if (!draft) return json({ error: "Draft is empty" }, 400, origin, log);
         await r2Put(env, r2Pending(obj.r2_key_base), draft);
@@ -5481,7 +5486,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         return json({ ok: true, status: "draft" }, 200, origin, log);
       }
       if (request.method === "DELETE" && !action) {
-        if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
+        if (!isAdmin(session) && (obj.created_by !== session.user.id || obj.status === "published")) return json({ error: "Forbidden" }, 403, origin, log);
         // Snapshot before deletion — needed for the manifest rebuild below.
         const pubKey = obj.published_r2_key;
         if (obj.r2_key_base) await deleteManagedBase(env, obj.r2_key_base);

@@ -10,7 +10,7 @@ export default function AdminTicketsPage() {
   const { t } = useI18n();
 
   return (
-    <AdminRouteGuard>
+    <AdminRouteGuard requireSuperAdmin>
       <AdminPageFrame
         title={t("admin.nav.tickets")}
         subtitle={t("admin.tickets.subtitle")}

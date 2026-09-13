@@ -104,7 +104,7 @@ Osler has three roles. The role is stored on the `users` table and granted only 
 | Role | Who has it | What they can do in `/admin` |
 | --- | --- | --- |
 | `student` (default) | Every newly registered user | No admin access. Sign-in at `/admin` returns "Access Denied". |
-| `content_admin` | Trusted editors and contributors | `/admin/content` only: create content, edit their own drafts/pending/rejected, see all published content. Cannot publish directly, cannot review others' work, cannot see users or audit log. |
+| `content_admin` | Trusted editors and contributors | `/admin/content` only: create content, inspect all managed content (read-only), edit/submit/delete their own non-published objects. Cannot publish directly, cannot edit or delete others' work, cannot review, cannot see users, tickets, or audit log. |
 | `admin` | Operators / school IT | Everything: dashboard, users, content (all of it, including direct publish and unpublish), review queue, audit log. |
 
 ### Capability matrix
@@ -113,7 +113,7 @@ The backend derives a set of boolean capabilities from the role and returns them
 
 | Capability | `student` | `content_admin` | `admin` |
 | --- | :---: | :---: | :---: |
-| `manageContent` | — | ✓ (own content only) | ✓ (all content) |
+| `manageContent` | — | ✓ (own edits, view all) | ✓ (all content) |
 | `manageUsers` | — | — | ✓ |
 | `manageSessions` | — | — | ✓ |
 | `approveContent` | — | — | ✓ |
