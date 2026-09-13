@@ -137,11 +137,12 @@ const ANALYTICS_MAX_DETAIL_BYTES = 512;
 // Global daily write cap for analytics events. When exceeded, new events
 // are rejected with 429 until the next UTC midnight. This protects the D1
 // daily row-write quota (100K/day, ACCOUNT-WIDE — sharding does not
-// multiply it) from being exhausted. Sized for a ~200-DAU instance with
-// headroom: 10K rows = 50 events/user/day, while a typical study session
-// emits a fraction of that — leaving 90% of the write budget for auth,
-// sync, and content, which are the flows users actually notice.
-const ANALYTICS_DAILY_WRITE_CAP = 10_000;
+// multiply it) from being exhausted. Sized with room to grow: 25K rows is
+// ~4x the current ~6.4K/day peak, covering the `ping` presence heartbeats
+// (~30 rows per tab-hour) plus traffic growth — while still leaving 75% of
+// the write budget for auth, sync, and content, which are the flows users
+// actually notice.
+const ANALYTICS_DAILY_WRITE_CAP = 25_000;
 
 // Per-question choice stats ("62% of users chose B") — pre-aggregated counters
 // in question_choice_stats, one upsert row per answered question per finished
