@@ -910,6 +910,56 @@ export const TOOLS: ToolDef[] = [
     },
   },
 
+  {
+    name: "duplicate_content_object",
+    description: "Clone any readable pack into a new draft you own (remix workflow: adapt a published pack and submit it as new). Copies the current body plus pack assets; the clone always starts as your unsubmitted draft.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: str("Source content object id"),
+        title: str('Title for the clone (default "Copy of <source title>")'),
+      },
+      required: ["id"],
+    },
+    async run(ctx, args) {
+      const bucket = requireEnv(ctx);
+      const src = await readAccessiblePack(ctx, args?.id) as any;
+      if (!src.body) throw new ToolError("Source has no readable body to duplicate");
+      const title = (typeof args?.title === "string" && args.title.trim() ? args.title.trim() : `Copy of ${src.title ?? "untitled"}`).slice(0, 200);
+      const objectId = ctx.uuid();
+      const r2Base = `content/${src.content_type}/${objectId}`;
+      await ctx.r2Put(ctx.draftKey(r2Base), src.body);
+      const insert = "INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)";
+      await ctx.env.DB.prepare(insert).bind(objectId, r2Base, src.content_type, title, src.language === "ar" ? "ar" : "en", ctx.userId, now(), now()).run();
+
+      // Copy pack assets (images/…), skipping the workflow slot files.
+      let assetsCopied = 0;
+      const failedAssets: { path: string; error: string }[] = [];
+      let cursor: string | undefined = undefined;
+      for (let page = 0; page < 10; page++) {
+        const listed: any = await bucket.list({ prefix: `${src.r2_key_base}/`, limit: 100, cursor });
+        for (const o of listed.objects ?? []) {
+          const rel = String(o.key ?? "").slice(String(src.r2_key_base).length + 1);
+          if (!rel || rel === "draft.json" || rel === "pending.json" || rel === "published.json") continue;
+          try {
+            const got = await bucket.get(o.key);
+            if (!got) throw new ToolError("asset vanished mid-copy");
+            await bucket.put(`${r2Base}/${rel}`, await got.arrayBuffer(), { httpMetadata: { contentType: (got as any).httpMetadata?.contentType } });
+            assetsCopied++;
+          } catch (e: any) {
+            failedAssets.push({ path: rel, error: e instanceof ToolError ? e.message : String(e?.message ?? e) });
+          }
+        }
+        if (!listed.truncated) break;
+        cursor = listed.cursor;
+        if (!cursor) break;
+      }
+
+      await ctx.audit("mcp_duplicate_content", objectId, { sourceId: src.id, title, assetsCopied, failed: failedAssets.length, via: "mcp" });
+      return { ok: failedAssets.length === 0, id: objectId, title, sourceId: src.id, assetsCopied, failedAssets, status: "draft" };
+    },
+  },
+
   // ─── Full Admin Privileged Tools ──────────────────────────────────────────
 
   {

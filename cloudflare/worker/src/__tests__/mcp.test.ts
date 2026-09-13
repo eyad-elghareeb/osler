@@ -302,6 +302,35 @@ describe("MCP bulk_validate", () => {
     expect(r.result.structuredContent.results[0].error).toMatch(/not found/i);
   });
 });
+
+describe("MCP duplicate_content_object", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+
+  it("clones a readable pack into an owned draft", async () => {
+    const ctx = makeCtx();
+    await ctx.r2Put("content/quiz/obj1/draft.json", VALID_QUIZ);
+    const r = await call(ctx, "tools/call", { name: "duplicate_content_object", arguments: { id: ID_A } });
+    const sc = r.result.structuredContent;
+    expect(sc.ok).toBe(true);
+    expect(sc.sourceId).toBe(ID_A);
+    expect(sc.id).not.toBe(ID_A);
+    expect(sc.title).toMatch(/Copy of/);
+    expect(sc.status).toBe("draft");
+    // Clone body readable through the new draft slot.
+    const dup = await ctx.r2Get(`content/quiz/${sc.id}/draft.json`);
+    expect(dup).toBe(VALID_QUIZ);
+  });
+
+  it("accepts a custom title and refuses body-less sources", async () => {
+    const ctx = makeCtx();
+    await ctx.r2Put("content/quiz/obj1/draft.json", VALID_QUIZ);
+    const r = await call(ctx, "tools/call", { name: "duplicate_content_object", arguments: { id: ID_A, title: "Remix" } });
+    expect(r.result.structuredContent.title).toBe("Remix");
+    const empty = makeCtx();
+    const bad = await call(empty, "tools/call", { name: "duplicate_content_object", arguments: { id: ID_A } });
+    expect(JSON.stringify(bad.result.content[0].text)).toMatch(/no readable body/);
+  });
+});
 describe("MCP batch handling", () => {
   it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];
