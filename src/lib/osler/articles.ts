@@ -54,6 +54,13 @@ export type ArticleContentType = "md" | "pdf" | "html" | "epub";
  * `images/<name>` are looked up in the `<articleDir>/images/` subfolder next
  * to the `.md` file; absolute URLs, `data:` URIs, and `/`-rooted paths are
  * returned untouched.
+ *
+ * The result is percent-encoded: the Milkdown reader rewrites `![alt](src)`
+ * destinations BEFORE markdown parsing, and a raw space (e.g. the
+ * "ENT E-book/" folder) makes the destination invalid so the raw syntax
+ * renders as text. encodeURI keeps `://`, `/`, `?`, `&`, `=` intact while
+ * escaping spaces to `%20`, which browsers, the Worker (decodeURIComponent),
+ * and static hosts all resolve back to the R2 key.
  */
 export function resolveArticleAsset(src: string, articleDir: string): string {
   if (!src) return src;
@@ -61,7 +68,7 @@ export function resolveArticleAsset(src: string, articleDir: string): string {
     return src;
   }
   const base = src.includes("/") ? src : `images/${src}`;
-  return cacheBust(`${libraryBaseUrl()}${articleDir}${base}`);
+  return encodeURI(cacheBust(`${libraryBaseUrl()}${articleDir}${base}`));
 }
 
 /** Directory part of an article file path ("" when root-level). */
