@@ -2,6 +2,12 @@
   "name": "osler",
   "version": "0.3.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.9.12"
+  },
   "scripts": {
     "dev": "node scripts/build-sw.js && next dev -p 3000",
     "dev:worker": "npm run dev --prefix cloudflare/worker",
@@ -108,5 +114,13 @@
     "tw-animate-css": "^1.3.5",
     "typescript": "^6.0.3",
     "wrangler": "^4.128.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.28.1": true,
+    "unrs-resolver@1.12.2": true,
+    "workerd@1.20260911.1": true,
+    "core-js": false,
+    "es5-ext": false
   }
 }
