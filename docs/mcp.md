@@ -15,7 +15,7 @@ at the authoring surface:
 |---|---|
 | create drafts, write bodies, upload assets | publish / approve |
 | bulk create / edit / submit / read (per-item ownership) | reject / schedule / unpublish |
-| validate against the platform schema | read the audit trail / analytics, or edit config |
+| bulk validate (with counts), duplicate, rename, re-path | read the audit trail / analytics, or edit config |
 | inspect all managed content (read-only) | edit or delete others' content |
 | edit, submit, and delete own non-published objects | touch users, stats, sessions |
 | submit own drafts to the review queue | |
@@ -24,9 +24,12 @@ Submitted packs land in `status = "pending"` and must be approved by an admin
 (role `admin`) through the web admin panel's review queue before students see
 anything — **for a content_admin-scoped token**. Prefer the bulk siblings
 (`bulk_create_content_packs`, `bulk_update_draft_bodies`,
-`bulk_submit_for_review`, `bulk_get_content_objects`) for multi-pack work:
+`bulk_submit_for_review`, `bulk_get_content_objects`, `bulk_validate`,
+`duplicate_content_object`, `bulk_set_titles`, `bulk_set_target_paths`,
+`bulk_delete_content_objects`) for multi-pack work:
 one round-trip, same per-item ownership rules, and a single bad item fails
-inline without aborting the batch.
+inline without aborting the batch. Bulk delete keeps the two-step confirm,
+with the token bound to the exact id set.
 
 A site admin can also mint an **admin**-scoped token from the same panel.
 That's a materially different trust level: `publish_content`,
@@ -37,7 +40,9 @@ human-in-the-loop step — an agent holding an admin-scoped token can approve
 and publish its own submissions, delete content, and rewrite the site config
 autonomously. Admin scope additionally unlocks observability tools
 (`get_analytics_overview`, `get_js_errors`) mirroring the admin analytics
-dashboard. Only mint admin scope for an agent you'd trust with direct
+dashboard, plus review-triage bulk tools (`bulk_approve_content`,
+`bulk_reject_content` with per-item reasons) and `get_object_diff`
+(draft/pending/published side by side). Only mint admin scope for an agent you'd trust with direct
 production write access; use the default content_admin scope for anything
 you want a human to review first.
 
