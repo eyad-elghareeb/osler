@@ -444,6 +444,59 @@ describe("MCP review triage tools", () => {
     expect(JSON.stringify(r.result.content[0].text)).toMatch(/Not authorized/);
   });
 });
+
+describe("MCP organize tools", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+  const ID_B = "22222222-2222-4222-8222-222222222222";
+
+  function ctxWithObjects(byId: Record<string, any>): McpCtx {
+    const db = {
+      prepare: (_sql: string) => ({
+        bind: (...args: unknown[]) => ({
+          first: async () => byId[String(args[0])] ?? null,
+          all: async () => ({ results: [] }),
+          run: async () => {},
+        }),
+      }),
+    } as unknown as McpCtx["env"]["DB"];
+    return makeCtx({ env: { ...makeCtx().env, DB: db } as any });
+  }
+
+  const draftObj = (id: string, by = "user-1", status = "draft") => ({
+    id, r2_key_base: "content/quiz/obj1", content_type: "quiz", title: "T", language: "en", status, created_by: by,
+  });
+
+  it("bulk_set_titles renames owned packs", async () => {
+    const ctx = ctxWithObjects({ [ID_A]: draftObj(ID_A), [ID_B]: draftObj(ID_B) });
+    const r = await call(ctx, "tools/call", {
+      name: "bulk_set_titles",
+      arguments: { items: [{ id: ID_A, title: "New A" }, { id: ID_B, title: "New B" }] },
+    });
+    expect(r.result.structuredContent.succeeded).toBe(2);
+    expect(r.result.structuredContent.results[0].title).toBe("New A");
+  });
+
+  it("bulk_set_titles fails foreign packs inline", async () => {
+    const ctx = ctxWithObjects({ [ID_A]: draftObj(ID_A, "user-2") });
+    const r = await call(ctx, "tools/call", {
+      name: "bulk_set_titles",
+      arguments: { items: [{ id: ID_A, title: "Hijack" }] },
+    });
+    expect(r.result.structuredContent.succeeded).toBe(0);
+    expect(r.result.structuredContent.results[0].error).toMatch(/Not authorized/);
+  });
+
+  it("bulk_set_target_paths moves drafts but refuses published", async () => {
+    const ctx = ctxWithObjects({ [ID_A]: draftObj(ID_A), [ID_B]: draftObj(ID_B, "user-1", "published") });
+    const r = await call(ctx, "tools/call", {
+      name: "bulk_set_target_paths",
+      arguments: { items: [{ id: ID_A, targetPath: "cardio/acs" }, { id: ID_B, targetPath: "cardio/acs" }] },
+    });
+    expect(r.result.structuredContent.succeeded).toBe(1);
+    expect(r.result.structuredContent.results[0].targetPath).toBe("cardio/acs");
+    expect(r.result.structuredContent.results[1].error).toMatch(/unpublish to draft/);
+  });
+});
 describe("MCP batch handling", () => {
   it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];

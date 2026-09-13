@@ -306,6 +306,31 @@ async function rejectPack(ctx: McpCtx, id: unknown, reasonInput: unknown) {
   return { ok: true as const, id: obj.id, status: "rejected", reason };
 }
 
+async function setPackTitle(ctx: McpCtx, id: unknown, titleInput: unknown) {
+  const obj = await loadOwnedObject(ctx, id, true);
+  const title = typeof titleInput === "string" ? titleInput.trim().slice(0, 200) : "";
+  if (!title) throw new ToolError("title must be a non-empty string (max 200 chars)");
+  await ctx.env.DB.prepare("UPDATE content_objects SET title = ?, updated_at = ? WHERE id = ?")
+    .bind(title, now(), obj.id)
+    .run();
+  await ctx.audit("mcp_set_title", obj.id, { from: obj.title, to: title, via: "mcp" });
+  return { ok: true as const, id: obj.id, title };
+}
+
+async function setPackTargetPath(ctx: McpCtx, id: unknown, targetPathInput: unknown) {
+  const obj = await loadOwnedObject(ctx, id, true);
+  if (obj.status === "published") {
+    throw new ToolError("Published objects cannot be re-pathed — unpublish to draft first, then move");
+  }
+  const targetPath = sanitizeTargetPath(targetPathInput);
+  if (!targetPath) throw new ToolError("targetPath must be a non-empty subfolder path (max 200 chars)");
+  await ctx.env.DB.prepare("UPDATE content_objects SET target_path = ?, updated_at = ? WHERE id = ?")
+    .bind(targetPath, now(), obj.id)
+    .run();
+  await ctx.audit("mcp_set_target_path", obj.id, { from: obj.target_path ?? null, to: targetPath, via: "mcp" });
+  return { ok: true as const, id: obj.id, targetPath };
+}
+
 interface PackSpec {
   contentType?: unknown;
   title?: unknown;
@@ -830,6 +855,64 @@ export const TOOLS: ToolDef[] = [
       const results = [];
       for (const id of ids) {
         results.push(await batchItem(id, () => submitPackForReview(ctx, id)));
+      }
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
+    },
+  },
+  {
+    name: "bulk_set_titles",
+    description: "Rename up to 20 owned packs in one call (metadata-only title update, any status). One bad item fails inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Items to rename: { id, title }. Max 20 per call.",
+          items: {
+            type: "object",
+            properties: { id: str("Content object id"), title: str("New display title (max 200 chars)") },
+            required: ["id", "title"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+    async run(ctx, args) {
+      const items: unknown[] = Array.isArray(args?.items) ? args.items : [];
+      if (!items.length || items.length > 20) throw new ToolError("items must be an array of 1-20 { id, title } entries");
+      const results = [];
+      for (const item of items) {
+        results.push(await batchItem((item as any)?.id, () => setPackTitle(ctx, (item as any)?.id, (item as any)?.title)));
+      }
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
+    },
+  },
+  {
+    name: "bulk_set_target_paths",
+    description: "Re-path up to 20 owned non-published packs in one call (reorganize where drafts will publish to). Published objects are refused inline — unpublish to draft first, then move. One bad item fails inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Items to move: { id, targetPath }. Max 20 per call.",
+          items: {
+            type: "object",
+            properties: { id: str("Content object id"), targetPath: str('New subfolder path, e.g. "cardiology/acute-coronary"') },
+            required: ["id", "targetPath"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+    async run(ctx, args) {
+      const items: unknown[] = Array.isArray(args?.items) ? args.items : [];
+      if (!items.length || items.length > 20) throw new ToolError("items must be an array of 1-20 { id, targetPath } entries");
+      const results = [];
+      for (const item of items) {
+        results.push(await batchItem((item as any)?.id, () => setPackTargetPath(ctx, (item as any)?.id, (item as any)?.targetPath)));
       }
       const succeeded = results.filter((r: any) => r.ok !== false).length;
       return { total: results.length, succeeded, failed: results.length - succeeded, results };
