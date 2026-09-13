@@ -608,6 +608,30 @@ export interface AnalyticsApiPerformance {
   items: AnalyticsApiPerfRow[];
 }
 
+export interface AnalyticsAiModelRow {
+  /** Saved model name, or null when the user never picked one (worker default applies). */
+  model: string | null;
+  users: number;
+}
+
+export interface AnalyticsAi {
+  range: AnalyticsRange;
+  keys: {
+    totalUsers: number;
+    usersWithKey: number;
+    /** Percent of registered users with a server-side key, 0-100 (1 decimal). */
+    pct: number;
+  };
+  models: AnalyticsAiModelRow[];
+  usage: {
+    proxyCalls: number;
+    aiSessions: number;
+    activeSessions: number;
+    /** Percent of active sessions that proxied at least one AI call, 0-100 (1 decimal). */
+    aiSessionPct: number;
+  };
+}
+
 /** Per-user subtotal inside a content pack. */
 export interface ContentUserStat {
   username: string;
@@ -807,6 +831,8 @@ export const analyticsApi = {
                                                     req<AnalyticsErrors>(`/v1/admin/analytics/errors?range=${range}&limit=${limit}`),
   apiPerformance:  (range: AnalyticsRange = "24h", limit = 20) =>
                                                     req<AnalyticsApiPerformance>(`/v1/admin/analytics/api-performance?range=${range}&limit=${limit}`),
+  ai:             (range: AnalyticsRange = "24h") =>
+                                                    req<AnalyticsAi>(`/v1/admin/analytics/ai?range=${range}`),
   content:         (limit = 20)                   => req<AnalyticsContent>(`/v1/admin/analytics/content?limit=${limit}`),
   cloudflareLimits: ()                            => req<CloudflareLimitsData>("/v1/admin/analytics/cloudflare-limits"),
 };

@@ -2948,6 +2948,8 @@ export const ar = {
     "admin.analytics.section.content.desc": "التقدم الدراسي المتزامن وإنجاز الحزم ومعدلات تفاعل الطلاب.",
     "admin.analytics.section.qstats": "بيانات إجابات الأسئلة",
     "admin.analytics.section.qstats.desc": "حجم بيانات الإجابات المجمّعة عبر الحزم.",
+    "admin.analytics.section.ai": "تبنّي الذكاء الاصطناعي",
+    "admin.analytics.section.ai.desc": "تغطية مفاتيح Gemini والنماذج المحفوظة واستخدام الذكاء الاصطناعي — إحصاءات فقط.",
 
     // Cloudflare limits & quotas
     "admin.analytics.cf.status.healthy": "جميع الحدود سليمة",
@@ -3073,6 +3075,18 @@ export const ar = {
     "admin.analytics.apiPerf.col.p50": "p50",
     "admin.analytics.apiPerf.col.p95": "p95",
     "admin.analytics.apiPerf.col.max": "الأقصى",
+
+    "admin.analytics.ai.title": "تبنّي الذكاء الاصطناعي",
+    "admin.analytics.ai.desc": "نسبة المستخدمين المسجلين الذين لديهم مفتاح Gemini محفوظ، ومزيج النماذج، واستدعاءات الذكاء الاصطناعي في النطاق.",
+    "admin.analytics.ai.keysShare": "{with} من {total} مستخدم لديهم مفتاح",
+    "admin.analytics.ai.proxyCalls": "استدعاءات البروكسي",
+    "admin.analytics.ai.aiSessions": "جلسات الذكاء الاصطناعي",
+    "admin.analytics.ai.aiSessionShare": "الجلسات النشطة بالذكاء الاصطناعي",
+    "admin.analytics.ai.models": "النماذج المحفوظة",
+    "admin.analytics.ai.defaultModel": "الافتراضي",
+    "admin.analytics.ai.users": "{n} مستخدم",
+    "admin.analytics.ai.noUsers": "لا يوجد مستخدمون مسجلون بعد",
+    "admin.analytics.ai.privacyNote": "إحصاءات فقط — لا تغادر المفاتيح أو صفوف المستخدمين قاعدة البيانات.",
 
     "admin.analytics.content.title": "تفاعل المحتوى",
     "admin.analytics.content.desc": "من حلّ ماذا وكم مرّة — مُجمّع من التقدّم المُزامن (كل الوقت، للحسابات السحابية فقط).",

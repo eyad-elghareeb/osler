@@ -9,6 +9,7 @@ import {
   BookOpen,
   HelpCircle,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +18,7 @@ import {
   AdminApiError,
   analyticsApi,
   questionStatsApi,
+  type AnalyticsAi,
   type AnalyticsApiPerformance,
   type AnalyticsContent,
   type AnalyticsErrors,
@@ -40,6 +42,7 @@ import { AnalyticsApiPerformancePanel } from "./analytics-api-performance";
 import { AnalyticsContentPanel } from "./analytics-content";
 import { AnalyticsQuestionStatsPanel } from "./analytics-question-stats";
 import { AnalyticsCloudflareLimitsPanel } from "./analytics-cloudflare-limits";
+import { AnalyticsAiPanel } from "./analytics-ai";
 import { AnalyticsCollapsibleSection } from "./analytics-collapsible-section";
 import type { QuestionStatsPack } from "@/components/osler/admin/admin-api";
 
@@ -50,6 +53,7 @@ interface AnalyticsState {
   topPages: AnalyticsTopPages | null;
   errors: AnalyticsErrors | null;
   apiPerformance: AnalyticsApiPerformance | null;
+  ai: AnalyticsAi | null;
   content: AnalyticsContent | null;
   qstatsPacks: QuestionStatsPack[] | null;
   cfLimits: CloudflareLimitsData | null;
@@ -62,12 +66,13 @@ const EMPTY_STATE: AnalyticsState = {
   topPages: null,
   errors: null,
   apiPerformance: null,
+  ai: null,
   content: null,
   qstatsPacks: null,
   cfLimits: null,
 };
 
-const SECTIONS = ["cloudflare", "volume", "performance", "trafficErrors", "content", "qstats"] as const;
+const SECTIONS = ["cloudflare", "volume", "performance", "trafficErrors", "ai", "content", "qstats"] as const;
 type SectionId = (typeof SECTIONS)[number];
 
 /** Sections whose data never changes with the range filter — fetched once,
@@ -193,6 +198,12 @@ export function AnalyticsDashboard() {
             ]);
             if (rangeRef.current !== r) return;
             setData((d) => ({ ...d, topPages, errors }));
+            break;
+          }
+          case "ai": {
+            const ai = await analyticsApi.ai(r);
+            if (rangeRef.current !== r) return;
+            setData((d) => ({ ...d, ai }));
             break;
           }
           case "content": {
@@ -383,6 +394,29 @@ export function AnalyticsDashboard() {
             loading={sectionLoading("trafficErrors", data.errors != null)}
           />
         </div>
+      </AnalyticsCollapsibleSection>
+
+      {/* ── AI Adoption ── */}
+      <AnalyticsCollapsibleSection
+        id="ai"
+        icon={Sparkles}
+        iconColor="var(--color-chart-4)"
+        title={t("admin.analytics.section.ai")}
+        description={t("admin.analytics.section.ai.desc")}
+        badge={
+          data.ai ? (
+            <Badge variant="outline" className="text-[11px] font-medium border bg-primary/10 text-primary border-primary/25">
+              {data.ai.keys.pct.toLocaleString(undefined, { maximumFractionDigits: 1 })}% keys
+            </Badge>
+          ) : null
+        }
+        open={openSections.has("ai")}
+        onToggle={() => toggleSection("ai")}
+      >
+        <AnalyticsAiPanel
+          data={data.ai}
+          loading={sectionLoading("ai", data.ai != null)}
+        />
       </AnalyticsCollapsibleSection>
 
       {/* ── Content Engagement ── */}

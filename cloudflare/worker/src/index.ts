@@ -2919,8 +2919,9 @@ function groupChoiceRows(rows: Array<{ qid: string; choice: number; options_coun
  *   GET /v1/admin/analytics/web-vitals?range=24h|7d|30d
  *   GET /v1/admin/analytics/top-pages?range=24h|7d|30d&limit=20
  *   GET /v1/admin/analytics/errors?range=24h|7d|30d&limit=20
- *   GET /v1/admin/analytics/api-performance?range=24h|7d|30d&limit=20
- *   GET /v1/admin/analytics/cloudflare-limits
+  *   GET /v1/admin/analytics/api-performance?range=24h|7d|30d&limit=20
+  *   GET /v1/admin/analytics/ai?range=24h|7d|30d
+  *   GET /v1/admin/analytics/cloudflare-limits
  */
 const ANALYTICS_RANGES: Record<string, number> = {
   "24h": 24 * 60 * 60 * 1000,
@@ -3254,6 +3255,57 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
       events24h:            row24?.events_24h ?? 0,
       sessions24h:          row24?.sessions_24h ?? 0,
       jsErrors24h:          row24?.js_errors_24h ?? 0,
+    }, 200, origin, log);
+  }
+
+  /* ── AI adoption ──
+   * No new trackers: key presence comes from the users table (the
+   * users_gemini_key_present partial index keeps the count cheap — only
+   * IS NOT NULL rows are scanned), model mix from the same rows, and usage
+   * from the api_call events the fetch wrapper already emits for
+   * POST /v1/account/gemini/proxy. Counts only — no key material or user
+   * rows ever leave the database. */
+  if (request.method === "GET" && path === "/v1/admin/analytics/ai") {
+    const range = analyticsRangeLabel(url);
+    const since = now() - analyticsRangeMs(url);
+    const [keyRow, modelRows, usageRow, sessionsRow] = await Promise.all([
+      env.DB.prepare(
+        `SELECT COUNT(*) AS total,
+           SUM(CASE WHEN gemini_api_key IS NOT NULL THEN 1 ELSE 0 END) AS with_key
+         FROM users`
+      ).first<any>(),
+      env.DB.prepare(
+        `SELECT gemini_model AS model, COUNT(*) AS n
+         FROM users WHERE gemini_api_key IS NOT NULL
+         GROUP BY gemini_model ORDER BY n DESC LIMIT 10`
+      ).all<any>(),
+      telemetryDb(env).prepare(
+        `SELECT COUNT(*) AS calls, COUNT(DISTINCT session_id) AS sessions
+         FROM analytics_events
+         WHERE event_type = 'api_call' AND metric_name = 'POST /v1/account/gemini/proxy' AND created_at >= ?`
+      ).bind(since).first<any>(),
+      telemetryDb(env).prepare(
+        `SELECT COUNT(DISTINCT session_id) AS n FROM analytics_events WHERE created_at >= ?`
+      ).bind(since).first<any>(),
+    ]);
+    const totalUsers = Number(keyRow?.total) || 0;
+    const usersWithKey = Number(keyRow?.with_key) || 0;
+    const activeSessions = Number(sessionsRow?.n) || 0;
+    const aiSessions = Number(usageRow?.sessions) || 0;
+    return json({
+      range,
+      keys: {
+        totalUsers,
+        usersWithKey,
+        pct: totalUsers > 0 ? Math.round((usersWithKey / totalUsers) * 1000) / 10 : 0,
+      },
+      models: (modelRows.results || []).map((r: any) => ({ model: r.model ?? null, users: Number(r.n) || 0 })),
+      usage: {
+        proxyCalls: Number(usageRow?.calls) || 0,
+        aiSessions,
+        activeSessions,
+        aiSessionPct: activeSessions > 0 ? Math.round((aiSessions / activeSessions) * 1000) / 10 : 0,
+      },
     }, 200, origin, log);
   }
 

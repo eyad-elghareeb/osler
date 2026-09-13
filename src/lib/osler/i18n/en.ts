@@ -2953,6 +2953,8 @@ export const en = {
     "admin.analytics.section.content.desc": "Synced study progress, pack completions, and learner adoption metrics.",
     "admin.analytics.section.qstats": "MCQ Answer Data",
     "admin.analytics.section.qstats.desc": "How much MCQ answer data has been collected across packs.",
+    "admin.analytics.section.ai": "AI Adoption",
+    "admin.analytics.section.ai.desc": "Gemini key coverage, saved models, and proxied AI usage — counts only, no key material.",
 
     // Cloudflare limits & quotas
     "admin.analytics.cf.status.healthy": "All Limits Healthy",
@@ -3078,6 +3080,18 @@ export const en = {
     "admin.analytics.apiPerf.col.p50": "p50",
     "admin.analytics.apiPerf.col.p95": "p95",
     "admin.analytics.apiPerf.col.max": "max",
+
+    "admin.analytics.ai.title": "AI Adoption",
+    "admin.analytics.ai.desc": "Share of registered users with a saved Gemini key, saved model mix, and proxied AI calls in range.",
+    "admin.analytics.ai.keysShare": "{with} of {total} users have a key",
+    "admin.analytics.ai.proxyCalls": "Proxy calls",
+    "admin.analytics.ai.aiSessions": "AI sessions",
+    "admin.analytics.ai.aiSessionShare": "Active sessions with AI",
+    "admin.analytics.ai.models": "Saved models",
+    "admin.analytics.ai.defaultModel": "Worker default",
+    "admin.analytics.ai.users": "{n} users",
+    "admin.analytics.ai.noUsers": "No registered users yet",
+    "admin.analytics.ai.privacyNote": "Counts only — key material and per-user rows never leave the database.",
 
     "admin.analytics.content.title": "Content Engagement",
     "admin.analytics.content.desc": "Who solved what and how often — aggregated from synced progress (all-time, cloud accounts only).",

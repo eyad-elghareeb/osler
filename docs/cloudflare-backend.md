@@ -172,6 +172,7 @@ and effective connection type. Rows are pruned after 30 days by the hourly cron.
 | `GET` | `/v1/admin/analytics/top-pages?range=&limit=` | Session (`admin`) | Top N paths by views, with unique-session counts. |
 | `GET` | `/v1/admin/analytics/errors?range=&limit=` | Session (`admin`) | JS errors grouped by message, with affected paths/sessions. |
 | `GET` | `/v1/admin/analytics/api-performance?range=&limit=` | Session (`admin`) | p50/p95/count/max for each cloud-backend endpoint. |
+| `GET` | `/v1/admin/analytics/ai?range=24h\|7d\|30d` | Session (`admin`) | AI adoption: % of users with a saved Gemini key, saved-model mix, and proxied AI calls/sessions in range. Counts only — no key material. |
 | `GET` | `/v1/admin/analytics/cloudflare-limits` | Session (`admin`) | Free-tier quota snapshot (Workers/D1/R2/CPU). Estimates by default; live GraphQL numbers when `CF_ACCOUNT_ID` + `CF_ANALYTICS_TOKEN` are set — see `docs/cloudflare-analytics.md`. |
 
 The dashboard UI lives at `/admin/analytics` (super-admin only). To opt out of
