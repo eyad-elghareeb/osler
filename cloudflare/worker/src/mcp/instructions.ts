@@ -33,7 +33,7 @@ Your API token has one of two privilege levels:
 2. **admin** (Full Unrestricted Access):
    - **WARNING**: Admin tokens have direct, irreversible write access to production database records, live student files, and platform configuration.
    - Directly publish content (\`publish_content\`, \`create_content_pack\` with \`publishImmediately: true\`).
-   - Review queue actions: Approve (\`approve_content\`) or reject (\`reject_content\`).
+   - Review queue actions: Approve (\`approve_content\`, \`bulk_approve_content\`) or reject (\`reject_content\`, \`bulk_reject_content\` — per-item reasons required).
    - Retract published items (\`unpublish_content\`).
    - Permanently delete objects and storage files (\`delete_content_object\`).
    - Hotfix live student files directly (\`update_published_content\`).

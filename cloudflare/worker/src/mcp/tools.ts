@@ -286,6 +286,26 @@ async function submitPackForReview(ctx: McpCtx, id: unknown) {
   return { ok: true as const, id: obj.id, status: "pending", note: "Awaiting approval." };
 }
 
+async function approvePack(ctx: McpCtx, id: unknown, targetPathInput: unknown) {
+  const obj = await loadOwnedObject(ctx, id, true);
+  if (obj.status !== "pending") throw new ToolError(`Object status is '${obj.status}', expected 'pending'`);
+  if (!ctx.publishObject) throw new ToolError("Host publishObject not wired");
+  const targetPath = sanitizeTargetPath(targetPathInput) ?? obj.target_path ?? null;
+  const res = await ctx.publishObject(obj.id, targetPath);
+  await ctx.audit("mcp_approve_content", obj.id, { title: obj.title, hybridKeys: res.hybridKeys, via: "mcp" });
+  return { ok: true as const, id: obj.id, status: "published", hybridKeys: res.hybridKeys };
+}
+
+async function rejectPack(ctx: McpCtx, id: unknown, reasonInput: unknown) {
+  const obj = await loadOwnedObject(ctx, id, true);
+  const reason = typeof reasonInput === "string" ? reasonInput.trim().slice(0, 1000) : "";
+  await ctx.env.DB.prepare("UPDATE content_objects SET status = 'rejected', reviewed_by = ?, reviewed_at = ?, rejection_reason = ?, updated_at = ? WHERE id = ?")
+    .bind(ctx.userId, now(), reason || null, now(), obj.id)
+    .run();
+  await ctx.audit("mcp_reject_content", obj.id, { title: obj.title, reason, via: "mcp" });
+  return { ok: true as const, id: obj.id, status: "rejected", reason };
+}
+
 interface PackSpec {
   contentType?: unknown;
   title?: unknown;
@@ -1015,13 +1035,37 @@ export const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       requireAdmin(ctx, "approve_content");
-      const obj = await loadOwnedObject(ctx, args?.id, true);
-      if (obj.status !== "pending") throw new ToolError(`Object status is '${obj.status}', expected 'pending'`);
-      if (!ctx.publishObject) throw new ToolError("Host publishObject not wired");
-      const targetPath = sanitizeTargetPath(args?.targetPath) ?? obj.target_path ?? null;
-      const res = await ctx.publishObject(obj.id, targetPath);
-      await ctx.audit("mcp_approve_content", obj.id, { title: obj.title, hybridKeys: res.hybridKeys, via: "mcp" });
-      return { ok: true, status: "published", hybridKeys: res.hybridKeys };
+      return approvePack(ctx, args?.id, args?.targetPath);
+    },
+  },
+  {
+    name: "bulk_approve_content",
+    description: "Approve up to 20 pending objects from the review queue in one call (same pending check and publish mechanics as approve_content). One bad item fails inline without aborting the rest. (Admin only).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Items to approve: { id, targetPath? }. Max 20 per call.",
+          items: {
+            type: "object",
+            properties: { id: str("Content object id"), targetPath: str("Optional target path override") },
+            required: ["id"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+    async run(ctx, args) {
+      requireAdmin(ctx, "bulk_approve_content");
+      const items: unknown[] = Array.isArray(args?.items) ? args.items : [];
+      if (!items.length || items.length > 20) throw new ToolError("items must be an array of 1-20 { id, targetPath? } entries");
+      const results = [];
+      for (const item of items) {
+        results.push(await batchItem((item as any)?.id, () => approvePack(ctx, (item as any)?.id, (item as any)?.targetPath)));
+      }
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
     },
   },
   {
@@ -1034,13 +1078,51 @@ export const TOOLS: ToolDef[] = [
     },
     async run(ctx, args) {
       requireAdmin(ctx, "reject_content");
+      return rejectPack(ctx, args?.id, args?.reason);
+    },
+  },
+  {
+    name: "bulk_reject_content",
+    description: "Reject up to 20 objects back to draft in one call, each with its own feedback reason (no blanket rejects — every author deserves actionable feedback). One bad item fails inline without aborting the rest. (Admin only).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Items to reject: { id, reason }. Max 20 per call.",
+          items: {
+            type: "object",
+            properties: { id: str("Content object id"), reason: str("Feedback / reason for rejection") },
+            required: ["id", "reason"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+    async run(ctx, args) {
+      requireAdmin(ctx, "bulk_reject_content");
+      const items: unknown[] = Array.isArray(args?.items) ? args.items : [];
+      if (!items.length || items.length > 20) throw new ToolError("items must be an array of 1-20 { id, reason } entries");
+      const results = [];
+      for (const item of items) {
+        results.push(await batchItem((item as any)?.id, () => rejectPack(ctx, (item as any)?.id, (item as any)?.reason)));
+      }
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
+    },
+  },
+  {
+    name: "get_object_diff",
+    description: "Show the draft, pending, and published bodies of one object side by side, so reviewers can see what changed since the live copy before approving. Slots without a stored copy return null. (Owner or admin).",
+    inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
+    async run(ctx, args) {
       const obj = await loadOwnedObject(ctx, args?.id, true);
-      const reason = typeof args?.reason === "string" ? args.reason.trim().slice(0, 1000) : "";
-      await ctx.env.DB.prepare("UPDATE content_objects SET status = 'rejected', reviewed_by = ?, reviewed_at = ?, rejection_reason = ?, updated_at = ? WHERE id = ?")
-        .bind(ctx.userId, now(), reason || null, now(), obj.id)
-        .run();
-      await ctx.audit("mcp_reject_content", obj.id, { title: obj.title, reason, via: "mcp" });
-      return { ok: true, status: "rejected", reason };
+      const [draft, pending, published] = await Promise.all([
+        ctx.r2Get(ctx.draftKey(obj.r2_key_base)),
+        ctx.r2Get(ctx.pendingKey(obj.r2_key_base)),
+        ctx.r2Get(ctx.publishedKey(obj.r2_key_base)),
+      ]);
+      return { id: obj.id, title: obj.title, contentType: obj.content_type, status: obj.status, draft: draft ?? null, pending: pending ?? null, published: published ?? null };
     },
   },
   {

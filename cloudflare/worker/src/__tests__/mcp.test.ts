@@ -377,6 +377,73 @@ describe("MCP bulk_delete_content_objects", () => {
     expect(r.result.structuredContent.skipped[0].error).toMatch(/admin privilege/);
   });
 });
+
+describe("MCP review triage tools", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+
+  function ctxWithStatus(status: string, overrides: Partial<McpCtx> = {}): McpCtx {
+    const db = {
+      prepare: (_sql: string) => ({
+        bind: (..._args: unknown[]) => ({
+          first: async () => ({ id: ID_A, r2_key_base: "content/quiz/obj1", content_type: "quiz", title: "T", language: "en", status, created_by: "user-1" }),
+          all: async () => ({ results: [] }),
+          run: async () => {},
+        }),
+      }),
+    } as unknown as McpCtx["env"]["DB"];
+    return makeCtx({ env: { ...makeCtx().env, DB: db } as any, ...overrides });
+  }
+
+  it("bulk_approve_content is admin-only", async () => {
+    const r = await call(makeCtx(), "tools/call", { name: "bulk_approve_content", arguments: { items: [{ id: ID_A }] } });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/'admin' privilege/);
+  });
+
+  it("bulk_approve_content publishes pending items when wired", async () => {
+    const ctx = ctxWithStatus("pending", { scope: "admin", publishObject: async () => ({ ok: true, hybridKeys: [] }) });
+    const r = await call(ctx, "tools/call", { name: "bulk_approve_content", arguments: { items: [{ id: ID_A }] } });
+    expect(r.result.structuredContent.succeeded).toBe(1);
+    expect(r.result.structuredContent.results[0].status).toBe("published");
+  });
+
+  it("bulk_approve_content fails non-pending items inline", async () => {
+    const ctx = ctxWithStatus("draft", { scope: "admin", publishObject: async () => ({ ok: true, hybridKeys: [] }) });
+    const r = await call(ctx, "tools/call", { name: "bulk_approve_content", arguments: { items: [{ id: ID_A }] } });
+    expect(r.result.structuredContent.succeeded).toBe(0);
+    expect(r.result.structuredContent.results[0].error).toMatch(/expected 'pending'/);
+  });
+
+  it("bulk_reject_content records per-item reasons", async () => {
+    const ctx = ctxWithStatus("pending", { scope: "admin" });
+    const r = await call(ctx, "tools/call", { name: "bulk_reject_content", arguments: { items: [{ id: ID_A, reason: "Q3 has two correct answers" }] } });
+    expect(r.result.structuredContent.succeeded).toBe(1);
+    expect(r.result.structuredContent.results[0].reason).toBe("Q3 has two correct answers");
+  });
+
+  it("get_object_diff shows all three slots to the owner", async () => {
+    const ctx = makeCtx();
+    await ctx.r2Put("content/quiz/obj1/draft.json", VALID_QUIZ);
+    const r = await call(ctx, "tools/call", { name: "get_object_diff", arguments: { id: ID_A } });
+    expect(r.result.structuredContent.draft).toBe(VALID_QUIZ);
+    expect(r.result.structuredContent.pending).toBeNull();
+    expect(r.result.structuredContent.published).toBeNull();
+  });
+
+  it("get_object_diff refuses foreign drafts", async () => {
+    const db = {
+      prepare: (_sql: string) => ({
+        bind: (..._args: unknown[]) => ({
+          first: async () => ({ id: ID_A, r2_key_base: "content/quiz/obj1", content_type: "quiz", title: "T", language: "en", status: "draft", created_by: "user-2" }),
+          all: async () => ({ results: [] }),
+          run: async () => {},
+        }),
+      }),
+    } as unknown as McpCtx["env"]["DB"];
+    const ctx = makeCtx({ env: { ...makeCtx().env, DB: db } as any });
+    const r = await call(ctx, "tools/call", { name: "get_object_diff", arguments: { id: ID_A } });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/Not authorized/);
+  });
+});
 describe("MCP batch handling", () => {
   it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];
