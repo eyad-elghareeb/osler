@@ -6330,6 +6330,70 @@ export default {
             ]);
             return { items: rows.results || [], total: (total as any)?.n ?? 0 };
           },
+          getAnalyticsOverview: async (e, days) => {
+            const since = Date.now() - days * 86_400_000;
+            const since24h = Date.now() - 24 * 60 * 60 * 1000;
+            const [row, row24] = await Promise.all([
+              telemetryDb(e).prepare(
+                `SELECT
+                  SUM(CASE WHEN event_type != 'ping' THEN 1 ELSE 0 END) AS total_events,
+                  COUNT(DISTINCT session_id) AS total_sessions,
+                  SUM(CASE WHEN event_type = 'page_view' THEN 1 ELSE 0 END) AS page_views,
+                  SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors,
+                  SUM(CASE WHEN event_type = 'web_vital' THEN 1 ELSE 0 END) AS web_vitals,
+                  SUM(CASE WHEN event_type = 'api_call' THEN 1 ELSE 0 END) AS api_calls,
+                  SUM(CASE WHEN event_type = 'route_change' THEN 1 ELSE 0 END) AS route_changes,
+                  MAX(created_at) AS last_event_at
+                FROM analytics_events WHERE created_at >= ?`
+              ).bind(since).first<any>(),
+              telemetryDb(e).prepare(
+                `SELECT
+                  SUM(CASE WHEN event_type != 'ping' THEN 1 ELSE 0 END) AS events_24h,
+                  COUNT(DISTINCT session_id) AS sessions_24h,
+                  SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors_24h
+                FROM analytics_events WHERE created_at >= ?`
+              ).bind(since24h).first<any>(),
+            ]);
+            return {
+              totalEvents: row?.total_events ?? 0,
+              totalSessions: row?.total_sessions ?? 0,
+              pageViews: row?.page_views ?? 0,
+              jsErrors: row?.js_errors ?? 0,
+              webVitals: row?.web_vitals ?? 0,
+              apiCalls: row?.api_calls ?? 0,
+              routeChanges: row?.route_changes ?? 0,
+              lastEventAt: row?.last_event_at ?? null,
+              events24h: row24?.events_24h ?? 0,
+              sessions24h: row24?.sessions_24h ?? 0,
+              jsErrors24h: row24?.js_errors_24h ?? 0,
+            };
+          },
+          getJsErrors: async (e, opts) => {
+            const rows = await telemetryDb(e).prepare(
+              `SELECT
+                  CASE WHEN json_valid(detail)
+                    THEN COALESCE(json_extract(detail, '$.message'), detail, '(unknown)')
+                    ELSE detail END AS message,
+                  COUNT(*) AS count,
+                  MIN(created_at) AS first_seen,
+                  MAX(created_at) AS last_seen,
+                  COUNT(DISTINCT path) AS affected_paths,
+                  COUNT(DISTINCT session_id) AS affected_sessions
+                FROM analytics_events
+                WHERE event_type = 'js_error' AND created_at >= ?
+                GROUP BY message
+                ORDER BY last_seen DESC
+                LIMIT ?`
+            ).bind(opts.since, opts.limit).all<any>();
+            return (rows.results || []).map((r: any) => ({
+              message: String(r.message).slice(0, 500),
+              count: Number(r.count),
+              firstSeen: Number(r.first_seen),
+              lastSeen: Number(r.last_seen),
+              affectedPaths: Number(r.affected_paths),
+              affectedSessions: Number(r.affected_sessions),
+            }));
+          },
           waitUntil: (p) => ctx.waitUntil(p),
           rateLimitToken: (tokenId) => rateLimit(tokenId, "mcp_token"),
         });

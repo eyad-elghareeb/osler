@@ -31,6 +31,8 @@ export interface McpHost {
   /** Read-only observability hooks for the MCP context tools. */
   readContentVersion?(env: any): Promise<string | null>;
   getAuditTrail?(env: any, opts: { page?: number; limit?: number; action?: string }): Promise<{ items: any[]; total: number }>;
+  getAnalyticsOverview?(env: any, days: number): Promise<Record<string, unknown>>;
+  getJsErrors?(env: any, opts: { since: number; limit: number }): Promise<any[]>;
   /**
    * Registers a promise to keep running after the Response is returned
    * (`ExecutionContext.waitUntil`). When absent, best-effort background work
@@ -168,6 +170,8 @@ export async function handleMcpRequest(request: Request, env: any & McpEnv, orig
     putConfig: host.putConfig ? (cfg) => host.putConfig!(env, cfg) : undefined,
     readContentVersion: host.readContentVersion ? () => host.readContentVersion!(env) : undefined,
     getAuditTrail: host.getAuditTrail ? (opts) => host.getAuditTrail!(env, opts) : undefined,
+    getAnalyticsOverview: host.getAnalyticsOverview ? (days) => host.getAnalyticsOverview!(env, days) : undefined,
+    getJsErrors: host.getJsErrors ? (opts) => host.getJsErrors!(env, opts) : undefined,
     uuid: () => crypto.randomUUID(),
   };
 

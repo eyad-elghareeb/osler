@@ -29,6 +29,8 @@ export interface McpCtx {
   getReviewQueue?(status?: string): Promise<any[]>;
   getInstanceStats?(): Promise<Record<string, number>>;
   getAuditTrail?(opts: { page?: number; limit?: number; action?: string }): Promise<{ items: any[]; total: number }>;
+  getAnalyticsOverview?(days: number): Promise<Record<string, unknown>>;
+  getJsErrors?(opts: { since: number; limit: number }): Promise<any[]>;
   readContentVersion?(): Promise<string | null>;
   r2Get(key: string): Promise<string | null>;
   r2Put(key: string, text: string | Uint8Array, contentType?: string): Promise<void>;
@@ -219,6 +221,160 @@ async function sha1Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// ─── Shared mutation cores ───────────────────────────────────────────────────
+// Single-item tools and their bulk siblings both run through these, so the
+// ownership checks, size caps, and audit entries can't drift apart. Bulk
+// wrappers catch per-item ToolErrors and report them inline — one bad item
+// never aborts the rest of the batch.
+
+function checkDraftBody(body: unknown): string {
+  if (typeof body !== "string" || !body || body.length > 2_000_000) {
+    throw new ToolError("body must be a non-empty string up to 2 MB");
+  }
+  return body;
+}
+
+async function applyDraftBody(ctx: McpCtx, id: unknown, body: unknown) {
+  const obj = await loadOwnedObject(ctx, id);
+  if (obj.status === "pending" && ctx.scope !== "admin") {
+    throw new ToolError("Object is pending review — ask an admin or use an admin-scoped token to reject it back to draft before editing");
+  }
+  const text = checkDraftBody(body);
+  await ctx.r2Put(ctx.draftKey(obj.r2_key_base), text);
+  const newTitle = draftTitle(text);
+  await ctx.env.DB.prepare("UPDATE content_objects SET title = COALESCE(?, title), updated_at = ? WHERE id = ?")
+    .bind(newTitle, now(), obj.id)
+    .run();
+  await ctx.audit("mcp_update_draft", obj.id, { title: newTitle, via: "mcp" });
+  return { ok: true as const, id: obj.id, title: newTitle ?? obj.title };
+}
+
+async function submitPackForReview(ctx: McpCtx, id: unknown) {
+  const obj = await loadOwnedObject(ctx, id);
+  if (obj.status === "published") {
+    throw new ToolError("Published objects cannot be submitted — unpublish to draft first");
+  }
+  const draft = await ctx.r2Get(ctx.draftKey(obj.r2_key_base));
+  if (!draft) throw new ToolError("Draft is empty");
+  await ctx.r2Put(ctx.pendingKey(obj.r2_key_base), draft);
+  await ctx.env.DB.prepare("UPDATE content_objects SET status = 'pending', submitted_at = ?, reviewed_by = NULL, reviewed_at = NULL, rejection_reason = NULL, updated_at = ? WHERE id = ?")
+    .bind(now(), now(), obj.id)
+    .run();
+  await ctx.audit("mcp_submit_content", obj.id, { title: obj.title, via: "mcp" });
+  return { ok: true as const, id: obj.id, status: "pending", note: "Awaiting approval." };
+}
+
+interface PackSpec {
+  contentType?: unknown;
+  title?: unknown;
+  language?: unknown;
+  body?: unknown;
+  assets?: unknown;
+  targetPath?: unknown;
+  validateFirst?: unknown;
+  submit?: unknown;
+  publishImmediately?: unknown;
+}
+
+async function createPack(ctx: McpCtx, spec: PackSpec) {
+  const bucket = requireEnv(ctx);
+  const contentType = checkType(spec?.contentType);
+  const title = typeof spec?.title === "string" ? spec.title.trim().slice(0, 200) : "";
+  if (!title) throw new ToolError("title required");
+  const body = checkDraftBody(spec?.body);
+  const assets: any[] = Array.isArray(spec?.assets) ? spec.assets : [];
+  if (assets.length > 50) throw new ToolError("At most 50 assets per batch pack");
+
+  if (spec?.validateFirst && contentType !== "library") {
+    let errors: string[] = [];
+    try {
+      errors = ctx.validateContent(contentType, JSON.parse(body));
+    } catch (e: any) {
+      errors = [`Invalid JSON: ${e.message}`];
+    }
+    if (errors.length) return { ok: false as const, stage: "validation", errors };
+  }
+
+  const objectId = ctx.uuid();
+  const r2Base = `content/${contentType}/${objectId}`;
+  const targetPath = sanitizeTargetPath(spec?.targetPath);
+  await ctx.r2Put(ctx.draftKey(r2Base), body);
+  try {
+    await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)")
+      .bind(objectId, r2Base, contentType, title, spec?.language === "ar" ? "ar" : "en", targetPath, ctx.userId, now(), now())
+      .run();
+  } catch {
+    await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
+      .bind(objectId, r2Base, contentType, title, spec?.language === "ar" ? "ar" : "en", ctx.userId, now(), now())
+      .run();
+  }
+
+  const uploaded: string[] = [];
+  const failed: { path: string; error: string }[] = [];
+  for (const asset of assets) {
+    try {
+      const rel = safeRelPath(asset?.path);
+      const key = `${r2Base}/${rel}`;
+      if (typeof asset?.dataUri === "string" && asset.dataUri) {
+        const decoded = decodeDataUri(asset.dataUri);
+        await bucket.put(key, decoded.bytes, { httpMetadata: { contentType: decoded.mediaType !== "application/octet-stream" ? decoded.mediaType : extContentType(rel, "application/octet-stream") } });
+      } else if (typeof asset?.text === "string") {
+        await bucket.put(key, asset.text, { httpMetadata: { contentType: extContentType(rel, "text/plain") } });
+      } else {
+        throw new ToolError("asset needs dataUri or text");
+      }
+      uploaded.push(key);
+    } catch (e: any) {
+      failed.push({ path: String(asset?.path ?? "?"), error: e instanceof ToolError ? e.message : String(e?.message ?? e) });
+    }
+  }
+
+  let finalStatus = "draft";
+  let hybridKeys: string[] = [];
+  if (spec?.publishImmediately) {
+    requireAdmin(ctx, "publishImmediately");
+    if (ctx.publishObject) {
+      const pub = await ctx.publishObject(objectId, targetPath);
+      finalStatus = "published";
+      hybridKeys = pub.hybridKeys;
+    }
+  } else if (spec?.submit && failed.length === 0) {
+    await ctx.r2Put(ctx.pendingKey(r2Base), body);
+    await ctx.env.DB.prepare("UPDATE content_objects SET status = 'pending', submitted_at = ?, updated_at = ? WHERE id = ?").bind(now(), now(), objectId).run();
+    finalStatus = "pending";
+  }
+
+  await ctx.audit(finalStatus === "published" ? "mcp_publish_direct" : finalStatus === "pending" ? "mcp_submit_content" : "mcp_create_content", objectId, { title, contentType, targetPath, assets: uploaded.length, failed: failed.length, via: "mcp" });
+  return {
+    ok: failed.length === 0,
+    id: objectId,
+    r2KeyBase: r2Base,
+    assetsUploaded: uploaded.length,
+    failedAssets: failed,
+    status: finalStatus,
+    targetPath: targetPath ?? undefined,
+    hybridKeys: hybridKeys.length ? hybridKeys : undefined,
+  };
+}
+
+/** Run one batch item, converting a ToolError into an inline failure row. */
+async function batchItem<T>(id: unknown, fn: () => Promise<T>): Promise<T | { ok: false; id: unknown; error: string }> {
+  try {
+    return await fn();
+  } catch (e: any) {
+    return { ok: false as const, id: typeof id === "string" ? id : undefined, error: e instanceof ToolError ? e.message : String(e?.message ?? e) };
+  }
+}
+
+async function readAccessiblePack(ctx: McpCtx, id: unknown) {
+  const obj = await loadAccessibleObject(ctx, id);
+  let bodyKey = ctx.draftKey(obj.r2_key_base);
+  if (obj.status === "published") bodyKey = ctx.publishedKey(obj.r2_key_base);
+  else if (obj.status === "pending") bodyKey = ctx.pendingKey(obj.r2_key_base);
+  const body = await ctx.r2Get(bodyKey);
+  return { ...obj, body: body ?? null };
+}
+
 // ─── Tool definitions ────────────────────────────────────────────────────────
 
 export const TOOLS: ToolDef[] = [
@@ -274,12 +430,28 @@ export const TOOLS: ToolDef[] = [
     description: "Fetch one managed content object by id — metadata plus its body (draft, pending, or published copy).",
     inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
     async run(ctx, args) {
-      const obj = await loadAccessibleObject(ctx, args?.id);
-      let bodyKey = ctx.draftKey(obj.r2_key_base);
-      if (obj.status === "published") bodyKey = ctx.publishedKey(obj.r2_key_base);
-      else if (obj.status === "pending") bodyKey = ctx.pendingKey(obj.r2_key_base);
-      const body = await ctx.r2Get(bodyKey);
-      return { ...obj, body: body ?? null };
+      return readAccessiblePack(ctx, args?.id);
+    },
+  },
+  {
+    name: "bulk_get_content_objects",
+    description: "Fetch up to 50 managed content objects by id in one call (same view-all read access as get_content_object). Unknown ids fail inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: { type: "array", description: "Content object ids. Max 50 per call.", items: { type: "string" } },
+      },
+      required: ["ids"],
+    },
+    async run(ctx, args) {
+      const ids: unknown[] = Array.isArray(args?.ids) ? args.ids : [];
+      if (!ids.length || ids.length > 50) throw new ToolError("ids must be an array of 1-50 content object ids");
+      const results = [];
+      for (const id of ids) {
+        results.push(await batchItem(id, () => readAccessiblePack(ctx, id)));
+      }
+      const succeeded = results.filter((r: any) => !(r as any).error).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
     },
   },
   {
@@ -327,20 +499,36 @@ export const TOOLS: ToolDef[] = [
       required: ["id", "body"],
     },
     async run(ctx, args) {
-      const obj = await loadOwnedObject(ctx, args?.id);
-      if (obj.status === "pending" && ctx.scope !== "admin") {
-        throw new ToolError("Object is pending review — ask an admin or use an admin-scoped token to reject it back to draft before editing");
+      return applyDraftBody(ctx, args?.id, args?.body);
+    },
+  },
+  {
+    name: "bulk_update_draft_bodies",
+    description: "Replace the draft bodies of up to 20 content objects in one call (same ownership rules and 2 MB cap per item as update_draft_body). One bad item fails inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          description: "Items to update: { id, body }. Max 20 per call.",
+          items: {
+            type: "object",
+            properties: { id: str("Content object id"), body: str("Full replacement body") },
+            required: ["id", "body"],
+          },
+        },
+      },
+      required: ["updates"],
+    },
+    async run(ctx, args) {
+      const updates: unknown[] = Array.isArray(args?.updates) ? args.updates : [];
+      if (!updates.length || updates.length > 20) throw new ToolError("updates must be an array of 1-20 { id, body } items");
+      const results = [];
+      for (const u of updates) {
+        results.push(await batchItem((u as any)?.id, () => applyDraftBody(ctx, (u as any)?.id, (u as any)?.body)));
       }
-      if (typeof args.body !== "string" || !args.body || args.body.length > 2_000_000) {
-        throw new ToolError("body must be a non-empty string up to 2 MB");
-      }
-      await ctx.r2Put(ctx.draftKey(obj.r2_key_base), args.body);
-      const newTitle = draftTitle(args.body);
-      await ctx.env.DB.prepare("UPDATE content_objects SET title = COALESCE(?, title), updated_at = ? WHERE id = ?")
-        .bind(newTitle, now(), obj.id)
-        .run();
-      await ctx.audit("mcp_update_draft", obj.id, { title: newTitle, via: "mcp" });
-      return { ok: true, id: obj.id, title: newTitle ?? obj.title };
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
     },
   },
   {
@@ -523,18 +711,28 @@ export const TOOLS: ToolDef[] = [
     description: "Submit a draft for admin review: snapshots draft to pending candidate queue.",
     inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
     async run(ctx, args) {
-      const obj = await loadOwnedObject(ctx, args?.id);
-      if (obj.status === "published") {
-        throw new ToolError("Published objects cannot be submitted — unpublish to draft first");
+      return submitPackForReview(ctx, args?.id);
+    },
+  },
+  {
+    name: "bulk_submit_for_review",
+    description: "Submit up to 20 owned drafts for admin review in one call (same ownership and published guards as submit_for_review). One bad item fails inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: { type: "array", description: "Content object ids. Max 20 per call.", items: { type: "string" } },
+      },
+      required: ["ids"],
+    },
+    async run(ctx, args) {
+      const ids: unknown[] = Array.isArray(args?.ids) ? args.ids : [];
+      if (!ids.length || ids.length > 20) throw new ToolError("ids must be an array of 1-20 content object ids");
+      const results = [];
+      for (const id of ids) {
+        results.push(await batchItem(id, () => submitPackForReview(ctx, id)));
       }
-      const draft = await ctx.r2Get(ctx.draftKey(obj.r2_key_base));
-      if (!draft) throw new ToolError("Draft is empty");
-      await ctx.r2Put(ctx.pendingKey(obj.r2_key_base), draft);
-      await ctx.env.DB.prepare("UPDATE content_objects SET status = 'pending', submitted_at = ?, reviewed_by = NULL, reviewed_at = NULL, rejection_reason = NULL, updated_at = ? WHERE id = ?")
-        .bind(now(), now(), obj.id)
-        .run();
-      await ctx.audit("mcp_submit_content", obj.id, { title: obj.title, via: "mcp" });
-      return { ok: true, status: "pending", note: "Awaiting approval." };
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
     },
   },
   {
@@ -603,84 +801,54 @@ export const TOOLS: ToolDef[] = [
       required: ["contentType", "title", "body"],
     },
     async run(ctx, args) {
-      const bucket = requireEnv(ctx);
-      const contentType = checkType(args?.contentType);
-      const title = typeof args?.title === "string" ? args.title.trim().slice(0, 200) : "";
-      if (!title) throw new ToolError("title required");
-      if (typeof args.body !== "string" || !args.body || args.body.length > 2_000_000) throw new ToolError("body must be a string up to 2 MB");
-      const assets: any[] = Array.isArray(args.assets) ? args.assets : [];
-      if (assets.length > 50) throw new ToolError("At most 50 assets per batch pack");
-
-      if (args.validateFirst && contentType !== "library") {
-        let errors: string[] = [];
-        try {
-          errors = ctx.validateContent(contentType, JSON.parse(args.body));
-        } catch (e: any) {
-          errors = [`Invalid JSON: ${e.message}`];
-        }
-        if (errors.length) return { ok: false, stage: "validation", errors };
+      return createPack(ctx, args ?? {});
+    },
+  },
+  {
+    name: "bulk_create_content_packs",
+    description: "Create up to 10 content packs in one call (same per-pack validation, asset caps, and submit/publish rules as create_content_pack). One bad pack fails inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        packs: {
+          type: "array",
+          description: "Pack specs: { contentType, title, body, language?, assets?, targetPath?, validateFirst?, submit?, publishImmediately? (admin only) }. Max 10 per call.",
+          items: {
+            type: "object",
+            properties: {
+              contentType: { type: "string", enum: [...CONTENT_TYPES], description: "Engine type of the pack" },
+              title: str("Display title"),
+              language: str('"en" or "ar"'),
+              body: str("Main JSON/markdown body (max 2 MB)"),
+              assets: {
+                type: "array",
+                description: "Asset files (max 50 per pack)",
+                items: {
+                  type: "object",
+                  properties: { path: str("Relative path"), dataUri: str("Data URI for binary"), text: str("Plain-text") },
+                  required: ["path"],
+                },
+              },
+              targetPath: str("Optional subfolder path inside the category"),
+              validateFirst: { type: "boolean", description: "Validate body before writing" },
+              submit: { type: "boolean", description: "Submit for review after upload" },
+              publishImmediately: { type: "boolean", description: "Directly publish (admin scope only)" },
+            },
+            required: ["contentType", "title", "body"],
+          },
+        },
+      },
+      required: ["packs"],
+    },
+    async run(ctx, args) {
+      const packs: unknown[] = Array.isArray(args?.packs) ? args.packs : [];
+      if (!packs.length || packs.length > 10) throw new ToolError("packs must be an array of 1-10 pack specs");
+      const results = [];
+      for (const pack of packs) {
+        results.push(await batchItem((pack as any)?.title, () => createPack(ctx, (pack ?? {}) as PackSpec)));
       }
-
-      const objectId = ctx.uuid();
-      const r2Base = `content/${contentType}/${objectId}`;
-      const targetPath = sanitizeTargetPath(args?.targetPath);
-      await ctx.r2Put(ctx.draftKey(r2Base), args.body);
-      try {
-        await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)")
-          .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", targetPath, ctx.userId, now(), now())
-          .run();
-      } catch {
-        await ctx.env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
-          .bind(objectId, r2Base, contentType, title, args?.language === "ar" ? "ar" : "en", ctx.userId, now(), now())
-          .run();
-      }
-
-      const uploaded: string[] = [];
-      const failed: { path: string; error: string }[] = [];
-      for (const asset of assets) {
-        try {
-          const rel = safeRelPath(asset?.path);
-          const key = `${r2Base}/${rel}`;
-          if (typeof asset?.dataUri === "string" && asset.dataUri) {
-            const decoded = decodeDataUri(asset.dataUri);
-            await bucket.put(key, decoded.bytes, { httpMetadata: { contentType: decoded.mediaType !== "application/octet-stream" ? decoded.mediaType : extContentType(rel, "application/octet-stream") } });
-          } else if (typeof asset?.text === "string") {
-            await bucket.put(key, asset.text, { httpMetadata: { contentType: extContentType(rel, "text/plain") } });
-          } else {
-            throw new ToolError("asset needs dataUri or text");
-          }
-          uploaded.push(key);
-        } catch (e: any) {
-          failed.push({ path: String(asset?.path ?? "?"), error: e instanceof ToolError ? e.message : String(e?.message ?? e) });
-        }
-      }
-
-      let finalStatus = "draft";
-      let hybridKeys: string[] = [];
-      if (args.publishImmediately) {
-        requireAdmin(ctx, "publishImmediately");
-        if (ctx.publishObject) {
-          const pub = await ctx.publishObject(objectId, targetPath);
-          finalStatus = "published";
-          hybridKeys = pub.hybridKeys;
-        }
-      } else if (args.submit && failed.length === 0) {
-        await ctx.r2Put(ctx.pendingKey(r2Base), args.body);
-        await ctx.env.DB.prepare("UPDATE content_objects SET status = 'pending', submitted_at = ?, updated_at = ? WHERE id = ?").bind(now(), now(), objectId).run();
-        finalStatus = "pending";
-      }
-
-      await ctx.audit(finalStatus === "published" ? "mcp_publish_direct" : finalStatus === "pending" ? "mcp_submit_content" : "mcp_create_content", objectId, { title, contentType, targetPath, assets: uploaded.length, failed: failed.length, via: "mcp" });
-      return {
-        ok: failed.length === 0,
-        id: objectId,
-        r2KeyBase: r2Base,
-        assetsUploaded: uploaded.length,
-        failedAssets: failed,
-        status: finalStatus,
-        targetPath: targetPath ?? undefined,
-        hybridKeys: hybridKeys.length ? hybridKeys : undefined,
-      };
+      const succeeded = results.filter((r: any) => r.ok !== false).length;
+      return { total: results.length, succeeded, failed: results.length - succeeded, results };
     },
   },
 
@@ -1123,6 +1291,41 @@ export const TOOLS: ToolDef[] = [
       const action = typeof args?.action === "string" && args.action.trim() ? args.action.trim() : undefined;
       const { items, total } = await ctx.getAuditTrail({ page, action });
       return { page, total, count: items.length, items };
+    },
+  },
+  {
+    name: "get_analytics_overview",
+    description: "Traffic and health aggregates over the last N days (page views, sessions, JS errors, web vitals, API calls, route changes, plus 24h figures). Same numbers as the admin analytics dashboard. (Admin only).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "Lookback window: 1, 7, or 30 days (default 7)" },
+      },
+    },
+    async run(ctx, args) {
+      requireAdmin(ctx, "get_analytics_overview");
+      if (!ctx.getAnalyticsOverview) throw new ToolError("Analytics store not wired on this host");
+      const days = [1, 7, 30].includes(Number(args?.days)) ? Number(args.days) : 7;
+      return { days, ...(await ctx.getAnalyticsOverview(days)) };
+    },
+  },
+  {
+    name: "get_js_errors",
+    description: "Recent client-side JS errors grouped by message with counts, first/last seen timestamps, and affected path/session counts. Use it to triage frontend crashes without opening the admin dashboard. (Admin only).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "Lookback window in days, 1-30 (default 7)" },
+        limit: { type: "number", description: "Max error groups, 1-100 (default 20)" },
+      },
+    },
+    async run(ctx, args) {
+      requireAdmin(ctx, "get_js_errors");
+      if (!ctx.getJsErrors) throw new ToolError("Analytics store not wired on this host");
+      const days = Math.min(30, Math.max(1, Number(args?.days) || 7));
+      const limit = Math.min(100, Math.max(1, Number(args?.limit) || 20));
+      const items = await ctx.getJsErrors({ since: Date.now() - days * 86_400_000, limit });
+      return { days, count: items.length, items };
     },
   },
   {

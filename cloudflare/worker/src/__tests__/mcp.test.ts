@@ -172,6 +172,104 @@ describe("MCP tools/call", () => {
   });
 });
 
+describe("MCP bulk tools", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+  const ID_B = "22222222-2222-4222-8222-222222222222";
+
+  function ctxWithObject(obj: any, overrides: Partial<McpCtx> = {}): McpCtx {
+    const db = {
+      prepare: (_sql: string) => ({
+        bind: (..._args: unknown[]) => ({ first: async () => obj, all: async () => ({ results: [] }), run: async () => {} }),
+      }),
+    } as unknown as McpCtx["env"]["DB"];
+    return makeCtx({ env: { ...makeCtx().env, DB: db } as any, ...overrides });
+  }
+
+  it("bulk_get_content_objects fetches several packs in one call", async () => {
+    const r = await call(makeCtx(), "tools/call", { name: "bulk_get_content_objects", arguments: { ids: [ID_A, ID_B] } });
+    expect(r.result.structuredContent.total).toBe(2);
+    expect(r.result.structuredContent.succeeded).toBe(2);
+  });
+
+  it("bulk_update_draft_bodies writes owned drafts", async () => {
+    const r = await call(makeCtx(), "tools/call", {
+      name: "bulk_update_draft_bodies",
+      arguments: { updates: [{ id: ID_A, body: VALID_QUIZ }, { id: ID_B, body: VALID_QUIZ }] },
+    });
+    expect(r.result.structuredContent.succeeded).toBe(2);
+  });
+
+  it("bulk_update_draft_bodies fails inline (not aborts) on foreign objects", async () => {
+    const ctx = ctxWithObject({ id: ID_A, r2_key_base: "content/quiz/obj1", content_type: "quiz", title: "T", language: "en", status: "draft", created_by: "user-2" });
+    const r = await call(ctx, "tools/call", {
+      name: "bulk_update_draft_bodies",
+      arguments: { updates: [{ id: ID_A, body: VALID_QUIZ }] },
+    });
+    expect(r.result.structuredContent.succeeded).toBe(0);
+    expect(r.result.structuredContent.results[0].error).toMatch(/Not authorized/);
+  });
+
+  it("bulk_submit_for_review refuses published objects inline", async () => {
+    const ctx = ctxWithObject({ id: ID_A, r2_key_base: "content/quiz/obj1", content_type: "quiz", title: "T", language: "en", status: "published", created_by: "user-1" });
+    const r = await call(ctx, "tools/call", { name: "bulk_submit_for_review", arguments: { ids: [ID_A] } });
+    expect(r.result.structuredContent.succeeded).toBe(0);
+    expect(r.result.structuredContent.results[0].error).toMatch(/unpublish to draft/);
+  });
+
+  it("bulk_create_content_packs creates several packs in one call", async () => {
+    const r = await call(makeCtx(), "tools/call", {
+      name: "bulk_create_content_packs",
+      arguments: { packs: [{ contentType: "quiz", title: "P1", body: VALID_QUIZ }, { contentType: "quiz", title: "P2", body: VALID_QUIZ }] },
+    });
+    expect(r.result.structuredContent.total).toBe(2);
+    expect(r.result.structuredContent.succeeded).toBe(2);
+    expect(r.result.structuredContent.results[0].id).toBeTypeOf("string");
+  });
+
+  it("bulk tools reject oversized batches wholesale", async () => {
+    const r = await call(makeCtx(), "tools/call", {
+      name: "bulk_submit_for_review",
+      arguments: { ids: Array.from({ length: 21 }, () => ID_A) },
+    });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/1-20/);
+  });
+});
+
+describe("MCP observability tools", () => {
+  it("get_analytics_overview is admin-only", async () => {
+    const r = await call(makeCtx(), "tools/call", { name: "get_analytics_overview", arguments: { days: 7 } });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/'admin' privilege/);
+  });
+
+  it("get_analytics_overview reports unwired hosts", async () => {
+    const r = await call(makeCtx({ scope: "admin" }), "tools/call", { name: "get_analytics_overview", arguments: {} });
+    expect(JSON.stringify(r.result.content[0].text)).toMatch(/not wired/);
+  });
+
+  it("get_analytics_overview returns aggregates when wired", async () => {
+    const ctx = makeCtx({ scope: "admin", getAnalyticsOverview: async () => ({ totalEvents: 42, jsErrors: 3 }) });
+    const r = await call(ctx, "tools/call", { name: "get_analytics_overview", arguments: { days: 30 } });
+    expect(r.result.structuredContent.days).toBe(30);
+    expect(r.result.structuredContent.totalEvents).toBe(42);
+  });
+
+  it("get_js_errors is admin-only and returns groups when wired", async () => {
+    const denied = await call(makeCtx(), "tools/call", { name: "get_js_errors", arguments: {} });
+    expect(JSON.stringify(denied.result.content[0].text)).toMatch(/'admin' privilege/);
+    const ctx = makeCtx({ scope: "admin", getJsErrors: async () => [{ message: "boom", count: 2 }] });
+    const r = await call(ctx, "tools/call", { name: "get_js_errors", arguments: { days: 1 } });
+    expect(r.result.structuredContent.count).toBe(1);
+    expect(r.result.structuredContent.items[0].message).toBe("boom");
+  });
+
+  it("tools/list advertises the bulk and observability tools", async () => {
+    const r = await call(makeCtx(), "tools/list");
+    const names = r.result.tools.map((t: any) => t.name);
+    for (const n of ["bulk_get_content_objects", "bulk_update_draft_bodies", "bulk_create_content_packs", "bulk_submit_for_review", "get_analytics_overview", "get_js_errors"]) {
+      expect(names).toContain(n);
+    }
+  });
+});
 describe("MCP batch handling", () => {
   it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];

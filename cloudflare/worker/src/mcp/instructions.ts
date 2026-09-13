@@ -7,7 +7,7 @@
  */
 
 export const SERVER_NAME = "osler-admin";
-export const SERVER_VERSION = "2.2.0";
+export const SERVER_VERSION = "2.3.0";
 export const PROTOCOL_VERSION = "2025-06-18";
 
 export const SERVER_INSTRUCTIONS = `# Osler Medical Study Platform — Content Authoring & Admin MCP Server
@@ -20,6 +20,7 @@ Your API token has one of two privilege levels:
 
 1. **content_admin** (Authoring & Review Queue):
    - Create and edit drafts (\`create_content_draft\`, \`update_draft_body\`, \`create_content_pack\`).
+   - Bulk authoring: \`bulk_create_content_packs\` (up to 10 packs), \`bulk_update_draft_bodies\` and \`bulk_submit_for_review\` (up to 20 items each), \`bulk_get_content_objects\` (up to 50 ids) — same ownership rules per item; one bad item fails inline without aborting the batch.
    - Upload and delete pack assets (\`upload_asset\`, \`delete_asset\`).
    - Validate JSON payloads against engine schemas (\`validate_content\`).
    - Submit drafts for human admin review (\`submit_for_review\`).
@@ -37,6 +38,7 @@ Your API token has one of two privilege levels:
    - Read and modify platform site configuration (\`read_config\`, \`update_config\`).
    - Trigger smart incremental manifest updates (\`smart_update_manifest\`).
    - Admin-only: inspect full audit trails (\`get_audit_trail\`).
+   - Admin-only observability: traffic/health aggregates (\`get_analytics_overview\`) and grouped client-side JS errors (\`get_js_errors\`).
 
 ---
 

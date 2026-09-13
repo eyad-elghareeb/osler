@@ -14,14 +14,19 @@ at the authoring surface:
 | content_admin token can | content_admin token cannot |
 |---|---|
 | create drafts, write bodies, upload assets | publish / approve |
-| validate against the platform schema | reject / schedule / unpublish |
+| bulk create / edit / submit / read (per-item ownership) | reject / schedule / unpublish |
+| validate against the platform schema | read the audit trail / analytics, or edit config |
 | inspect all managed content (read-only) | edit or delete others' content |
-| edit, submit, and delete own non-published objects | read the audit trail or edit config |
-| submit own drafts to the review queue | touch users, stats, sessions |
+| edit, submit, and delete own non-published objects | touch users, stats, sessions |
+| submit own drafts to the review queue | |
 
 Submitted packs land in `status = "pending"` and must be approved by an admin
 (role `admin`) through the web admin panel's review queue before students see
-anything — **for a content_admin-scoped token**.
+anything — **for a content_admin-scoped token**. Prefer the bulk siblings
+(`bulk_create_content_packs`, `bulk_update_draft_bodies`,
+`bulk_submit_for_review`, `bulk_get_content_objects`) for multi-pack work:
+one round-trip, same per-item ownership rules, and a single bad item fails
+inline without aborting the batch.
 
 A site admin can also mint an **admin**-scoped token from the same panel.
 That's a materially different trust level: `publish_content`,
@@ -30,7 +35,9 @@ That's a materially different trust level: `publish_content`,
 all real MCP tools, gated only on the token's scope, not on any
 human-in-the-loop step — an agent holding an admin-scoped token can approve
 and publish its own submissions, delete content, and rewrite the site config
-autonomously. Only mint admin scope for an agent you'd trust with direct
+autonomously. Admin scope additionally unlocks observability tools
+(`get_analytics_overview`, `get_js_errors`) mirroring the admin analytics
+dashboard. Only mint admin scope for an agent you'd trust with direct
 production write access; use the default content_admin scope for anything
 you want a human to review first.
 
