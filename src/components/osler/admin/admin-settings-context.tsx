@@ -33,7 +33,7 @@ export interface AdminSettings {
 
 const DEFAULT_SETTINGS: AdminSettings = {
   reducedMotion: false,
-  defaultLanding: "content",
+  defaultLanding: "dashboard",
   pageSize: 25,
   autoSaveDrafts: true,
   showAdvancedFields: false,
@@ -41,6 +41,11 @@ const DEFAULT_SETTINGS: AdminSettings = {
 };
 
 const STORAGE_KEY = "osler-admin-settings-v1";
+// One-time migration flag: the old default landing was "content", and any
+// persisted copy (e.g. saved implicitly by a sidebar toggle) would otherwise
+// pin old devices to content forever. Run the migration once per browser so
+// a deliberate future "content" pick is never disturbed.
+const LANDING_MIGRATION_KEY = "osler-admin-landing-migrated-v2";
 
 function loadSettings(): AdminSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
@@ -52,6 +57,13 @@ function loadSettings(): AdminSettings {
     const { language: _, theme: __, ...rest } = parsed;
     void _;
     void __;
+    if (
+      rest.defaultLanding === "content" &&
+      localStorage.getItem(LANDING_MIGRATION_KEY) !== "1"
+    ) {
+      delete rest.defaultLanding;
+      localStorage.setItem(LANDING_MIGRATION_KEY, "1");
+    }
     return { ...DEFAULT_SETTINGS, ...rest };
   } catch {
     return DEFAULT_SETTINGS;
