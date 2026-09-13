@@ -2977,6 +2977,7 @@ export const ar = {
     "admin.analytics.cf.connect.step1": "انسخ Account ID من الشريط الجانبي في لوحة تحكم Cloudflare.",
     "admin.analytics.cf.connect.step2": "أنشئ رمز API بصلاحية Account Analytics ← قراءة (My Profile ← API Tokens).",
     "admin.analytics.cf.connect.step3": "نفّذ: wrangler secret put CF_ANALYTICS_TOKEN، ثم أضف CF_ACCOUNT_ID إلى wrangler.toml وأعد النشر.",
+    "admin.analytics.cf.connect.dismiss": "إغلاق",
     "admin.analytics.cf.latencyMedian": "الوسيط، مقاس من العميل",
     "admin.analytics.cf.p95badge": "p95 {ms} م.ث",
 

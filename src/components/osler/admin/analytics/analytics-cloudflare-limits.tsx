@@ -15,10 +15,13 @@ import {
   Activity,
   Zap,
   Unplug,
+  X,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import type { CloudflareLimitsData, CloudflareLimitMetric } from "@/components/osler/admin/admin-api";
 import { LoadingState } from "@/components/osler/ui-primitives";
@@ -83,8 +86,27 @@ function getStatusColor(status: CloudflareLimitMetric["status"]): {
   }
 }
 
+/** localStorage flag for the dismissible estimates notice (UI pref, same
+ *  precedent as the studio view-mode / analytics opt-out flags). */
+const CONNECT_BANNER_DISMISSED_KEY = "osler-cf-connect-banner-dismissed";
+
 export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloudflareLimitsProps) {
   const { t } = useI18n();
+  const [connectBannerDismissed, setConnectBannerDismissed] = React.useState(() => {
+    try {
+      return window.localStorage.getItem(CONNECT_BANNER_DISMISSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function dismissConnectBanner() {
+    haptic("light");
+    try {
+      window.localStorage.setItem(CONNECT_BANNER_DISMISSED_KEY, "1");
+    } catch {}
+    setConnectBannerDismissed(true);
+  }
 
   if (loading && !data) {
     return <LoadingState label="Loading Cloudflare free tier analytics…" />;
@@ -172,11 +194,11 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
         </div>
       </div>
 
-      {/* Connect banner when serving estimates */}
-      {!connected && (
+      {/* Connect banner when serving estimates — dismissible via the X */}
+      {!connected && !connectBannerDismissed && (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-info/10 border border-info/30 text-foreground">
           <Unplug className="size-5 text-info shrink-0 mt-0.5" />
-          <div className="text-xs leading-relaxed">
+          <div className="text-xs leading-relaxed min-w-0 flex-1">
             <h3 className="font-semibold text-sm text-info mb-0.5">
               {t("admin.analytics.cf.connect.title")}
             </h3>
@@ -190,6 +212,17 @@ export function AnalyticsCloudflareLimitsPanel({ data, loading }: AnalyticsCloud
             </ol>
             <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">docs/cloudflare-analytics.md</p>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="iconSm"
+            onClick={dismissConnectBanner}
+            aria-label={t("admin.analytics.cf.connect.dismiss")}
+            title={t("admin.analytics.cf.connect.dismiss")}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-4" />
+          </Button>
         </div>
       )}
 

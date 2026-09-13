@@ -2982,6 +2982,7 @@ export const en = {
     "admin.analytics.cf.connect.step1": "Copy your Account ID from the Cloudflare dashboard sidebar.",
     "admin.analytics.cf.connect.step2": "Create an API token with Account Analytics → Read (My Profile → API Tokens).",
     "admin.analytics.cf.connect.step3": "Run: wrangler secret put CF_ANALYTICS_TOKEN, set CF_ACCOUNT_ID in wrangler.toml, redeploy.",
+    "admin.analytics.cf.connect.dismiss": "Dismiss",
     "admin.analytics.cf.latencyMedian": "median, client-measured",
     "admin.analytics.cf.p95badge": "p95 {ms} ms",
 
