@@ -375,6 +375,42 @@ async function readAccessiblePack(ctx: McpCtx, id: unknown) {
   return { ...obj, body: body ?? null };
 }
 
+/** Cheap shape summary so agents can verify an upload landed whole
+ *  ("did all 40 questions arrive?") without fetching full bodies. */
+function summarizeContent(contentType: string, parsed: any): Record<string, number> | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const len = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+  switch (contentType) {
+    case "quiz": return { questions: len(parsed.questions) };
+    case "bank": {
+      const passages = Array.isArray(parsed.passages) ? parsed.passages : [];
+      return { passages: passages.length, questions: passages.reduce((n: number, p: any) => n + len(p?.questions), 0) };
+    }
+    case "written": return { prompts: len(parsed.prompts) };
+    case "mixed": return { questions: len(parsed.questions), prompts: len(parsed.prompts) };
+    case "flashcard": return { cards: len(parsed.cards) };
+    case "osce": return { stations: len(parsed.stations) };
+    case "video": return { videos: len(parsed.videos) };
+    default: return null;
+  }
+}
+
+async function validateStoredPack(ctx: McpCtx, id: unknown) {
+  const obj = await loadAccessibleObject(ctx, id);
+  if (obj.content_type === "library") {
+    return { ok: true as const, id: obj.id, title: obj.title, contentType: obj.content_type, valid: true, errors: [] as string[], counts: null };
+  }
+  const body = (await ctx.r2Get(ctx.draftKey(obj.r2_key_base))) ?? "";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch (e: any) {
+    return { ok: true as const, id: obj.id, title: obj.title, contentType: obj.content_type, valid: false, errors: [`Invalid JSON: ${e.message}`], counts: null };
+  }
+  const errors = ctx.validateContent(obj.content_type, parsed);
+  return { ok: true as const, id: obj.id, title: obj.title, contentType: obj.content_type, valid: errors.length === 0, errors, counts: summarizeContent(obj.content_type, parsed) };
+}
+
 // ─── Tool definitions ────────────────────────────────────────────────────────
 
 export const TOOLS: ToolDef[] = [
@@ -620,6 +656,28 @@ export const TOOLS: ToolDef[] = [
       }
       const errors = ctx.validateContent(contentType, parsed);
       return { errors, valid: errors.length === 0 };
+    },
+  },
+  {
+    name: "bulk_validate",
+    description: "Validate up to 20 stored drafts by id in one call, with per-pack content counts (questions/cards/stations/…) so agents can QA-sweep an upload batch without fetching full bodies. Unknown ids fail inline without aborting the rest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: { type: "array", description: "Content object ids. Max 20 per call.", items: { type: "string" } },
+      },
+      required: ["ids"],
+    },
+    async run(ctx, args) {
+      const ids: unknown[] = Array.isArray(args?.ids) ? args.ids : [];
+      if (!ids.length || ids.length > 20) throw new ToolError("ids must be an array of 1-20 content object ids");
+      const results = [];
+      for (const id of ids) {
+        results.push(await batchItem(id, () => validateStoredPack(ctx, id)));
+      }
+      const rows = results as any[];
+      const valid = rows.filter((r) => r.ok !== false && r.valid).length;
+      return { total: rows.length, valid, invalid: rows.length - valid, results };
     },
   },
   {

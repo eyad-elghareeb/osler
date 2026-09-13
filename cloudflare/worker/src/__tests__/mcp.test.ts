@@ -270,6 +270,38 @@ describe("MCP observability tools", () => {
     }
   });
 });
+
+describe("MCP bulk_validate", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+
+  it("reports valid packs with content counts", async () => {
+    const ctx = makeCtx();
+    await ctx.r2Put("content/quiz/obj1/draft.json", VALID_QUIZ);
+    const r = await call(ctx, "tools/call", { name: "bulk_validate", arguments: { ids: [ID_A] } });
+    expect(r.result.structuredContent.valid).toBe(1);
+    expect(r.result.structuredContent.results[0].counts).toEqual({ questions: 1 });
+  });
+
+  it("reports schema errors inline without aborting", async () => {
+    const ctx = makeCtx({ validateContent: () => ["quiz: `questions` array required"] });
+    await ctx.r2Put("content/quiz/obj1/draft.json", VALID_QUIZ);
+    const r = await call(ctx, "tools/call", { name: "bulk_validate", arguments: { ids: [ID_A] } });
+    expect(r.result.structuredContent.invalid).toBe(1);
+    expect(r.result.structuredContent.results[0].errors).toEqual(["quiz: `questions` array required"]);
+  });
+
+  it("reports unknown ids inline", async () => {
+    const db = {
+      prepare: (_sql: string) => ({
+        bind: (..._args: unknown[]) => ({ first: async () => null, all: async () => ({ results: [] }), run: async () => {} }),
+      }),
+    } as unknown as McpCtx["env"]["DB"];
+    const ctx = makeCtx({ env: { ...makeCtx().env, DB: db } as any });
+    const r = await call(ctx, "tools/call", { name: "bulk_validate", arguments: { ids: [ID_A] } });
+    expect(r.result.structuredContent.invalid).toBe(1);
+    expect(r.result.structuredContent.results[0].error).toMatch(/not found/i);
+  });
+});
 describe("MCP batch handling", () => {
   it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];
