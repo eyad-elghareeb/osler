@@ -279,6 +279,7 @@ export async function filesToDropped(
 function guessContentType(filename: string): ContentType {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".md")) return "library";
+  if (lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".m4v") || lower.endsWith(".mov")) return "video";
   if (lower.includes("flashcard") || lower.includes("cards")) return "flashcard";
   if (lower.includes("osce") || lower.includes("station")) return "osce";
   if (lower.includes("video")) return "video";

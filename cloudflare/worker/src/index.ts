@@ -42,6 +42,7 @@ import { sendEmail, passwordResetEmail, verifyEmail, emailProviderReady, emailPr
 import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from "./mcp";
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
+import { parseHttpRange } from "./http-range";
 // Durable Object classes must be reachable from the entry module for the
 // wrangler migration to bind them.
 export { UserSyncHub };
@@ -1659,52 +1660,56 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
   const hybridKeys: string[] = [r2Key];
 
   // ── Copy images (and any other asset files) from the draft's `images/`
-  //    folder to the published location so they're reachable from the
-  //    student-facing article/quiz. The student-side resolver looks them up
-  //    at `<publishedDir>/images/<name>` (see src/lib/osler/articles.ts and
-  //    src/lib/osler/richtext.ts). Drafts keep their images at
-  //    `<r2_key_base>/images/<name>`, so we list those and copy each one to
-  //    `content-files/<category>/<publishedDir>images/<name>`. We don't
-  //    delete the draft copies — they're needed for re-publishing.
+  //    and `media/` folders to the published location so they're reachable
+  //    from the student-facing article/quiz/video. The student-side resolver
+  //    looks images up at `<publishedDir>/images/<name>` (see
+  //    src/lib/osler/articles.ts and src/lib/osler/richtext.ts) and R2-hosted
+  //    videos at `<publishedDir>/media/<name>` (see src/lib/osler/videos.ts).
+  //    Drafts keep their assets at `<r2_key_base>/images/<name>` and
+  //    `<r2_key_base>/media/<name>`, so we list those and copy each one to
+  //    `content-files/<category>/<publishedDir>images/<name>` (resp. media/).
+  //    We don't delete the draft copies — they're needed for re-publishing.
   try {
     const publishedDir = fileSegment.includes("/")
       ? fileSegment.slice(0, fileSegment.lastIndexOf("/") + 1)
       : "";
-    const draftImagePrefix = `${obj.r2_key_base}/images/`;
-    const publishedImagePrefix = `content-files/${category}/${publishedDir}images/`;
-    // list() returns up to 1000 keys per page — we cap at 5000 to avoid a
-    // pathological hot loop. Real content objects rarely have >50 images.
     const r2 = env.CONTENT;
-    let cursor: string | undefined = undefined;
-    for (let page = 0; page < 5; page++) {
-      const listed: any = await r2.list({ prefix: draftImagePrefix, limit: 1000, cursor });
-      const objects: any[] = listed?.objects || [];
-      const validItems = objects.filter((item: any) => {
-        const rel = String(item.key).slice(draftImagePrefix.length);
-        return rel && !rel.endsWith("/");
-      });
-      const CHUNK_SIZE = 8;
-      for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
-        const chunk = validItems.slice(i, i + CHUNK_SIZE);
-        await Promise.all(
-          chunk.map(async (item: any) => {
-            const rel = String(item.key).slice(draftImagePrefix.length);
-            const dstKey = publishedImagePrefix + rel;
-            const src = await r2.get(item.key);
-            if (!src) return;
-            const buf = await src.arrayBuffer();
-            const imgCt = guessImageContentType(rel);
-            await r2.put(dstKey, buf, { httpMetadata: { contentType: imgCt } });
-            hybridKeys.push(dstKey);
-          })
-        );
+    for (const assetFolder of ["images", "media"]) {
+      const draftAssetPrefix = `${obj.r2_key_base}/${assetFolder}/`;
+      const publishedAssetPrefix = `content-files/${category}/${publishedDir}${assetFolder}/`;
+      // list() returns up to 1000 keys per page — we cap at 5000 to avoid a
+      // pathological hot loop. Real content objects rarely have >50 assets.
+      let cursor: string | undefined = undefined;
+      for (let page = 0; page < 5; page++) {
+        const listed: any = await r2.list({ prefix: draftAssetPrefix, limit: 1000, cursor });
+        const objects: any[] = listed?.objects || [];
+        const validItems = objects.filter((item: any) => {
+          const rel = String(item.key).slice(draftAssetPrefix.length);
+          return rel && !rel.endsWith("/");
+        });
+        const CHUNK_SIZE = 8;
+        for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
+          const chunk = validItems.slice(i, i + CHUNK_SIZE);
+          await Promise.all(
+            chunk.map(async (item: any) => {
+              const rel = String(item.key).slice(draftAssetPrefix.length);
+              const dstKey = publishedAssetPrefix + rel;
+              const src = await r2.get(item.key);
+              if (!src) return;
+              const buf = await src.arrayBuffer();
+              const assetCt = guessImageContentType(rel);
+              await r2.put(dstKey, buf, { httpMetadata: { contentType: assetCt } });
+              hybridKeys.push(dstKey);
+            })
+          );
+        }
+        if (!listed.truncated) break;
+        cursor = listed.cursor;
       }
-      if (!listed.truncated) break;
-      cursor = listed.cursor;
     }
   } catch (e) {
-    // Image copy is best-effort — don't fail the publish if it errors.
-    console.error("image copy failed:", e);
+    // Asset copy is best-effort — don't fail the publish if it errors.
+    console.error("asset copy failed:", e);
   }
 
   try {
@@ -1795,11 +1800,18 @@ function guessImageContentType(filename: string): string {
     case "bmp": return "image/bmp";
     case "ico": return "image/x-icon";
     case "pdf": return "application/pdf";
+    case "mp3":
+    case "m4a": return "audio/mpeg";
+    case "mp4": return "video/mp4";
+    case "webm": return "video/webm";
+    case "m4v": return "video/x-m4v";
+    case "mov": return "video/quicktime";
+    case "m3u8": return "application/vnd.apple.mpegurl";
     default: return "application/octet-stream";
   }
 }
 
-const ASSET_FOLDERS = new Set(["images", "assets"]);
+const ASSET_FOLDERS = new Set(["images", "assets", "media"]);
 /** Library article sidecar metadata (`<article>.meta.json`) — client-merged
  *  over frontmatter; excluded from manifests and the backfill walk. */
 function isArticleMetaFileName(name: string): boolean {
@@ -2008,7 +2020,7 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
         // frontmatter, never listed as a content data file.
       } else if (file.toLowerCase().endsWith(".json") || file.toLowerCase().endsWith(".md") || file.toLowerCase().endsWith(".html") || file.toLowerCase().endsWith(".pdf")) {
         f.files.push(file);
-      } else if (file.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4)$/i)) {
+      } else if (file.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4|webm|m4v|mov)$/i)) {
         f.images.push(file);
       }
     }
@@ -2019,11 +2031,14 @@ async function regenerateManifestForCategory(env: Env, category: string): Promis
     // Roll the asset folder's files up into its parent pack so the manifest
     // keeps `images` for packs that ship an `images/` subfolder (mirrors the
     // local generator in scripts/generate-content-manifests.js). Without this,
-    // admin-published packs lose their precache URLs.
+    // admin-published packs lose their precache URLs. Entries from a `media/`
+    // subfolder (uploaded video files) keep their `media/` prefix so the
+    // client's precache-URL builder can resolve them against the pack folder
+    // instead of `images/`.
     const info = folders.get(path)!;
     const parentPath = path.slice(0, path.length - seg.length - 1);
     const parent = folders.get(parentPath);
-    if (parent) parent.images.push(...info.images);
+    if (parent) parent.images.push(...info.images.map((n) => seg === "media" ? `media/${n}` : n));
     folders.delete(path);
   }
   const parentType = CATEGORY_TYPE_MAP[category] || null;
@@ -2193,10 +2208,15 @@ async function updateManifestIncremental(env: Env, category: string, touchedPath
       if (rel.startsWith("images/") || rel.startsWith("assets/")) {
         const imgName = rel.split("/").pop();
         if (imgName) directImages.push(imgName);
+      } else if (rel.startsWith("media/")) {
+        // Uploaded video files keep their `media/` prefix (mirrors the full
+        // regen roll-up above) so precache URLs resolve against the pack
+        // folder instead of `images/`.
+        directImages.push(rel);
       } else if (!rel.includes("/")) {
         if (!isArticleMetaFileName(rel)) {
           if (rel.match(/\.(json|md|html|htm|pdf)$/i)) directFiles.push(rel);
-          else if (rel.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4)$/i)) directImages.push(rel);
+          else if (rel.match(/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp3|m4a|mp4|webm|m4v|mov)$/i)) directImages.push(rel);
         }
       }
     }
@@ -2411,8 +2431,18 @@ function validateContent(contentType: string, parsed: any): string[] {
         if (typeof v.source.id !== "string" || v.source.id.length < 8 || v.source.id.length > 32) errors.push(`${p}: youtube source.id (8-32 chars) required`);
       } else if (v.source.type === "mp4" || v.source.type === "hls") {
         if (typeof v.source.url !== "string" || !v.source.url.startsWith("http")) errors.push(`${p}: ${v.source.type}.url required`);
+      } else if (v.source.type === "r2") {
+        // R2-hosted pack media: a path relative to the video's own pack
+        // folder (e.g. `media/lecture.mp4`), resolved at runtime against
+        // the instance's content base URL so packs stay portable.
+        const key = v.source.key;
+        if (typeof key !== "string" || !key.trim() || key.includes("..") || key.startsWith("/") || key.includes("\\")) {
+          errors.push(`${p}: r2.key must be a relative media path (e.g. media/lecture.mp4)`);
+        } else if (!/\.(mp4|webm|m4v|mov|m3u8)$/i.test(key.trim())) {
+          errors.push(`${p}: r2.key must end in .mp4/.webm/.m4v/.mov/.m3u8`);
+        }
       } else {
-        errors.push(`${p}: source.type must be youtube|mp4|hls`);
+        errors.push(`${p}: source.type must be youtube|mp4|hls|r2`);
       }
     });
   } else if (contentType === "library") {}
@@ -5603,10 +5633,15 @@ export default {
         const r2Key = `content-files/${contentPath}`;
         const ext = contentPath.split(".").pop()?.toLowerCase() ?? "";
         const cacheable = ext !== "json" && ext !== "md";
+        // A Range request must never be answered from (or populate) the edge
+        // cache: the cache key carries no Range, so a cached full body would
+        // wrongly satisfy a partial request and vice versa.
+        const rangeHeader = request.headers.get("range");
+        const isRangeRequest = rangeHeader != null;
         // Edge-cache lookup first — an immutable asset served from cache bills
         // neither a Worker subrequest nor an R2 read. Cache hits skip the R2
         // round-trip entirely, protecting the free-tier request budget.
-        if (cacheable) {
+        if (cacheable && !isRangeRequest) {
           try {
             const cached = await caches.default.match(new Request(request.url, { method: "GET" }));
             if (cached) return cached;
@@ -5614,6 +5649,28 @@ export default {
         }
         const obj = await env.CONTENT.get(r2Key);
         if (!obj) return json({ error: "Not found" }, 404, origin, log);
+        const objectSize = obj.size;
+        // ── HTTP Range (media seeking) ──────────────────────────────
+        // Video/audio playback issues `Range: bytes=` requests to seek;
+        // without 206 support browsers cannot seek and some refuse to play
+        // remote files at all. (Cache bypass/skip is handled by
+        // isRangeRequest above.)
+        const range = rangeHeader ? parseHttpRange(rangeHeader, objectSize) : null;
+        if (range === "unsatisfiable") {
+          return new Response("Range Not Satisfiable", {
+            status: 416,
+            headers: {
+              "content-range": `bytes */${objectSize}`,
+              "accept-ranges": "bytes",
+              ...cors(origin),
+              ...SECURITY_HEADERS,
+              "cross-origin-resource-policy": "cross-origin",
+            } as any,
+          });
+        }
+        const rangedObj = range ? await env.CONTENT.get(r2Key, { range: { offset: range.start, length: range.end - range.start + 1 } }) : null;
+        if (range && !rangedObj) return json({ error: "Not found" }, 404, origin, log);
+        const bodyObj = rangedObj ?? obj;
         const contentType =
           ext === "json" ? "application/json" : ext === "md" ? "text/markdown; charset=utf-8"
           : ext === "html" || ext === "htm" ? "text/html; charset=utf-8" : ext === "pdf" ? "application/pdf"
@@ -5622,7 +5679,8 @@ export default {
           : ext === "webp" ? "image/webp" : ext === "avif" ? "image/avif"
           : ext === "bmp" ? "image/bmp" : ext === "ico" ? "image/x-icon"
           : ext === "mp3" || ext === "m4a" ? "audio/mpeg" : ext === "mp4" ? "video/mp4"
-          : ext === "webm" ? "video/webm" : ext === "m3u8" ? "application/vnd.apple.mpegurl"
+          : ext === "webm" ? "video/webm" : ext === "m4v" ? "video/x-m4v" : ext === "mov" ? "video/quicktime"
+          : ext === "m3u8" ? "application/vnd.apple.mpegurl"
           : ext === "css" ? "text/css" : ext === "js" ? "application/javascript"
           : "application/octet-stream";
         // HTML/SVG/JS/XML served from the Worker origin could execute script
@@ -5635,18 +5693,28 @@ export default {
         const contentHeaders: Record<string, string> = {
           "content-type": contentType,
           "cache-control": cacheControl,
+          // Advertise seeking support on full responses so players issue
+          // Range requests with confidence instead of downloading whole files.
+          "accept-ranges": "bytes",
           ...(forceDownload ? { "content-disposition": `attachment; filename="${contentPath.split("/").pop()?.replace(/[^\w.-]/g, "_") || "download"}"` } : {}),
+          ...(range
+            ? {
+                "content-range": `bytes ${range.start}-${range.end}/${objectSize}`,
+                "content-length": String(range.end - range.start + 1),
+              }
+            : {}),
           ...cors(origin),
           ...SECURITY_HEADERS,
           // Override CORP so the Pages site (different origin) can read this.
           "cross-origin-resource-policy": "cross-origin",
         };
-        const response = new Response(obj.body, { status: 200, headers: contentHeaders as any });
+        const response = new Response(bodyObj.body, { status: range ? 206 : 200, headers: contentHeaders as any });
         // Cache immutable assets at the Cloudflare edge. Workers responses are
         // NOT auto-cached from cache-control headers alone; without an explicit
         // Cache API put, every pack fetch bills a Worker request + an R2 read,
         // which can exhaust the free-tier 100k requests/day under classroom load.
-        if (cacheable) {
+        // Partial (206) responses are never cached — see isRangeRequest above.
+        if (cacheable && !range) {
           const req = new Request(request.url, { method: "GET" });
           // Edge-cache population is post-response work. Waiting here adds a
           // second network/storage operation to every cold asset request even

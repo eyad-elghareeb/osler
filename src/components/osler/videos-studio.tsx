@@ -26,6 +26,8 @@ import {
   loadNodeVideos,
   listAllVideos,
   resolveThumbnail,
+  resolveVideoUrl,
+  videoStreamKind,
   formatDuration,
 } from "@/lib/osler/videos";
 import { ENGINE_META, collectPackUrls, findNodeByUid, getCachedCategoryTree } from "@/lib/osler/content";
@@ -813,8 +815,12 @@ function VideoPlayerView({
     void settings.set("video-alt-host", String(next));
   };
 
-  const isYouTube = video.source.type === "youtube";
+  const isYouTube = videoStreamKind(video) === "youtube";
   const videoId = isYouTube ? video.source.id : undefined;
+  // Direct-file URL for mp4/hls sources — absolute `url` as-is, `r2` keys
+  // resolved against the video's own pack folder (cloud → Worker Range
+  // endpoint, local → bundled files). YouTube plays via the IFrame API.
+  const streamUrl = isYouTube ? null : resolveVideoUrl(video, video.nodePath);
 
   // A chapter jump stamps invidiousStart — clear it when the video
   // changes so the next embed doesn't inherit the old timestamp.
@@ -953,9 +959,9 @@ function VideoPlayerView({
       };
     }
 
-    if (!isYouTube && video.source.url) {
+    if (!isYouTube && streamUrl) {
       const videoEl = document.createElement("video");
-      videoEl.src = video.source.url;
+      videoEl.src = streamUrl;
       videoEl.playsInline = true;
       containerRef.current.appendChild(videoEl);
       let plyrInstance: any = null;
@@ -975,7 +981,7 @@ function VideoPlayerView({
         plyrRef.current = null;
       };
     }
-  }, [isYouTube, videoId, video.source.url, invidiousMode, prefsReady]);
+  }, [isYouTube, videoId, streamUrl, invidiousMode, prefsReady]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {

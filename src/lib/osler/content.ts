@@ -119,7 +119,11 @@ export function nodeUrls(node: ContentTreeNode): string[] {
     return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(v)}`;
   }
   const urls = (node.files ?? []).map((f) => bust(`${base}${f}`));
-  for (const img of node.images ?? []) urls.push(bust(`${base}images/${img}`));
+  // Entries from a pack's `media/` subfolder (uploaded videos) keep their
+  // `media/` prefix in the manifest; everything else lives under `images/`.
+  for (const img of node.images ?? []) {
+    urls.push(bust(img.includes("/") ? `${base}${img}` : `${base}images/${img}`));
+  }
   return urls;
 }
 

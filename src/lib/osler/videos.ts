@@ -164,3 +164,43 @@ export function resolveThumbnail(video: Pick<VideoResource, "thumbnail" | "sourc
 export function isYouTube(video: VideoResource): boolean {
   return video.source?.type === "youtube" && Boolean(video.source.id);
 }
+
+/** Helper: detect if a video is hosted on this instance's R2 storage. */
+export function isR2Source(video: VideoResource): boolean {
+  return video.source?.type === "r2" && typeof video.source.key === "string" && video.source.key.length > 0;
+}
+
+/**
+ * Resolve the playable stream URL for a video.
+ *
+ * YouTube videos resolve to `null` (played through the IFrame API, not a
+ * URL). `mp4`/`hls` sources use their absolute `url` as-is. `r2` sources
+ * carry a pack-relative `key` (e.g. `media/lecture.mp4`) resolved against
+ * the video's own pack folder through the instance's content base URL —
+ * cloud instances hit the Worker's Range-capable `/v1/content/` endpoint,
+ * local instances hit the bundled `/osler-content/` files.
+ */
+export function resolveVideoUrl(video: VideoResource, nodePath?: string): string | null {
+  const src = video.source;
+  if (!src) return null;
+  if (src.type === "youtube") return null;
+  if (src.type === "mp4" || src.type === "hls") return src.url ?? null;
+  if (src.type === "r2") {
+    if (!src.key || src.key.includes("..") || src.key.startsWith("/") || src.key.includes("\\")) return null;
+    const clean = src.key.replace(/^\/+/, "");
+    return videoFileUrl(`${nodePath ?? ""}${clean}`);
+  }
+  return null;
+}
+
+/**
+ * The effective playback kind for a video: `"youtube"` (IFrame API) or the
+ * direct-file kind (`"mp4"` / `"hls"`) for everything else. R2 `.m3u8` keys
+ * play through the HLS path, all other R2 keys through the MP4 path.
+ */
+export function videoStreamKind(video: VideoResource): "youtube" | "mp4" | "hls" {
+  if (video.source?.type === "youtube") return "youtube";
+  if (video.source?.type === "hls") return "hls";
+  if (video.source?.type === "r2" && /\.m3u8$/i.test(video.source.key ?? "")) return "hls";
+  return "mp4";
+}

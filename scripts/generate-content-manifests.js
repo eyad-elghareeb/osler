@@ -20,9 +20,12 @@ const path = require("path");
 const CONTENT_DIR = path.resolve(__dirname, "..", "public", "osler-content");
 const MANIFEST_NAME = "manifest.json";
 
-// Folders that hold binary assets (images, audio) next to a pack's JSON.
-// They contain no content data files and must not be scanned as content nodes.
-const ASSET_FOLDERS = new Set(["images", "assets"]);
+// Folders that hold binary assets (images, audio, uploaded video) next to a
+// pack's JSON. They contain no content data files and must not be scanned as
+// content nodes. `media/` holds admin-uploaded video files (see the `r2`
+// video source type); its entries are rolled into the parent pack's `images`
+// list with their `media/` prefix so precache URLs resolve correctly.
+const ASSET_FOLDERS = new Set(["images", "assets", "media"]);
 
 // Direct folder name → type mapping
 const FOLDER_TYPE_MAP = {
@@ -288,16 +291,27 @@ function isArticleMetaFile(name) {
 
 /**
  * Get list of binary asset filenames in a directory's `images` subfolder
- * (e.g. png/jpg/svg/gif/webp). Returned relative to the images/ folder so
- * the client can build precache URLs as <base>/images/<name>.
+ * (e.g. png/jpg/svg/gif/webp) plus uploaded video/audio files in its
+ * `media/` subfolder. Returned relative to the pack folder (`images/x.png`,
+ * `media/lecture.mp4`) so the client can build precache URLs as
+ * `<base>/<entry>` — mirroring the worker's manifest regen, which rolls
+ * `media/` entries up with their prefix.
  */
 function getImageFileNames(dirPath) {
+  const out = [];
   const imagesDir = path.join(dirPath, "images");
-  if (!fs.existsSync(imagesDir) || !fs.statSync(imagesDir).isDirectory()) return [];
-  return fs.readdirSync(imagesDir, { withFileTypes: true })
-    .filter((e) => e.isFile() && /\.(png|jpe?g|svg|gif|webp|avif|bmp)$/i.test(e.name))
-    .map((e) => e.name)
-    .sort();
+  if (fs.existsSync(imagesDir) && fs.statSync(imagesDir).isDirectory()) {
+    for (const e of fs.readdirSync(imagesDir, { withFileTypes: true })) {
+      if (e.isFile() && /\.(png|jpe?g|svg|gif|webp|avif|bmp)$/i.test(e.name)) out.push(e.name);
+    }
+  }
+  const mediaDir = path.join(dirPath, "media");
+  if (fs.existsSync(mediaDir) && fs.statSync(mediaDir).isDirectory()) {
+    for (const e of fs.readdirSync(mediaDir, { withFileTypes: true })) {
+      if (e.isFile() && /\.(mp3|m4a|mp4|webm|m4v|mov|m3u8)$/i.test(e.name)) out.push(`media/${e.name}`);
+    }
+  }
+  return out.sort();
 }
 
 /**

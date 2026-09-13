@@ -403,12 +403,18 @@ export interface VideoSource {
    *  - "youtube"   — uses YouTube IFrame Player API under a custom UI
    *  - "mp4"       — direct video file (CDN or same-origin)
    *  - "hls"       — HLS stream (.m3u8)
+   *  - "r2"        — instance-hosted media in the video's own pack folder
+   *    (e.g. `media/lecture.mp4`), uploaded via the admin video editor and
+   *    streamed from R2 with HTTP Range support. Resolved at runtime against
+   *    the instance's content base URL so packs stay portable.
    */
-  type: "youtube" | "mp4" | "hls";
+  type: "youtube" | "mp4" | "hls" | "r2";
   /** YouTube video ID (when type === "youtube") */
   id?: string;
   /** Direct URL for mp4/hls streams */
   url?: string;
+  /** Pack-relative media path for r2 sources (e.g. `media/lecture.mp4`) */
+  key?: string;
 }
 
 export interface VideoChapter {

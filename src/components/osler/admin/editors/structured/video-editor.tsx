@@ -1,12 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, CirclePlay, Plus, Trash2, Tags } from "lucide-react";
+import { CheckCircle2, CirclePlay, Plus, Trash2, Tags, Upload, Loader2, HardDrive } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StructuredEditorProps, Field, SectionLabel, ListToolbar, arrayMove, ItemRow, TagListField, MilkdownEditor } from "./shared";
+import { uploadVideoForEditor, isVideoFile, formatBytes } from "@/components/osler/admin/editors/video-upload";
 
 /**
  * Structured content editors — full React port of
@@ -195,7 +198,9 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
                   onValueChange={(val) => {
                     const next = val === "youtube"
                       ? { type: "youtube", id: "" }
-                      : { type: val, url: "" };
+                      : val === "r2"
+                        ? { type: "r2", key: "" }
+                        : { type: val, url: "" };
                     patchVideo(i, { source: next });
                   }}
                   disabled={readOnly}
@@ -205,13 +210,22 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="youtube">YouTube (paste any video URL or ID)</SelectItem>
+                    <SelectItem value="r2">{t("admin.structured.sourceR2")}</SelectItem>
                     <SelectItem value="mp4">Direct MP4 (CDN or same-origin URL)</SelectItem>
                     <SelectItem value="hls">HLS stream (.m3u8 URL)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
 
-              {source.type === "youtube" ? (
+              {source.type === "r2" ? (
+                <R2SourceField
+                  sourceKey={source.key ?? ""}
+                  onKeyChange={(key) => patchVideo(i, { source: { ...source, key } })}
+                  readOnly={readOnly}
+                  r2KeyBase={r2KeyBase}
+                  rawR2Key={rawR2Key}
+                />
+              ) : source.type === "youtube" ? (
                 <Field label="YouTube URL or video ID">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
@@ -285,6 +299,122 @@ export function VideoEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: 
         })
       )}
     </div>
+  );
+}
+
+/* ── R2 pack-media source ────────────────────────────────────────────
+ *
+ * Uploads a video file into the pack's `media/` folder and stores the
+ * pack-relative reference (`media/<name>`) as `source.key`. Managed drafts
+ * stream the raw file with progress; the worker copies `media/` to the
+ * student keyspace at publish time.
+ */
+function R2SourceField({
+  sourceKey,
+  onKeyChange,
+  readOnly,
+  r2KeyBase,
+  rawR2Key,
+}: {
+  sourceKey: string;
+  onKeyChange: (key: string) => void;
+  readOnly?: boolean;
+  r2KeyBase?: string;
+  rawR2Key?: string;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = React.useState<number | null>(null);
+
+  const canUpload = Boolean(r2KeyBase ?? rawR2Key);
+
+  async function handleFile(file: File) {
+    if (!isVideoFile(file)) {
+      toast({ title: t("admin.structured.videoInvalidType"), variant: "destructive" });
+      return;
+    }
+    // Raw-mode uploads ride a JSON data-URI write capped at ~30 MB by the
+    // worker — fail fast with guidance instead of a cryptic 500.
+    if (!r2KeyBase && rawR2Key && file.size > 24 * 1024 * 1024) {
+      toast({ title: t("admin.structured.videoTooLargeRaw"), variant: "destructive" });
+      return;
+    }
+    haptic("light");
+    setProgress(0);
+    try {
+      const res = await uploadVideoForEditor(
+        file,
+        { r2KeyBase, rawR2Key, onProgress: setProgress },
+      );
+      onKeyChange(res.ref);
+      haptic("success");
+      toast({ title: t("admin.structured.videoUploaded"), description: `${res.ref} · ${formatBytes(res.bytes)}` });
+    } catch (err) {
+      haptic("error");
+      toast({ title: t("admin.structured.videoUploadFailed"), description: String(err), variant: "destructive" });
+    } finally {
+      setProgress(null);
+    }
+  }
+
+  return (
+    <Field label={t("admin.structured.videoR2Key")}>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <HardDrive className="size-4 text-muted-foreground shrink-0" />
+          <Input
+            value={sourceKey}
+            onChange={(e) => onKeyChange(e.target.value)}
+            readOnly={readOnly}
+            placeholder="media/lecture.mp4"
+            className="font-mono text-xs"
+          />
+        </div>
+        {progress !== null ? (
+          <div className="flex items-center gap-2">
+            <Loader2 className="size-3.5 animate-spin text-primary shrink-0" />
+            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-150"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs tabular-nums text-muted-foreground w-9 text-end">
+              {Math.round(progress * 100)}%
+            </span>
+          </div>
+        ) : !readOnly && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={!canUpload}>
+              <Upload className="size-3.5 me-1.5" />
+              {sourceKey ? t("admin.structured.replaceVideo") : t("admin.structured.uploadVideo")}
+            </Button>
+            {sourceKey && (
+              <span className="inline-flex items-center gap-1 text-xs text-success">
+                <CheckCircle2 className="size-3.5" />
+                {sourceKey}
+              </span>
+            )}
+          </div>
+        )}
+        {!canUpload && !readOnly && (
+          <p className="text-xs text-warning">{t("admin.structured.videoNoDestination")}</p>
+        )}
+        <p className="text-xs text-muted-foreground">{t("admin.structured.videoR2Hint")}</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.m4v,.mov"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void handleFile(f);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    </Field>
   );
 }
 

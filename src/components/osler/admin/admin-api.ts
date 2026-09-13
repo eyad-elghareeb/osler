@@ -445,6 +445,44 @@ export const adminApi = {
   /** Fetch a draft asset associated with a content object as a Blob. */
   getAssetBlob:    (id: string, path: string) => reqBinary(`/v1/admin/content/${id}/asset?path=${encodeURIComponent(path)}`),
 
+  /** Upload a binary asset with upload-progress callbacks (XHR — fetch has
+   *  no upload-progress API). Used for large files such as R2-hosted videos
+   *  where a stuck-at-0% button would otherwise look broken. Same endpoint
+   *  and auth as `uploadAsset`; `onProgress` receives 0–1 fractions. */
+  uploadAssetProgress: (id: string, path: string, file: Blob, contentType?: string, onProgress?: (fraction: number) => void) => {
+    return (async () => {
+      const enabled = await cloudEnabled();
+      if (!enabled) throw new AdminApiError(503, "Cloud features are disabled");
+      const base = await getApiBase();
+      const session = readCloudSession();
+      const url = `${base}/v1/admin/content/${id}/asset?path=${encodeURIComponent(path)}`;
+      return new Promise<{ ok: boolean; key: string; relPath: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", url);
+        if (session?.token) xhr.setRequestHeader("authorization", `Bearer ${session.token}`);
+        if (contentType) xhr.setRequestHeader("content-type", contentType);
+        else if ((file as File).type) xhr.setRequestHeader("content-type", (file as File).type);
+        if (onProgress && xhr.upload) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total));
+          };
+        }
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText ?? "{}") as { ok: boolean; key: string; relPath: string; error?: string };
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+            else reject(new AdminApiError(xhr.status, data.error ?? "Asset upload failed"));
+          } catch {
+            reject(new AdminApiError(xhr.status || 500, "Asset upload failed"));
+          }
+        };
+        xhr.onerror = () => reject(new AdminApiError(500, "Asset upload failed"));
+        xhr.onabort = () => reject(new AdminApiError(500, "Asset upload cancelled"));
+        xhr.send(file);
+      });
+    })();
+  },
+
   /** Trigger batch backfill of raw files in content-files/ to managed content_objects. */
   backfillContent: () => req<{ ok: boolean; backfilled: number; existing: number; total: number; errors: string[]; complete: boolean }>("/v1/admin/content/backfill", "POST"),
 
