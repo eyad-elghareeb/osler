@@ -380,15 +380,22 @@ const SHARD_SCHEMA_SQL: Record<"sync" | "telemetry", string[]> = {
   n    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (name, day)
 )`,
-    // Permanent daily rollup of the raw event stream: the cron recomputes the
-    // last two days into it hourly, and analytics_events rows older than 30
-    // days are pruned — the rollup is what keeps all-time aggregate
-    // statistics alive after the raw rows are gone.
+    // Permanent daily rollup of the raw event stream: the cron finalizes
+    // closed UTC days into it (earliest ~01:00 after the day ends — ingest
+    // clamps client timestamps to the last hour), and analytics_events rows
+    // older than 30 days are pruned — the rollup is what keeps all-time
+    // aggregate statistics alive after the raw rows are gone.
     `CREATE TABLE IF NOT EXISTS analytics_daily (
   day        TEXT NOT NULL,
   event_type TEXT NOT NULL,
   events     INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (day, event_type)
+)`,
+    // Rollup progress marker: every day <= last_day is fully reflected in
+    // analytics_daily and is never rescanned by the cron.
+    `CREATE TABLE IF NOT EXISTS analytics_rollup_state (
+  id       INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+  last_day TEXT NOT NULL
 )`,
   ],
 };
@@ -1456,14 +1463,42 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
     // the primary DB otherwise), so they are pruned in their own batch — a
     // D1 batch cannot span two databases.
     await ensureShardSchema(env, "telemetry");
-    await telemetryDb(env).batch([
-      // Permanent aggregate: recompute the last two days into analytics_daily
-      // BEFORE the raw-event prune, so all-time statistics survive the 30-day
-      // retention window (a missed cron run self-heals on the next one).
-      telemetryDb(env).prepare(`INSERT INTO analytics_daily (day, event_type, events)
+    const tdb = telemetryDb(env);
+    // Incremental daily rollup — replaces the old "recompute the last 2 days
+    // every hour" pass (~50k row scans × 24 runs = 1.2M reads/day at the
+    // write cap). Days are finalized exactly once: ingest clamps client
+    // timestamps to the last hour (see handleAnalyticsEvents), so a closed
+    // UTC day can stop receiving events one hour after it ends. Each run
+    // recomputes — fully and idempotently — only the days that are not yet
+    // final, which in steady state is yesterday for the first cron run past
+    // 01:00 and nothing for the remaining 23 runs. A missed run (or an
+    // outage) self-heals on the next one, since the window advances from the
+    // persisted marker, not from wall-clock recency.
+    const t = now();
+    const finalizableBeforeIso = utcDateString(t - 3_600_000); // strictly older days only
+    const state = await tdb
+      .prepare("SELECT last_day FROM analytics_rollup_state WHERE id = 1")
+      .first<{ last_day: string }>()
+      .catch(() => null);
+    // Every day <= last_day is already final; scanning resumes at the next
+    // day. No marker yet (fresh install) ⇒ re-verify the last 3 closed days.
+    const sinceDay = state?.last_day && Number.isFinite(Date.parse(state.last_day))
+      ? state.last_day
+      : utcDateString(t - 4 * 86_400_000);
+    const windowStart = Date.parse(sinceDay) + 86_400_000;      // first non-final day
+    const windowEnd = Date.parse(finalizableBeforeIso);         // first not-yet-finalizable day
+    const lastFinalizedIso = utcDateString(Date.parse(finalizableBeforeIso) - 86_400_000);
+    await tdb.batch([
+      ...(Number.isFinite(windowStart) && Number.isFinite(windowEnd) && windowEnd > windowStart
+        ? [tdb.prepare(`INSERT INTO analytics_daily (day, event_type, events)
         SELECT strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') AS day, event_type, COUNT(*) AS events
-        FROM analytics_events WHERE created_at >= ? GROUP BY day, event_type
-        ON CONFLICT(day, event_type) DO UPDATE SET events = excluded.events`).bind(now() - 2 * 86_400_000),
+        FROM analytics_events WHERE created_at >= ? AND created_at < ? GROUP BY day, event_type
+        ON CONFLICT(day, event_type) DO UPDATE SET events = excluded.events`).bind(windowStart, windowEnd)]
+        : []),
+      // MAX() keeps the marker monotonic across clock jitter; ISO dates
+      // compare correctly as strings.
+      tdb.prepare(`INSERT INTO analytics_rollup_state (id, last_day) VALUES (1, ?)
+        ON CONFLICT(id) DO UPDATE SET last_day = MAX(last_day, excluded.last_day)`).bind(lastFinalizedIso),
       telemetryDb(env).prepare("DELETE FROM analytics_events WHERE created_at < ?").bind(analyticsCutoff),
       // Daily write-cap counters: keep ~90 days for trend debugging, then drop.
       telemetryDb(env).prepare("DELETE FROM daily_counters WHERE day < ?").bind(utcDateString(now() - 90 * 24 * 60 * 60 * 1000)),
@@ -3831,7 +3866,8 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
 
     // Run parallel queries across D1 tables
     const [
-      analyticsRow,
+      dailyRollupRow,
+      analyticsTodayRow,
       qstatsRow,
       qstatsTodayRow,
       progressRow,
@@ -3846,7 +3882,26 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       verifiesRow,
       apiPerfRows,
     ] = await Promise.all([
-      telemetryDb(env).prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS today, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_month FROM analytics_events").bind(startOfToday, startOfMonth).first<{ total: number; today: number; this_month: number }>().catch(() => ({ total: 0, today: 0, this_month: 0 })),
+      // Telemetry counters without the old unbounded scan (COUNT(*) over the
+      // whole analytics_events table read ~750k rows per dashboard load).
+      // All-time / month-to-date / trailing-30d come from the tiny
+      // analytics_daily rollup (cron-finalized closed days); today is a
+      // 1-row point read of the ingest write-counter, which counts exactly
+      // the events accepted today. Bounded drift, self-correcting: the
+      // not-yet-finalized yesterday is missing from the rollup only between
+      // 00:00 and ~01:00 UTC, and the counter is keyed by ingest day rather
+      // than clamped-event day (identical except for events ingested just
+      // past midnight with a clamped-into-yesterday ts). All event types
+      // (incl. `ping` heartbeats) are counted, matching the old semantics.
+      // `day` is an ISO date string — bind ISO strings, not epoch ms.
+      telemetryDb(env).prepare(`SELECT
+          COALESCE(SUM(CASE WHEN day >= ? THEN events ELSE 0 END), 0) AS month_to_date,
+          COALESCE(SUM(CASE WHEN day >= ? THEN events ELSE 0 END), 0) AS last30
+        FROM analytics_daily WHERE day < ?`)
+        .bind(utcDateString(startOfMonth), utcDateString(startOfToday - 30 * 86_400_000), utcDateString(startOfToday))
+        .first<{ month_to_date: number; last30: number }>()
+        .catch(() => ({ month_to_date: 0, last30: 0 })),
+      telemetryDb(env).prepare("SELECT n FROM daily_counters WHERE name = 'analytics' AND day = ?").bind(utcDateString(startOfToday)).first<{ n: number }>().catch(() => ({ n: 0 })),
       telemetryDb(env).prepare("SELECT COUNT(*) AS total, SUM(count) AS total_responses FROM question_choice_stats").first<{ total: number; total_responses: number }>().catch(() => ({ total: 0, total_responses: 0 })),
       telemetryDb(env).prepare("SELECT COUNT(*) AS n FROM question_choice_stats WHERE updated_at >= ?").bind(startOfToday).first<{ n: number }>().catch(() => ({ n: 0 })),
       syncDbProgressTotals(env),
@@ -3862,8 +3917,8 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
       telemetryDb(env).prepare("SELECT value FROM analytics_events WHERE event_type = 'api_call' AND value IS NOT NULL AND created_at >= ? ORDER BY value ASC LIMIT 5000").bind(startOfToday).all<{ value: number }>().catch(() => ({ results: [] })),
     ]);
 
-    const analyticsToday = Number(analyticsRow?.today) || 0;
-    const analyticsThisMonth = Number(analyticsRow?.this_month) || 0;
+    const analyticsToday = Number(analyticsTodayRow?.n) || 0;
+    const analyticsThisMonth = (Number(dailyRollupRow?.month_to_date) || 0) + analyticsToday;
     const auditToday = Number(auditRow?.today) || 0;
     const sessionsToday = Number(sessionsRow?.today) || 0;
     const qstatsToday = Number(qstatsTodayRow?.n) || 0;
@@ -3910,7 +3965,7 @@ async function r2BucketBytes(env: Env): Promise<number | null> {
     // that holds the table ("core" on single-database deployments too — the
     // shards fall back to DB there, so the label is about logical ownership).
     const d1Tables = [
-      { table: "analytics_events", shard: "telemetry", rowCount: Number(analyticsRow?.total) || 0, estimatedBytes: (Number(analyticsRow?.total) || 0) * 220, retention: "30 days" },
+      { table: "analytics_events", shard: "telemetry", rowCount: (Number(dailyRollupRow?.last30) || 0) + analyticsToday, estimatedBytes: ((Number(dailyRollupRow?.last30) || 0) + analyticsToday) * 220, retention: "30 days" },
       { table: "progress_documents", shard: "sync", rowCount: Number(progressRow?.total) || 0, estimatedBytes: Number(progressRow?.compressed_bytes) || (Number(progressRow?.total) || 0) * 1024, retention: "Active" },
       { table: "question_choice_stats", shard: "telemetry", rowCount: Number(qstatsRow?.total) || 0, estimatedBytes: (Number(qstatsRow?.total) || 0) * 128, retention: "90 days" },
       { table: "admin_audit", shard: "core", rowCount: Number(auditRow?.total) || 0, estimatedBytes: (Number(auditRow?.total) || 0) * 280, retention: "365 days" },
