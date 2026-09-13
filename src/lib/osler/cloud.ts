@@ -1137,6 +1137,7 @@ export function startCloudSync(session: CloudSession): () => void {
     "osler-notes-changed",
     "osler-article-highlights-changed",
     "osler-bookmarks-changed",
+    "osler-video-watch-changed",
     "osler-achievements-changed",
   ];
   for (const event of syncEvents) window.addEventListener(event, schedule);

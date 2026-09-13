@@ -745,10 +745,22 @@ function json(body: unknown, status = 200, origin = "", options: { cacheControl?
 }
 
 function cors(origin: string): Record<string, string> {
+  // Derive the per-kind OCC headers from SYNC_KINDS + RETIRED_SYNC_KINDS so a
+  // newly added sync kind can never break the CORS preflight again (incident:
+  // the hardcoded list missed x-sync-since-videos and every sync PUT carrying
+  // it died at preflight, taking the whole sync cycle down with it).
+  const allowHeaders = [
+    "authorization",
+    "content-type",
+    "content-encoding",
+    "if-unmodified-since",
+    "x-osler-realtime-conn",
+    ...[...SYNC_KINDS, ...RETIRED_SYNC_KINDS].map((kind) => `x-sync-since-${kind}`),
+  ].join(", ");
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, content-encoding, if-unmodified-since, x-osler-realtime-conn, x-sync-since-qbank, x-sync-since-flashcards, x-sync-since-sessions, x-sync-since-notes, x-sync-since-highlights, x-sync-since-articleHighlights, x-sync-since-writtenDrafts, x-sync-since-bookmarks, x-sync-since-achievements, x-sync-since-settings, x-sync-since-*",
+    "access-control-allow-headers": allowHeaders,
     "access-control-expose-headers": "x-request-id, content-encoding, content-type",
     "access-control-max-age": "86400",
     vary: "Origin",
