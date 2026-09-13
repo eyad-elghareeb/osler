@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, AlertTriangle, ArrowRight, Eye, Server, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, BarChart2, Eye, Server, Users } from "lucide-react";
+import { useI18n } from "@/components/osler/i18n-provider";
+import { haptic } from "@/lib/osler/native";
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { useI18n } from "@/components/osler/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { ChartCard, StatTile } from "@/components/osler/ui-primitives";
 import {
@@ -47,11 +48,16 @@ const VISITORS_POLL_MS = 60_000;
 
 export function DashboardAnalyticsPreview() {
   const { t } = useI18n();
+  // D1 read budget: nothing is fetched from the Worker until the user
+  // explicitly opts in — the dashboard home no longer spends telemetry
+  // reads on every admin visit.
+  const [enabled, setEnabled] = useState(false);
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [timeseries, setTimeseries] = useState<AnalyticsTimeseries | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     Promise.all([analyticsApi.overview("24h"), analyticsApi.timeseries("24h")])
       .then(([o, ts]) => {
@@ -61,11 +67,11 @@ export function DashboardAnalyticsPreview() {
       })
       .catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; };
-  }, []);
+  }, [enabled]);
 
   // Live ticker: refresh only the visitors-now number, never the curve.
   useEffect(() => {
-    if (failed) return;
+    if (!enabled || failed) return;
     let alive = true;
     const id = setInterval(() => {
       if (document.visibilityState !== "visible") return;
@@ -77,9 +83,51 @@ export function DashboardAnalyticsPreview() {
         .catch(() => {});
     }, VISITORS_POLL_MS);
     return () => { alive = false; clearInterval(id); };
-  }, [failed]);
+  }, [enabled, failed]);
 
   if (failed) return null;
+
+  if (!enabled) {
+    return (
+      <ChartCard
+        title={
+          <span className="flex items-center gap-2">
+            <Activity className="size-4 text-primary" />
+            {t("admin.dashboard.analytics.title")}
+          </span>
+        }
+        subtitle={t("admin.dashboard.analytics.desc")}
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/admin/analytics">
+              {t("admin.dashboard.analytics.viewAll")}
+              <ArrowRight className="size-3.5 ms-1 rtl-flip-x" />
+            </Link>
+          </Button>
+        }
+      >
+        <div className="py-10 flex flex-col items-center gap-3 text-center">
+          <div className="size-12 rounded-full bg-muted/40 flex items-center justify-center">
+            <BarChart2 className="size-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            {t("admin.dashboard.analytics.loadHint")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              haptic("light");
+              setEnabled(true);
+            }}
+          >
+            <Activity className="size-4 me-1.5" />
+            {t("admin.dashboard.analytics.load")}
+          </Button>
+        </div>
+      </ChartCard>
+    );
+  }
 
   const loading = !overview || !timeseries;
   // Older Workers predate the visitors aggregates — hide the live box

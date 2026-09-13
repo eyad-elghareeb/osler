@@ -98,9 +98,10 @@ export function AnalyticsDashboard() {
   const [range, setRange] = useState<AnalyticsRange>("24h");
   const [data, setData] = useState<AnalyticsState>(EMPTY_STATE);
   const [refreshing, setRefreshing] = useState(false);
-  const [openSections, setOpenSections] = useState<Set<SectionId>>(
-    new Set(["cloudflare", "volume"] as SectionId[])
-  );
+  // All sections start collapsed — expanding one fetches only its own data
+  // (per-section lazy loading), so a page visit costs zero telemetry reads
+  // until a section is actually opened.
+  const [openSections, setOpenSections] = useState<Set<SectionId>>(new Set());
   // Sections with a request in flight (drives per-panel skeletons).
   const [pending, setPending] = useState<Set<SectionId>>(new Set());
   // Sections that failed — their panels render data/empty states, not spinners.

@@ -1837,6 +1837,8 @@ export const en = {
     "admin.dashboard.analytics.title": "Live Analytics",
     "admin.dashboard.analytics.desc": "App activity over the last 24 hours.",
     "admin.dashboard.analytics.viewAll": "View all",
+"admin.dashboard.analytics.load": "Load analytics",
+"admin.dashboard.analytics.loadHint": "Analytics data isn't fetched from the server until you ask for it — tap to load the last 24 hours of activity.",
     "admin.dashboard.quickActions": "Quick actions",
     "admin.dashboard.shortcut.content": "Browse, upload and edit packs",
     "admin.dashboard.shortcut.review": "Approve pending submissions",

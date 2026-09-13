@@ -1832,6 +1832,8 @@ export const ar = {
     "admin.dashboard.analytics.title": "التحليلات المباشرة",
     "admin.dashboard.analytics.desc": "نشاط التطبيق خلال آخر 24 ساعة.",
     "admin.dashboard.analytics.viewAll": "عرض الكل",
+"admin.dashboard.analytics.load": "تحميل التحليلات",
+"admin.dashboard.analytics.loadHint": "لا تُجلب بيانات التحليلات من الخادم إلا عند الطلب — انقر لتحميل نشاط آخر 24 ساعة.",
     "admin.dashboard.quickActions": "إجراءات سريعة",
     "admin.dashboard.shortcut.content": "تصفّح الحزم وارفعها وحرّرها",
     "admin.dashboard.shortcut.review": "اعتماد المساهمات المعلّقة",
