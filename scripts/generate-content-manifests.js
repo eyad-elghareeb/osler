@@ -302,7 +302,9 @@ function getImageFileNames(dirPath) {
   const imagesDir = path.join(dirPath, "images");
   if (fs.existsSync(imagesDir) && fs.statSync(imagesDir).isDirectory()) {
     for (const e of fs.readdirSync(imagesDir, { withFileTypes: true })) {
-      if (e.isFile() && /\.(png|jpe?g|svg|gif|webp|avif|bmp)$/i.test(e.name)) out.push(e.name);
+      // Extension set mirrors the worker regen (index.ts) so local and R2
+      // manifests list the same entries for the same folder.
+      if (e.isFile() && /\.(png|jpe?g|svg|gif|webp|avif|bmp|mp3|m4a|mp4|webm|m4v|mov)$/i.test(e.name)) out.push(e.name);
     }
   }
   const mediaDir = path.join(dirPath, "media");

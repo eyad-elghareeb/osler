@@ -1669,12 +1669,16 @@ async function hybridPublish(env: Env, obj: any, body: string, targetPath?: stri
   //    `<r2_key_base>/media/<name>`, so we list those and copy each one to
   //    `content-files/<category>/<publishedDir>images/<name>` (resp. media/).
   //    We don't delete the draft copies — they're needed for re-publishing.
+  //    The `media/` pass runs for video packs only — every list() is a billed
+  //    subrequest on the free-plan cap, so plain articles/quizzes keep the
+  //    original single-prefix behavior.
   try {
     const publishedDir = fileSegment.includes("/")
       ? fileSegment.slice(0, fileSegment.lastIndexOf("/") + 1)
       : "";
     const r2 = env.CONTENT;
-    for (const assetFolder of ["images", "media"]) {
+    const assetFolders = obj.content_type === "video" ? ["images", "media"] : ["images"];
+    for (const assetFolder of assetFolders) {
       const draftAssetPrefix = `${obj.r2_key_base}/${assetFolder}/`;
       const publishedAssetPrefix = `content-files/${category}/${publishedDir}${assetFolder}/`;
       // list() returns up to 1000 keys per page — we cap at 5000 to avoid a
