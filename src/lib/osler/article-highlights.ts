@@ -27,6 +27,38 @@ export const ARTICLE_HIGHLIGHT_COLORS = [
   "#fdba74",
 ];
 
+/**
+ * Find the occurrence of `needle` nearest to `hintStart`. Without a hint
+ * this is the first occurrence; with one (the stored range that failed to
+ * verify, e.g. legacy offsets measured against a wider container) it is
+ * the closest match — so a repeated word like "The" paints where the user
+ * selected it, not at its first appearance in the paragraph.
+ */
+export function findNearestOccurrence(
+  hay: string,
+  needle: string,
+  hintStart: number | null
+): number {
+  if (!needle) return -1;
+  if (hintStart == null || !(hintStart >= 0)) return hay.indexOf(needle);
+  if (hay.slice(hintStart, hintStart + needle.length) === needle) return hintStart;
+  let best = -1;
+  let bestDist = Infinity;
+  let from = 0;
+  while (from < hay.length) {
+    const idx = hay.indexOf(needle, from);
+    if (idx < 0) break;
+    const dist = Math.abs(idx - hintStart);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = idx;
+    }
+    if (idx === hintStart) break;
+    from = idx + 1;
+  }
+  return best;
+}
+
 export function applyHighlightsToHtml(
   html: string,
   highlights: ArticleHighlightItem[],
@@ -73,9 +105,14 @@ export function applyHighlightsToHtml(
       if (sliced === hl.text) { s = rng.start; e = rng.end; }
     }
     if (s < 0) {
-      const needle = hl.text.toLowerCase();
-      if (!needle) continue;
-      const idx = fullText.toLowerCase().indexOf(needle);
+      if (!hl.text) continue;
+      const hint = rng && typeof rng.start === "number" && rng.start >= 0 ? rng.start : null;
+      // Prefer an exact-case match nearest the hint ("The" at a sentence
+      // start beats a mid-sentence "the"); fall back to case-insensitive.
+      let idx = findNearestOccurrence(fullText, hl.text, hint);
+      if (idx < 0) {
+        idx = findNearestOccurrence(fullText.toLowerCase(), hl.text.toLowerCase(), hint);
+      }
       if (idx < 0) continue;
       s = idx; e = idx + hl.text.length;
     }

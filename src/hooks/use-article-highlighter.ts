@@ -5,6 +5,7 @@ import {
   type ArticleSource,
   type ArticleHighlightItem,
   HL_CLASS,
+  findNearestOccurrence,
 } from "@/lib/osler/article-highlights";
 import {
   HIGHLIGHT_COLOR_KEYS,
@@ -165,9 +166,12 @@ export function useArticleHighlighter(
         if (sliced === hl.text) { s = rng.start; e = rng.end; }
       }
       if (s < 0) {
-        const needle = hl.text.toLowerCase();
-        if (!needle) continue;
-        const idx = fullText.toLowerCase().indexOf(needle);
+        if (!hl.text) continue;
+        const hint = rng && typeof rng.start === "number" && rng.start >= 0 ? rng.start : null;
+        let idx = findNearestOccurrence(fullText, hl.text, hint);
+        if (idx < 0) {
+          idx = findNearestOccurrence(fullText.toLowerCase(), hl.text.toLowerCase(), hint);
+        }
         if (idx < 0) continue;
         s = idx; e = idx + hl.text.length;
       }
@@ -268,7 +272,8 @@ export function useArticleHighlighter(
       const sel = doc.getSelection?.();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0).cloneRange();
-      const text = range.toString().trim();
+      const raw = range.toString();
+      const text = raw.trim();
       if (!text) return;
 
       let absStart = -1, absEnd = -1;
@@ -278,7 +283,8 @@ export function useArticleHighlighter(
         const headRange = doc.createRange();
         headRange.selectNodeContents(doc.body);
         headRange.setEnd(startRange.startContainer, startRange.startOffset);
-        absStart = headRange.toString().length;
+        const leadingWs = raw.length - raw.trimStart().length;
+        absStart = headRange.toString().length + leadingWs;
         absEnd = absStart + text.length;
       } catch {}
 

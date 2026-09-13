@@ -36,6 +36,7 @@ import { parseCalloutMarker, CALLOUT_DEFAULT_TITLES } from "@/lib/osler/callouts
 import { resolveArticleAsset } from "@/lib/osler/articles";
 import {
   HL_CLASS,
+  findNearestOccurrence,
   type ArticleHighlightItem,
 } from "@/lib/osler/article-highlights";
 import { resolveHighlightColor } from "@/lib/osler/highlight-palette";
@@ -97,7 +98,7 @@ function collectDomTextSegments(root: Node): DomTextSegment[] {
 /**
  * Resolve a highlight to absolute DOM text offsets. Prefers the stored
  * range (verified against the text, as the HTML pipeline does) and falls
- * back to a case-insensitive text search.
+ * back to the nearest text match (exact-case first, then case-insensitive).
  */
 function resolveHighlightOffsets(
   hl: ArticleHighlightItem,
@@ -109,9 +110,12 @@ function resolveHighlightOffsets(
       return { start: rng.start, end: rng.end };
     }
   }
-  const needle = hl.text.toLowerCase();
-  if (!needle) return null;
-  const idx = fullText.toLowerCase().indexOf(needle);
+  if (!hl.text) return null;
+  const hint = rng && typeof rng.start === "number" && rng.start >= 0 ? rng.start : null;
+  let idx = findNearestOccurrence(fullText, hl.text, hint);
+  if (idx < 0) {
+    idx = findNearestOccurrence(fullText.toLowerCase(), hl.text.toLowerCase(), hint);
+  }
   if (idx < 0) return null;
   return { start: idx, end: idx + hl.text.length };
 }

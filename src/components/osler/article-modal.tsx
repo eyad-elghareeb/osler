@@ -74,7 +74,8 @@ export function FloatingArticleModal({
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
       if (!el.contains(range.commonAncestorContainer)) return;
-      const text = sel.toString().trim();
+      const raw = sel.toString();
+      const text = raw.trim();
       if (!text) return;
 
       const headRange = document.createRange();
@@ -82,8 +83,11 @@ export function FloatingArticleModal({
       const endRange = range.cloneRange();
       endRange.collapse(false);
       headRange.setEnd(endRange.startContainer, endRange.startOffset);
-      const absEnd = headRange.toString().length;
-      const ranges = [{ start: absEnd - text.length, end: absEnd }];
+      const trailingWs = raw.length - raw.trimEnd().length;
+      const absEnd = headRange.toString().length - trailingWs;
+      const absStart = absEnd - text.length;
+      if (absStart < 0) return;
+      const ranges = [{ start: absStart, end: absEnd }];
 
       hlCtrl.onAdd(text, hlCtrl.highlightColor, ranges);
       sel.removeAllRanges();

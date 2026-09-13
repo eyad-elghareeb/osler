@@ -424,14 +424,16 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
       const range = sel.getRangeAt(0);
       if (!el.contains(range.commonAncestorContainer)) return;
 
-      const text = sel.toString().trim();
+      const raw = sel.toString();
+      const text = raw.trim();
       if (!text) return;
 
       const clonedRange = range.cloneRange();
       const headRange = document.createRange();
       headRange.selectNodeContents(el);
       headRange.setEnd(clonedRange.startContainer, clonedRange.startOffset);
-      const absStart = headRange.toString().length;
+      const leadingWs = raw.length - raw.trimStart().length;
+      const absStart = headRange.toString().length + leadingWs;
       const absEnd = absStart + text.length;
 
       hlCtrl.onAdd(

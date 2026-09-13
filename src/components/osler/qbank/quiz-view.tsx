@@ -1018,7 +1018,8 @@ export function QuizView({
     const applySelection = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
-      const text = sel.toString().trim();
+      const raw = sel.toString();
+      const text = raw.trim();
       if (!text) return;
 
       const range = sel.getRangeAt(0);
@@ -1048,15 +1049,33 @@ export function QuizView({
         }
         el = el.parentElement;
       }
+      if (!regionEl) return;
+      // Narrow to the inner prose container — the exact text the painter
+      // measures against. The choice button also holds the letter chip and
+      // the explanation card holds its heading/tags; measuring against the
+      // outer element shifts every offset and the paint falls back to the
+      // first text match (the reported "previous word" bug).
+      const textEl = regionEl.querySelector(".osler-prose") ?? regionEl;
 
-      // Absolute offsets inside the region's rendered text.
+      // Absolute offsets inside the region's rendered text. The raw range
+      // string keeps its surrounding whitespace while `text` is trimmed,
+      // so discount trailing whitespace — otherwise start drifts and the
+      // stored range never verifies at paint time.
+      const trailingWs = raw.length - raw.trimEnd().length;
       const head = document.createRange();
-      head.selectNodeContents(regionEl ?? document.body);
+      head.selectNodeContents(textEl);
       const endRange = range.cloneRange();
       endRange.collapse(false);
-      head.setEnd(endRange.startContainer, endRange.startOffset);
-      const absEnd = head.toString().length;
-      const ranges = [{ start: absEnd - text.length, end: absEnd }];
+      try {
+        head.setEnd(endRange.startContainer, endRange.startOffset);
+      } catch {
+        return;
+      }
+      const absEndRaw = head.toString().length;
+      const absEnd = absEndRaw - trailingWs;
+      const absStart = absEnd - text.length;
+      if (absStart < 0) return;
+      const ranges = [{ start: absStart, end: absEnd }];
 
       const hl: HighlightItem = {
         id: crypto.randomUUID(),
