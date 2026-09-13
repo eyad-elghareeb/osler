@@ -918,6 +918,13 @@ export const en = {
     "videos.subfolders": "{n} folders",
     "videos.openFolder": "Open folder",
     "videos.emptyDesc": "No videos match the current content-language filter.",
+    "videos.watched": "Watched",
+    "videos.unwatched": "Unwatched",
+    "videos.watchedCount": "{watched} of {total} watched",
+    "videos.markWatched": "Mark as watched",
+    "videos.markUnwatched": "Mark as unwatched",
+    "videos.noWatchedYet": "No watched videos yet — finished videos will appear here.",
+    "videos.allWatched": "Everything watched — nice work.",
 
     "profile.title": "Profile",
     "profile.user": "User",

@@ -19,6 +19,7 @@ import {
   Sun,
   ArrowDownUp,
   Check,
+  CheckCircle2,
 } from "lucide-react";
 import "plyr/dist/plyr.css";
 import {
@@ -31,7 +32,8 @@ import {
   formatDuration,
 } from "@/lib/osler/videos";
 import { ENGINE_META, collectPackUrls, findNodeByUid, getCachedCategoryTree } from "@/lib/osler/content";
-import { settings } from "@/lib/osler/storage";
+import { settings, videoWatch } from "@/lib/osler/storage";
+import { useVideoWatch } from "@/hooks/use-video-watch";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,7 +47,7 @@ import {
 import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
 import { useI18n } from "./i18n-provider";
-import { HubSkeleton, EmptyState, ComingSoonState, PageHeader, SectionHeading } from "./ui-primitives";
+import { HubSkeleton, EmptyState, ComingSoonState, PageHeader, SectionHeading, MetricBar } from "./ui-primitives";
 import { NavigationStack } from "./navigation-stack";
 import { ContentCacheButton } from "./content-cache-button";
 import {
@@ -127,6 +129,10 @@ export function VideosStudio({
   // Sort ("more options" layer). Content search lives in the global
   // search bar (AppShell → GlobalSearchPanel), not per-view.
   const [sortMode, setSortMode] = React.useState<"default" | "longest" | "shortest" | "title">("default");
+  // Watch-history filter — backed by the synced videoWatch store so viewed /
+  // unviewed state follows the user across devices.
+  const [watchFilter, setWatchFilter] = React.useState<"all" | "watched" | "unwatched">("all");
+  const watchedIds = useVideoWatch();
 
   // The active video being played (or null = hub view).
   const [activeVideo, setActiveVideo] = React.useState<(VideoResource & { nodeUid: string; nodePath: string }) | null>(null);
@@ -297,15 +303,27 @@ export function VideosStudio({
     openVideo({ ...playlist[idx - 1], nodeUid: activeVideo.nodeUid, nodePath: activeVideo.nodePath });
   }
 
-  // Sorted view of the current folder's videos (hooks stay above the
-  // player/skeleton early returns).
+  // Sorted + watch-filtered view of the current folder's videos (hooks stay
+  // above the player/skeleton early returns).
   const displayVideos = React.useMemo(() => {
-    const sorted = [...folderVideos];
-    if (sortMode === "longest") sorted.sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
-    else if (sortMode === "shortest") sorted.sort((a, b) => (a.duration ?? Infinity) - (b.duration ?? Infinity));
-    else if (sortMode === "title") sorted.sort((a, b) => a.title.localeCompare(b.title));
-    return sorted;
-  }, [folderVideos, sortMode]);
+    const filtered = watchFilter === "all"
+      ? [...folderVideos]
+      : folderVideos.filter((v) => (watchFilter === "watched") === watchedIds.has(v.id));
+    if (sortMode === "longest") filtered.sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+    else if (sortMode === "shortest") filtered.sort((a, b) => (a.duration ?? Infinity) - (b.duration ?? Infinity));
+    else if (sortMode === "title") filtered.sort((a, b) => a.title.localeCompare(b.title));
+    return filtered;
+  }, [folderVideos, sortMode, watchFilter, watchedIds]);
+
+  const watchedInFolder = React.useMemo(
+    () => folderVideos.filter((v) => watchedIds.has(v.id)).length,
+    [folderVideos, watchedIds],
+  );
+
+  const selectWatchFilter = React.useCallback((f: "all" | "watched" | "unwatched") => {
+    haptic("selection");
+    setWatchFilter(f);
+  }, []);
 
   // Warm thumbnail bytes as soon as the folder's videos resolve so card
   // images paint from cache instead of starting after mount + lazy.
@@ -464,6 +482,14 @@ export function VideosStudio({
       );
     }
     if (displayVideos.length === 0) {
+      // Filter-aware empty states: the history filters explain themselves
+      // instead of looking like missing content.
+      if (watchFilter === "watched") {
+        return <EmptyState icon={CheckCircle2} title={t("videos.watched")} description={t("videos.noWatchedYet")} />;
+      }
+      if (watchFilter === "unwatched") {
+        return <EmptyState icon={CheckCircle2} title={t("videos.unwatched")} description={t("videos.allWatched")} />;
+      }
       return <ComingSoonState icon={VideoIcon} />;
     }
     return (
@@ -517,6 +543,14 @@ export function VideosStudio({
                 {video.specialty && (
                   <div className="absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/60 text-white backdrop-blur-sm">
                     {video.specialty}
+                  </div>
+                )}
+                {/* Watched badge — state-only (the card root is already a
+                    button, so this must not be interactive). */}
+                {watchedIds.has(video.id) && (
+                  <div className="absolute top-2 end-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/60 text-white backdrop-blur-sm">
+                    <CheckCircle2 className="size-3" />
+                    {t("videos.watched")}
                   </div>
                 )}
               </div>
@@ -628,6 +662,47 @@ export function VideosStudio({
       {levelChildren.length === 0 && (
         <div className="mt-6">
           <SectionHeading icon={VideoIcon}>{t("videos.allVideos")}</SectionHeading>
+          {folderVideos.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 mb-3">
+              {/* Folder watch progress */}
+              <div className="flex items-center gap-2 flex-1 min-w-44">
+                <MetricBar
+                  value={watchedInFolder}
+                  max={folderVideos.length}
+                  color="success"
+                  label={t("videos.watchedCount", { watched: watchedInFolder, total: folderVideos.length })}
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                  {t("videos.watchedCount", { watched: watchedInFolder, total: folderVideos.length })}
+                </span>
+              </div>
+              {/* Watch-history filter pills */}
+              <div className="flex items-center gap-1.5" role="tablist" aria-label={t("videos.allVideos")}>
+                {([
+                  ["all", t("videos.all")],
+                  ["unwatched", t("videos.unwatched")],
+                  ["watched", t("videos.watched")],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={watchFilter === mode}
+                    onClick={() => selectWatchFilter(mode)}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                      watchFilter === mode
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/60 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {renderVideoGrid()}
         </div>
       )}
@@ -821,6 +896,23 @@ function VideoPlayerView({
   // resolved against the video's own pack folder (cloud → Worker Range
   // endpoint, local → bundled files). YouTube plays via the IFrame API.
   const streamUrl = isYouTube ? null : resolveVideoUrl(video, video.nodePath);
+  // Watch history for this video (synced store — marks from any device).
+  const watchedIds = useVideoWatch();
+  const isWatched = watchedIds.has(video.id);
+
+  const toggleWatched = React.useCallback(() => {
+    haptic("selection");
+    void videoWatch.toggle(video.id);
+  }, [video.id]);
+
+  // Mark-on-finish shared by both player backends. The effect closures below
+  // bind per video (streamUrl/videoId change per video), so the captured id
+  // is always the video that just ended.
+  const markFinished = React.useCallback(() => {
+    void videoWatch.mark(video.id).then((changed) => {
+      if (changed) haptic("success");
+    });
+  }, [video.id]);
 
   // A chapter jump stamps invidiousStart — clear it when the video
   // changes so the next embed doesn't inherit the old timestamp.
@@ -882,7 +974,10 @@ function VideoPlayerView({
         resetOnEnd: false,
         autoplay: true,
       });
-      p.on("ended", () => autoAdvanceRef.current());
+      p.on("ended", () => {
+        markFinished();
+        autoAdvanceRef.current();
+      });
       plyrRef.current = p;
       requestAnimationFrame(() => {
         const el = containerRef.current?.querySelector<HTMLElement>(".plyr");
@@ -940,7 +1035,10 @@ function VideoPlayerView({
             },
             onStateChange: (event: { data: number }) => {
               // 0 === YT.PlayerState.ENDED
-              if (event.data === 0) autoAdvanceRef.current();
+              if (event.data === 0) {
+                markFinished();
+                autoAdvanceRef.current();
+              }
             },
           },
         });
@@ -981,7 +1079,7 @@ function VideoPlayerView({
         plyrRef.current = null;
       };
     }
-  }, [isYouTube, videoId, streamUrl, invidiousMode, prefsReady]);
+  }, [isYouTube, videoId, streamUrl, invidiousMode, prefsReady, markFinished]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {
@@ -1070,6 +1168,12 @@ function VideoPlayerView({
             <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
           </Button>
         )}
+        <PlayerWatchedToggle
+          watched={isWatched}
+          onToggle={toggleWatched}
+          labelClassName="hidden md:inline"
+          className="hidden sm:flex"
+        />
         {playlist.length > 1 && (
           <PlayerAutoplayToggle
             autoplay={autoplay}
@@ -1222,26 +1326,29 @@ function VideoPlayerView({
               </span>
             </div>
             {/* Phone-only playback prefs — the top bar only fits back +
-                title + prev/next at 390px, so autoplay and the player
-                switch live here next to the playlist they govern. */}
-            {(playlist.length > 1 || (isYouTube && INVIDIOUS_HOST)) && (
-              <div className="flex sm:hidden items-center gap-2 mt-2.5">
-                {playlist.length > 1 && (
-                  <PlayerAutoplayToggle
-                    autoplay={autoplay}
-                    onToggle={toggleAutoplay}
-                    className="h-9"
-                  />
-                )}
-                {isYouTube && INVIDIOUS_HOST && (
-                  <PlayerSourceToggle
-                    invidiousMode={invidiousMode}
-                    onToggle={switchPlayer}
-                    className="h-9"
-                  />
-                )}
-              </div>
-            )}
+                title + prev/next at 390px, so autoplay, the watched toggle,
+                and the player switch live here next to the playlist. */}
+            <div className="flex sm:hidden items-center gap-2 mt-2.5">
+              <PlayerWatchedToggle
+                watched={isWatched}
+                onToggle={toggleWatched}
+                className="h-9"
+              />
+              {playlist.length > 1 && (
+                <PlayerAutoplayToggle
+                  autoplay={autoplay}
+                  onToggle={toggleAutoplay}
+                  className="h-9"
+                />
+              )}
+              {isYouTube && INVIDIOUS_HOST && (
+                <PlayerSourceToggle
+                  invidiousMode={invidiousMode}
+                  onToggle={switchPlayer}
+                  className="h-9"
+                />
+              )}
+            </div>
           </div>
 
           <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[max(env(safe-area-inset-bottom,0px),1rem)] lg:pb-2">
@@ -1291,6 +1398,13 @@ function VideoPlayerView({
                       </span>
                     )}
                   </div>
+                  {/* Watched state — hidden on the active row (the player
+                      header toggle already shows it there). */}
+                  {!isActive && watchedIds.has(v.id) && (
+                    <span title={t("videos.watched")} className="shrink-0 mt-1 text-success">
+                      <CheckCircle2 className="size-4" />
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1303,6 +1417,38 @@ function VideoPlayerView({
 }
 
 /* ── Player toggle pills (top bar on sm+, Up Next header on phones) ── */
+
+function PlayerWatchedToggle({
+  watched,
+  onToggle,
+  labelClassName,
+  className,
+}: {
+  watched: boolean;
+  onToggle: () => void;
+  labelClassName?: string;
+  className?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={watched}
+      className={cn(
+        "px-2.5 h-8 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors border",
+        watched
+          ? "bg-success-soft text-success border-success/30"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border-border",
+        className,
+      )}
+      title={watched ? t("videos.markUnwatched") : t("videos.markWatched")}
+    >
+      <CheckCircle2 className="size-3.5" />
+      <span className={labelClassName}>{t("videos.watched")}</span>
+    </button>
+  );
+}
 
 function PlayerAutoplayToggle({
   autoplay,

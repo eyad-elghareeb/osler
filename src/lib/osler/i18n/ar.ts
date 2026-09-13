@@ -919,6 +919,13 @@ export const ar = {
     "videos.subfolders": "{n} مجلدات",
     "videos.openFolder": "فتح المجلد",
     "videos.emptyDesc": "لا توجد فيديوهات مطابقة لفلتر لغة المحتوى الحالي.",
+    "videos.watched": "تمت مشاهدته",
+    "videos.unwatched": "غير مشاهَد",
+    "videos.watchedCount": "تمت مشاهدة {watched} من {total}",
+    "videos.markWatched": "تعليم كتمت مشاهدته",
+    "videos.markUnwatched": "تعليم كغير مشاهَد",
+    "videos.noWatchedYet": "لا توجد فيديوهات مشاهَدة بعد — ستظهر هنا بعد إتمام المشاهدة.",
+    "videos.allWatched": "تمت مشاهدة كل شيء — عمل رائع.",
 
     "profile.title": "الملف الشخصي",
     "profile.user": "مستخدم",
