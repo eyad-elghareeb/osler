@@ -4,7 +4,7 @@
  * Design contract (read before changing):
  *
  *   1. NO personally identifiable information. We collect:
- *        - Event type (page_view | web_vital | js_error | api_call | route_change)
+ *        - Event type (page_view | web_vital | js_error | api_call | route_change | ping)
  *        - Pathname only (NO query string, NO hash, NO referrer)
  *        - Numeric value (ms for timings, unitless for CLS)
  *        - Metric name (LCP | INP | CLS | TTFB | FCP)
@@ -14,6 +14,9 @@
  *        - A per-tab sessionId that rotates every 30 min — NOT a user id.
  *      We do NOT collect: user id, username, email, IP, full user-agent
  *      string, query parameters, cookies, or referrer URLs.
+ *      `ping` is a presence heartbeat (session id only — no path, metric,
+ *      or value). Volume dashboards exclude it; it exists solely so the
+ *      "visitors now" count sees idle-but-open tabs.
  *
  *   2. Best-effort delivery. If the network is offline, the worker is
  *      unreachable, or the user has telemetry disabled in their browser,
@@ -31,6 +34,11 @@
  *      api_call telemetry additionally samples successful requests (failures
  *      are always recorded) — the biggest event source by volume, and the
  *      trend dashboards don't need every datapoint.
+ *      Presence heartbeat: the timer tick also enqueues a `ping` when the
+ *      tab is visible and the buffer is otherwise empty (at most one per
+ *      HEARTBEAT_MIN_INTERVAL_MS). Without it, a tab left open on an
+ *      article emits nothing for minutes and wrongly drops out of the
+ *      "visitors now" window even though the user is still there.
  *
  *   4. Respects Do-Not-Track. If `navigator.doNotTrack === "1"` we never
  *      start collection. The provider also reads a localStorage flag so
@@ -51,7 +59,8 @@ export type AnalyticsEventType =
   | "web_vital"
   | "js_error"
   | "api_call"
-  | "route_change";
+  | "route_change"
+  | "ping";
 
 export type AnalyticsMetricName = "LCP" | "INP" | "CLS" | "TTFB" | "FCP" | "FID";
 
@@ -84,6 +93,10 @@ const MAX_BATCH_PER_POST = 50;
  *  are sampling-tolerant, and this cuts telemetry rows ~4x at scale. */
 const API_CALL_SAMPLE_RATE = 0.25;
 const SESSION_ROTATION_MS = 30 * 60 * 1000;
+/** Minimum gap between presence heartbeats. 2 minutes keeps every visible
+ *  tab inside the server's 5-minute "visitors now" window with ~2-3 pings
+ *  while costing ~30 rows per tab-hour — well inside the daily write cap. */
+const HEARTBEAT_MIN_INTERVAL_MS = 2 * 60 * 1000;
 /** Max consecutive network failures before we drop the buffer to avoid
  *  unbounded stale-event re-queueing (e.g. persistent 401 after logout). */
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -95,6 +108,7 @@ let listenersBound = false;
 let sessionId: string = "";
 let sessionIssuedAt: number = 0;
 let consecutiveFailures = 0;
+let lastPingAt = 0;
 
 // ─── Privacy / enabling ────────────────────────────────────────────────────
 //
@@ -438,13 +452,29 @@ function onVisibilityChange(): void {
 function onPageHide(): void { void flush(); }
 function onBeforeUnload(): void { void flush(); }
 
+/** Enqueue a presence heartbeat when the tab is visible but otherwise idle.
+ *  Real events already prove liveness, so pings only fill the gaps — at most
+ *  one per HEARTBEAT_MIN_INTERVAL_MS. Hidden tabs never ping (they age out
+ *  of the live window instead of ghosting). Delivery, batching, and failure
+ *  accounting ride the normal flush path. */
+function maybeHeartbeat(): void {
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+  if (buffer.length > 0) return;
+  if (Date.now() - lastPingAt < HEARTBEAT_MIN_INTERVAL_MS) return;
+  lastPingAt = Date.now();
+  track({ type: "ping" });
+}
+
 /** Start the periodic flush timer + lifecycle listeners. Safe to call
  *  multiple times — listeners are bound exactly once via the
  *  `listenersBound` flag (previous version leaked listeners on every call). */
 export function startAnalytics(): void {
   if (!analyticsEnabled()) return;
   if (!flushTimer) {
-    flushTimer = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
+    flushTimer = setInterval(() => {
+      maybeHeartbeat();
+      void flush();
+    }, FLUSH_INTERVAL_MS);
   }
   if (!listenersBound && typeof window !== "undefined") {
     window.addEventListener("visibilitychange", onVisibilityChange);

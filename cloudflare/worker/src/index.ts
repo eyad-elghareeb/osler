@@ -340,7 +340,7 @@ const SHARD_SCHEMA_SQL: Record<"sync" | "telemetry", string[]> = {
   id           TEXT PRIMARY KEY,
   session_id   TEXT NOT NULL,
   event_type   TEXT NOT NULL CHECK (event_type IN (
-    'page_view', 'web_vital', 'js_error', 'api_call', 'route_change'
+    'page_view', 'web_vital', 'js_error', 'api_call', 'route_change', 'ping'
   )),
   path         TEXT,
   metric_name  TEXT,
@@ -2486,7 +2486,7 @@ async function handleSearch(request: Request, env: Env, session: Session, log: L
 /* ── Analytics helpers ── */
 
 const ANALYTICS_VALID_EVENT_TYPES = new Set([
-  "page_view", "web_vital", "js_error", "api_call", "route_change",
+  "page_view", "web_vital", "js_error", "api_call", "route_change", "ping",
 ]);
 const ANALYTICS_VALID_METRICS = new Set([
   "LCP", "INP", "CLS", "TTFB", "FCP", "FID",
@@ -3210,7 +3210,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     const since24h = now() - 24 * 60 * 60 * 1000;
     const row = await telemetryDb(env).prepare(
       `SELECT
-         COUNT(*) AS total_events,
+         SUM(CASE WHEN event_type != 'ping' THEN 1 ELSE 0 END) AS total_events,
          COUNT(DISTINCT session_id) AS total_sessions,
          SUM(CASE WHEN event_type = 'page_view' THEN 1 ELSE 0 END) AS page_views,
          SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors,
@@ -3222,7 +3222,7 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     ).bind(since).first<any>();
     const row24 = await telemetryDb(env).prepare(
       `SELECT
-         COUNT(*) AS events_24h,
+         SUM(CASE WHEN event_type != 'ping' THEN 1 ELSE 0 END) AS events_24h,
          COUNT(DISTINCT session_id) AS sessions_24h,
          SUM(CASE WHEN event_type = 'js_error' THEN 1 ELSE 0 END) AS js_errors_24h
        FROM analytics_events WHERE created_at >= ?`
@@ -3230,10 +3230,13 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     // All-time aggregate: analytics_daily keeps every rolled-up day forever
     // (raw events prune at 30 days; the cron rolls up before pruning), and
     // today's raw events are counted live on top — no overlap, no double count.
+    // `ping` heartbeats are presence only: excluded from every volume count
+    // here (but included in the distinct-session counts above, which is what
+    // makes idle readers visible in "visitors now").
     const todayIso = utcDateString(now());
     const [rollupRow, todayCountRow] = await Promise.all([
-      telemetryDb(env).prepare("SELECT COALESCE(SUM(events), 0) AS n FROM analytics_daily WHERE day < ?").bind(todayIso).first<{ n: number }>().catch(() => ({ n: 0 })),
-      telemetryDb(env).prepare("SELECT COUNT(*) AS n FROM analytics_events WHERE created_at >= ?").bind(Date.parse(todayIso)).first<{ n: number }>().catch(() => ({ n: 0 })),
+      telemetryDb(env).prepare("SELECT COALESCE(SUM(events), 0) AS n FROM analytics_daily WHERE day < ? AND event_type != 'ping'").bind(todayIso).first<{ n: number }>().catch(() => ({ n: 0 })),
+      telemetryDb(env).prepare("SELECT SUM(CASE WHEN event_type != 'ping' THEN 1 ELSE 0 END) AS n FROM analytics_events WHERE created_at >= ?").bind(Date.parse(todayIso)).first<{ n: number }>().catch(() => ({ n: 0 })),
     ]);
     const allTimeEvents = (Number(rollupRow?.n) || 0) + (Number(todayCountRow?.n) || 0);
     return json({
@@ -3262,8 +3265,12 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
    *     minutes (one tiny indexed query). The session id rotates per tab
    *     every 30 minutes and carries no identity, so this counts active
    *     tabs — guests and signed-in alike, one id space, no double count.
-   *     Clients flush roughly every minute while open, so idle readers
-   *     stay visible without ghosting closed tabs for long.
+   *     Idle-but-open tabs stay visible through `ping` heartbeats (a
+   *     session-id-only presence event the client sends at most every 2
+   *     minutes while visible and otherwise idle — without it, a tab left
+   *     open on an article emits nothing for minutes and wrongly drops out
+   *     of the live count). Volume aggregates exclude pings; session and
+   *     visitor counts include them.
    * `?live=1` skips the heavy bucket scan and returns only
    * `{ range, visitorsNow, at }` — the cheap poll for "visitors now"
    * tickers (one 5-minute-window query per poll). */
