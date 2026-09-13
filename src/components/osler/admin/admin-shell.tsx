@@ -18,7 +18,6 @@ import {
   ShieldOff,
   Settings as SettingsIcon,
   ChevronDown,
-  PanelLeft,
   Home,
   BarChart3,
   Mail,
@@ -292,11 +291,11 @@ function AdminShellInner({ children }: AdminShellProps) {
           which read as scroll jank across admin pages. */}
       <header className="z-40 shrink-0 h-14 border-b border-border bg-background safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
-          {/* Sidebar toggle — desktop: collapse/expand; mobile: open slide-in sheet */}
-          <Button
+          {/* Logo doubles as the sidebar toggle — desktop: collapse/expand;
+              mobile: open slide-in sheet. The Dashboard nav item remains the
+              route home, so no separate menu button is needed. */}
+          <button
             type="button"
-            variant="ghost"
-            size="icon"
             onClick={() => {
               haptic("selection");
               if (window.innerWidth >= 768) {
@@ -306,16 +305,8 @@ function AdminShellInner({ children }: AdminShellProps) {
               }
             }}
             aria-label={t("admin.shell.menu")}
-            className="shrink-0"
-          >
-            <PanelLeft className="size-4" />
-          </Button>
-
-          {/* Logo — premium recipe: primary-soft tint + subtle elevation */}
-          <Link
-            href="/admin"
-            prefetch={false}
-            className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0"
+            title={t("admin.shell.menu")}
+            className="flex items-center gap-2.5 me-1 sm:me-3 shrink-0 rounded-lg px-1 py-1 text-start transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <OslerMark variant="line" className="size-6 text-primary shrink-0" />
             <div className="hidden sm:block leading-tight text-start">
@@ -326,7 +317,7 @@ function AdminShellInner({ children }: AdminShellProps) {
                 {t("admin.shell.tagline")}
               </div>
             </div>
-          </Link>
+          </button>
 
           {/* Spacer */}
           <div className="flex-1" />

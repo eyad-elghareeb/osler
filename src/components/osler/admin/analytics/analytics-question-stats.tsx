@@ -1,55 +1,29 @@
 "use client";
 
-import * as React from "react";
-import { BarChart3, Layers } from "lucide-react";
+import { BarChart3, Layers, ListChecks, MessagesSquare } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { ChartCard, MetricBar } from "@/components/osler/ui-primitives";
+import { ChartCard, MetricBar, StatTile } from "@/components/osler/ui-primitives";
 import { ChartEmpty, ChartLoading } from "@/components/osler/analytics-primitives";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { AdminApiError, questionStatsApi, type AdminQuestionStatsDetail, type QuestionStatsPack } from "@/components/osler/admin/admin-api";
+import type { QuestionStatsPack } from "@/components/osler/admin/admin-api";
 
 interface AnalyticsQuestionStatsPanelProps {
   packs: QuestionStatsPack[] | null;
   loading: boolean;
 }
 
-const CHOICE_LETTERS = "ABCDEFGHIJKL";
-
 /**
- * Admin view of the per-question choice counters (question_choice_stats).
- * Unlike the student-facing review percentages, this panel shows RAW
- * aggregates with no minimum-sample gate — admins may inspect small
- * cohorts. Pick a pack, see every question's answer distribution.
+ * Admin view of MCQ answer-data volume (question_choice_stats).
+ * Shows HOW MUCH data has been collected — packs tracked, questions with
+ * answers, total responses — instead of per-question choice breakdowns.
  */
 export function AnalyticsQuestionStatsPanel({ packs, loading }: AnalyticsQuestionStatsPanelProps) {
   const { t } = useI18n();
-  const [selected, setSelected] = React.useState<string>("");
-  const [detail, setDetail] = React.useState<AdminQuestionStatsDetail | null>(null);
-  const [detailLoading, setDetailLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
 
-  const uid = selected || (packs && packs.length > 0 ? packs[0].uid : "");
-
-  React.useEffect(() => {
-    if (!uid) {
-      setDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    setError(null);
-    questionStatsApi.detail(uid)
-      .then((d) => { if (!cancelled) setDetail(d); })
-      .catch((err) => { if (!cancelled) setError(err instanceof AdminApiError ? err.message : String(err)); })
-      .finally(() => { if (!cancelled) setDetailLoading(false); });
-    return () => { cancelled = true; };
-  }, [uid]);
-
-  const questions = detail
-    ? Object.entries(detail.stats).sort(([a], [b]) => a.localeCompare(b))
-    : [];
+  const totalPacks = packs?.length ?? 0;
+  const totalQuestions = packs?.reduce((n, p) => n + p.questions, 0) ?? 0;
+  const totalResponses = packs?.reduce((n, p) => n + p.responses, 0) ?? 0;
+  const maxResponses = Math.max(1, ...(packs?.map((p) => p.responses) ?? [1]));
+  const ranked = [...(packs ?? [])].sort((a, b) => b.responses - a.responses);
 
   return (
     <ChartCard
@@ -60,22 +34,6 @@ export function AnalyticsQuestionStatsPanel({ packs, loading }: AnalyticsQuestio
         </span>
       }
       subtitle={t("admin.analytics.qstats.desc")}
-      actions={
-        packs && packs.length > 0 ? (
-          <Select value={uid} onValueChange={setSelected}>
-            <SelectTrigger className="h-8 w-[220px] text-xs" aria-label={t("admin.analytics.qstats.select")}>
-              <SelectValue placeholder={t("admin.analytics.qstats.select")} />
-            </SelectTrigger>
-            <SelectContent>
-              {packs.map((p) => (
-                <SelectItem key={p.uid} value={p.uid} className="text-xs">
-                  {p.uid} ({t("admin.analytics.qstats.responses", { n: p.responses })})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : undefined
-      }
     >
       {loading ? (
         <ChartLoading />
@@ -85,51 +43,55 @@ export function AnalyticsQuestionStatsPanel({ packs, loading }: AnalyticsQuestio
           title={t("admin.analytics.noData")}
           description={t("admin.analytics.qstats.desc")}
         />
-      ) : error ? (
-        <p className="text-sm text-destructive">{error}</p>
-      ) : !detail || detailLoading ? (
-        <ChartLoading />
-      ) : questions.length === 0 ? (
-        <ChartEmpty
-          icon={BarChart3}
-          title={t("admin.analytics.noData")}
-          description={t("admin.analytics.qstats.desc")}
-        />
       ) : (
-        <ul className="space-y-4">
-          {questions.map(([qid, s]) => {
-            const modalIdx = s.c.indexOf(Math.max(...s.c));
-            return (
-              <li key={qid} className="space-y-2">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <code className="font-mono truncate text-foreground">{qid}</code>
-                  <span className="shrink-0 text-muted-foreground">
-                    {t("admin.analytics.qstats.respondents", { n: s.t })}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                  {s.c.map((count, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className={`size-5 shrink-0 rounded-full border flex items-center justify-center text-[11px] font-semibold ${
-                        idx === modalIdx
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border text-muted-foreground"
-                      }`}>
-                        {CHOICE_LETTERS[idx] ?? idx + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <MetricBar value={count} max={s.t} color="primary" label={`${qid}-${idx}`} />
-                      </div>
-                      <span className="shrink-0 w-14 text-end font-mono text-xs tabular-nums text-muted-foreground">
-                        {Math.round((count / s.t) * 100)}% · {count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <StatTile
+              compact
+              label={t("admin.analytics.qstats.kpi.packs")}
+              value={totalPacks.toLocaleString()}
+              icon={Layers}
+              color="primary"
+            />
+            <StatTile
+              compact
+              label={t("admin.analytics.qstats.kpi.questions")}
+              value={totalQuestions.toLocaleString()}
+              icon={ListChecks}
+              color="info"
+            />
+            <StatTile
+              compact
+              label={t("admin.analytics.qstats.kpi.responses")}
+              value={totalResponses.toLocaleString()}
+              icon={MessagesSquare}
+              color="success"
+            />
+          </div>
+
+          <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+            {ranked.map((p) => {
+              const avgPerQ = p.questions > 0 ? p.responses / p.questions : 0;
+              return (
+                <li key={p.uid} className="px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <code className="font-mono text-xs truncate min-w-0">{p.uid}</code>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                      {p.responses.toLocaleString()} {t("admin.analytics.qstats.col.responses")}
+                    </span>
+                  </div>
+                  <MetricBar value={p.responses} max={maxResponses} color="primary" label={p.uid} />
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>{t("admin.analytics.qstats.col.questions")}: {p.questions.toLocaleString()}</span>
+                    <span className="ms-auto">
+                      {t("admin.analytics.qstats.col.avgPerQ")}: {avgPerQ >= 10 ? Math.round(avgPerQ).toLocaleString() : avgPerQ.toFixed(1)}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </ChartCard>
   );

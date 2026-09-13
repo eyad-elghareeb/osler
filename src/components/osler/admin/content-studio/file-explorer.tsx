@@ -7,7 +7,9 @@
  * in either grid or list mode, with file-explorer-style interactions:
  *
  *   - Single-click selects a file.
- *   - Double-click opens the editor.
+ *   - Tapping the already-selected item opens it (touch-friendly — no
+ *     double-click / double-tap timing needed); double-click still works
+ *     as a fallback and is deduped against the tap-to-open.
  *   - Ctrl/Cmd+click toggles a file in the multi-selection.
  *   - Shift+click extends the selection from the anchor to the clicked file.
  *   - Ctrl/Cmd+A selects all files in the current view.
@@ -102,6 +104,17 @@ export function FileExplorer({
   const anchorRef = React.useRef<number | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const [contextNode, setContextNode] = React.useState<ContentTreeNode | null>(null);
+
+  // Dedupe rapid open triggers: tap-to-open on an already-selected item and
+  // the native dblclick event can fire back-to-back for the same node — the
+  // second open is a no-op navigation, so swallow it within a short window.
+  const lastOpenRef = React.useRef<{ id: string; at: number }>({ id: "", at: 0 });
+  const openDeduped = React.useCallback((node: ContentTreeNode) => {
+    const now = Date.now();
+    if (lastOpenRef.current.id === node.id && now - lastOpenRef.current.at < 600) return;
+    lastOpenRef.current = { id: node.id, at: now };
+    (node.kind === "folder" ? onOpenFolder : onOpen)(node);
+  }, [onOpen, onOpenFolder]);
 
   // ── Selection helpers ──────────────────────────────────────────────────
   const selectSingle = (idx: number, node: ContentTreeNode) => {
@@ -278,7 +291,7 @@ export function FileExplorer({
                 anchorRef.current = -1;
                 onSelectionChange(new Set([node.id]));
               }}
-              onOpen={onOpen}
+              onOpen={openDeduped}
               query={query}
               onDropOnFolder={onDropFiles ? collectDropOnFolder : undefined}
             />
@@ -289,8 +302,8 @@ export function FileExplorer({
               onSelectSingle={selectSingle}
               onToggle={toggleInSelection}
               onSelectRange={selectRange}
-              onOpenFolder={onOpenFolder}
-              onOpen={onOpen}
+              onOpenFolder={openDeduped}
+              onOpen={openDeduped}
               onDropOnFolder={onDropFiles ? collectDropOnFolder : undefined}
             />
           ) : (
@@ -300,8 +313,8 @@ export function FileExplorer({
               onSelectSingle={selectSingle}
               onToggle={toggleInSelection}
               onSelectRange={selectRange}
-              onOpenFolder={onOpenFolder}
-              onOpen={onOpen}
+              onOpenFolder={openDeduped}
+              onOpen={openDeduped}
               onDropOnFolder={onDropFiles ? collectDropOnFolder : undefined}
             />
           )}
@@ -351,6 +364,7 @@ function GridView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
             onClick={(e) => {
               if (e.ctrlKey || e.metaKey) onToggle(idx, node);
               else if (e.shiftKey) onSelectRange(idx);
+              else if (selectedIds.has(node.id)) (node.kind === "folder" ? onOpenFolder : onOpen)(node);
               else onSelectSingle(idx, node);
             }}
             onDoubleClick={() => (node.kind === "folder" ? onOpenFolder : onOpen)(node)}
@@ -501,6 +515,7 @@ function ListView({ items, selectedIds, onSelectSingle, onToggle, onSelectRange,
             onClick={(e) => {
               if (e.ctrlKey || e.metaKey) onToggle(idx, node);
               else if (e.shiftKey) onSelectRange(idx);
+              else if (selectedIds.has(node.id)) (node.kind === "folder" ? onOpenFolder : onOpen)(node);
               else onSelectSingle(idx, node);
             }}
             onDoubleClick={() => (node.kind === "folder" ? onOpenFolder : onOpen)(node)}

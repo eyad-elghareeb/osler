@@ -19,6 +19,10 @@ export interface AdminUser {
 export interface AdminUserDetail extends AdminUser {
   hasPassword: boolean;
   hasGeminiKey: boolean;
+  /** User's preferred Gemini model (non-sensitive). Absent on older Workers. */
+  geminiModel?: string | null;
+  /** User's Gemini max-wait ms (non-sensitive). Absent on older Workers. */
+  geminiMaxWait?: number | null;
   emailVerified: boolean;
   activeSessionCount: number;
   content: Array<{
@@ -493,12 +497,23 @@ export interface AnalyticsTimeseriesPoint {
   js_error: number;
   api_call: number;
   route_change: number;
+  /** Distinct visitor sessions in this bucket. Absent on older Workers. */
+  visitors?: number;
 }
 
 export interface AnalyticsTimeseries {
   range: AnalyticsRange;
   bucketMs: number;
+  /** Tabs with telemetry in the last 5 minutes. Absent on older Workers. */
+  visitorsNow?: number | null;
   series: AnalyticsTimeseriesPoint[];
+}
+
+/** Live-only visitors poll — the `?live=1` variant skips the bucket scan. */
+export interface AnalyticsVisitorsLive {
+  range: AnalyticsRange;
+  visitorsNow: number;
+  at: number;
 }
 
 export interface AnalyticsWebVitalMetric {
@@ -744,6 +759,8 @@ export const analyticsApi = {
                                                     req<AnalyticsOverview>(`/v1/admin/analytics/overview?range=${range}`),
   timeseries:      (range: AnalyticsRange = "24h") =>
                                                     req<AnalyticsTimeseries>(`/v1/admin/analytics/timeseries?range=${range}`),
+  /** Cheap "visitors now" poll: one 5-minute-window query, no bucket scan. */
+  visitorsLive:    ()                              => req<AnalyticsVisitorsLive>("/v1/admin/analytics/timeseries?range=24h&live=1"),
   webVitals:       (range: AnalyticsRange = "24h") =>
                                                     req<AnalyticsWebVitals>(`/v1/admin/analytics/web-vitals?range=${range}`),
   topPages:        (range: AnalyticsRange = "24h", limit = 20) =>

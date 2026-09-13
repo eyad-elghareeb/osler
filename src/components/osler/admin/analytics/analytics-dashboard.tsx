@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Cloud,
   BarChart2,
@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { AnalyticsFilters } from "./analytics-filters";
 import { AnalyticsOverviewTiles } from "./analytics-overview-tiles";
 import { AnalyticsTimeseriesPanel } from "./analytics-timeseries-chart";
+import { AnalyticsVisitorsPanel } from "./analytics-visitors";
 import { AnalyticsWebVitalsPanel } from "./analytics-web-vitals";
 import { AnalyticsTopPagesPanel } from "./analytics-top-pages";
 import { AnalyticsErrorsPanel } from "./analytics-errors";
@@ -69,6 +70,10 @@ const EMPTY_STATE: AnalyticsState = {
 const SECTIONS = ["cloudflare", "volume", "performance", "trafficErrors", "content", "qstats"] as const;
 type SectionId = (typeof SECTIONS)[number];
 
+/** Sections whose data never changes with the range filter — fetched once,
+ *  on first expand, instead of on every range switch. */
+const STATIC_SECTIONS: ReadonlySet<SectionId> = new Set(["cloudflare", "content", "qstats"]);
+
 function StatusDot({ status }: { status: "healthy" | "warning" | "critical" | "exceeded" }) {
   return (
     <span
@@ -87,11 +92,24 @@ export function AnalyticsDashboard() {
   const { toast } = useToast();
   const [range, setRange] = useState<AnalyticsRange>("24h");
   const [data, setData] = useState<AnalyticsState>(EMPTY_STATE);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [openSections, setOpenSections] = useState<Set<SectionId>>(
     new Set(["cloudflare", "volume"] as SectionId[])
   );
+  // Sections with a request in flight (drives per-panel skeletons).
+  const [pending, setPending] = useState<Set<SectionId>>(new Set());
+  // Sections that failed — their panels render data/empty states, not spinners.
+  const [failed, setFailed] = useState<Set<SectionId>>(new Set());
+
+  // Freshness markers (refs — logic-only, no re-render needed). Static
+  // sections load once ever; range sections reload when the range moves on.
+  // In-flight is keyed by what each request is fetching so a range switch
+  // mid-flight still fires the new range instead of hiding behind the old one.
+  const loadedStatic = useRef<Set<SectionId>>(new Set());
+  const loadedRange = useRef<Partial<Record<SectionId, AnalyticsRange>>>({});
+  const inFlight = useRef<Map<SectionId, AnalyticsRange | "static">>(new Map());
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
 
   const allExpanded = openSections.size === SECTIONS.length;
 
@@ -108,47 +126,122 @@ export function AnalyticsDashboard() {
     setOpenSections(allExpanded ? new Set() : new Set(SECTIONS));
   }, [allExpanded]);
 
-  const load = useCallback(async (r: AnalyticsRange, isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
-    try {
-      const [overview, timeseries, webVitals, topPages, errors, apiPerformance, content, qstatsPacks, cfLimits] =
-        await Promise.all([
-          analyticsApi.overview(r),
-          analyticsApi.timeseries(r),
-          analyticsApi.webVitals(r),
-          analyticsApi.topPages(r, 15),
-          analyticsApi.errors(r, 15),
-          analyticsApi.apiPerformance(r, 15),
-          analyticsApi.content(15),
-          questionStatsApi.packs(),
-          analyticsApi.cloudflareLimits().catch(() => null),
-        ]);
-      setData({
-        overview,
-        timeseries,
-        webVitals,
-        topPages,
-        errors,
-        apiPerformance,
-        content,
-        qstatsPacks: qstatsPacks.packs,
-        cfLimits,
-      });
-    } catch (err) {
-      const status = err instanceof AdminApiError ? err.status : 0;
-      toast({
-        title: t(status === 503 ? "admin.analytics.error.unavailableTitle" : "admin.analytics.error.title"),
-        description: err instanceof Error ? err.message : undefined,
-        variant: "destructive",
-      });
-      setData(EMPTY_STATE);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const failSection = useCallback((err: unknown, id: SectionId) => {
+    const status = err instanceof AdminApiError ? err.status : 0;
+    toast({
+      title: t(status === 503 ? "admin.analytics.error.unavailableTitle" : "admin.analytics.error.title"),
+      description: err instanceof Error ? err.message : undefined,
+      variant: "destructive",
+    });
+    setFailed((prev) => new Set(prev).add(id));
   }, [toast, t]);
 
-  useEffect(() => { void load(range); }, [load, range]);
+  /**
+   * Fetch data for the given sections only — skipped when already fresh
+   * (static sections load once; range sections reload only when the range
+   * changed) or already in flight. Collapsed sections never fetch, and
+   * expanding one loads just its own data.
+   */
+  const loadSections = useCallback(async (ids: SectionId[], r: AnalyticsRange) => {
+    const targets = ids.filter((id) => {
+      const want = STATIC_SECTIONS.has(id) ? ("static" as const) : r;
+      if (inFlight.current.get(id) === want) return false;
+      if (STATIC_SECTIONS.has(id)) return !loadedStatic.current.has(id);
+      return loadedRange.current[id] !== r;
+    });
+    if (targets.length === 0) return;
+    for (const id of targets) {
+      inFlight.current.set(id, STATIC_SECTIONS.has(id) ? "static" : r);
+    }
+    setPending((prev) => new Set([...prev, ...targets]));
+    setFailed((prev) => {
+      const next = new Set(prev);
+      targets.forEach((id) => next.delete(id));
+      return next;
+    });
+    await Promise.all(targets.map(async (id) => {
+      try {
+        switch (id) {
+          case "cloudflare": {
+            const cfLimits = await analyticsApi.cloudflareLimits().catch(() => null);
+            if (rangeRef.current !== r) return;
+            setData((d) => ({ ...d, cfLimits }));
+            break;
+          }
+          case "volume": {
+            const [overview, timeseries] = await Promise.all([
+              analyticsApi.overview(r),
+              analyticsApi.timeseries(r),
+            ]);
+            if (rangeRef.current !== r) return;
+            setData((d) => ({ ...d, overview, timeseries }));
+            break;
+          }
+          case "performance": {
+            const [webVitals, apiPerformance] = await Promise.all([
+              analyticsApi.webVitals(r),
+              analyticsApi.apiPerformance(r, 15),
+            ]);
+            if (rangeRef.current !== r) return;
+            setData((d) => ({ ...d, webVitals, apiPerformance }));
+            break;
+          }
+          case "trafficErrors": {
+            const [topPages, errors] = await Promise.all([
+              analyticsApi.topPages(r, 15),
+              analyticsApi.errors(r, 15),
+            ]);
+            if (rangeRef.current !== r) return;
+            setData((d) => ({ ...d, topPages, errors }));
+            break;
+          }
+          case "content": {
+            const content = await analyticsApi.content(15);
+            setData((d) => ({ ...d, content }));
+            break;
+          }
+          case "qstats": {
+            const packs = await questionStatsApi.packs();
+            setData((d) => ({ ...d, qstatsPacks: packs.packs }));
+            break;
+          }
+        }
+        if (STATIC_SECTIONS.has(id)) loadedStatic.current.add(id);
+        else loadedRange.current[id] = r;
+      } catch (err) {
+        failSection(err, id);
+      } finally {
+        inFlight.current.delete(id);
+      }
+    }));
+    setPending((prev) => {
+      const next = new Set(prev);
+      targets.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [failSection]);
+
+  // Load whatever the open sections still need — on mount, on expand, and
+  // on range change (where only stale range sections refetch).
+  useEffect(() => { void loadSections([...openSections], range); }, [loadSections, openSections, range]);
+
+  const refreshOpen = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      for (const id of openSections) {
+        if (STATIC_SECTIONS.has(id)) loadedStatic.current.delete(id);
+        else delete loadedRange.current[id];
+      }
+      await loadSections([...openSections], rangeRef.current);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadSections, openSections]);
+
+  /** A panel spins while its section fetches or while fresh data is missing
+   *  (and hasn't failed) — never because an unrelated section is loading. */
+  const sectionLoading = (id: SectionId, hasData: boolean) =>
+    pending.has(id) || (!hasData && !failed.has(id));
 
   const cfStatus = data.cfLimits?.status ?? "healthy";
   const cfBadge = data.cfLimits ? (
@@ -191,7 +284,7 @@ export function AnalyticsDashboard() {
           <AnalyticsFilters
             range={range}
             onRangeChange={setRange}
-            onRefresh={() => void load(range, true)}
+            onRefresh={() => void refreshOpen()}
             refreshing={refreshing}
           />
         </div>
@@ -208,7 +301,10 @@ export function AnalyticsDashboard() {
         open={openSections.has("cloudflare")}
         onToggle={() => toggleSection("cloudflare")}
       >
-        <AnalyticsCloudflareLimitsPanel data={data.cfLimits} loading={loading} />
+        <AnalyticsCloudflareLimitsPanel
+          data={data.cfLimits}
+          loading={sectionLoading("cloudflare", data.cfLimits != null)}
+        />
       </AnalyticsCollapsibleSection>
 
       {/* ── Telemetry Overview & Event Volume ── */}
@@ -230,7 +326,17 @@ export function AnalyticsDashboard() {
       >
         <div className="space-y-4">
           <AnalyticsOverviewTiles data={data.overview} />
-          <AnalyticsTimeseriesPanel data={data.timeseries} loading={loading} />
+          <AnalyticsTimeseriesPanel
+            data={data.timeseries}
+            loading={sectionLoading("volume", data.overview != null && data.timeseries != null)}
+          />
+          {/* Visitor curve rides on the already-fetched timeseries — zero
+              extra requests. Freshness follows the section (open / range /
+              manual refresh); the dashboard ticker covers live polling. */}
+          <AnalyticsVisitorsPanel
+            timeseries={data.timeseries}
+            loading={sectionLoading("volume", data.timeseries != null)}
+          />
         </div>
       </AnalyticsCollapsibleSection>
 
@@ -245,8 +351,14 @@ export function AnalyticsDashboard() {
         onToggle={() => toggleSection("performance")}
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <AnalyticsWebVitalsPanel data={data.webVitals} loading={loading} />
-          <AnalyticsApiPerformancePanel data={data.apiPerformance} loading={loading} />
+          <AnalyticsWebVitalsPanel
+            data={data.webVitals}
+            loading={sectionLoading("performance", data.webVitals != null)}
+          />
+          <AnalyticsApiPerformancePanel
+            data={data.apiPerformance}
+            loading={sectionLoading("performance", data.apiPerformance != null)}
+          />
         </div>
       </AnalyticsCollapsibleSection>
 
@@ -262,8 +374,14 @@ export function AnalyticsDashboard() {
         onToggle={() => toggleSection("trafficErrors")}
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <AnalyticsTopPagesPanel data={data.topPages} loading={loading} />
-          <AnalyticsErrorsPanel data={data.errors} loading={loading} />
+          <AnalyticsTopPagesPanel
+            data={data.topPages}
+            loading={sectionLoading("trafficErrors", data.topPages != null)}
+          />
+          <AnalyticsErrorsPanel
+            data={data.errors}
+            loading={sectionLoading("trafficErrors", data.errors != null)}
+          />
         </div>
       </AnalyticsCollapsibleSection>
 
@@ -284,7 +402,10 @@ export function AnalyticsDashboard() {
         open={openSections.has("content")}
         onToggle={() => toggleSection("content")}
       >
-        <AnalyticsContentPanel data={data.content} loading={loading} />
+        <AnalyticsContentPanel
+          data={data.content}
+          loading={sectionLoading("content", data.content != null)}
+        />
       </AnalyticsCollapsibleSection>
 
       {/* ── Question Choice Statistics ── */}
@@ -304,7 +425,10 @@ export function AnalyticsDashboard() {
         open={openSections.has("qstats")}
         onToggle={() => toggleSection("qstats")}
       >
-        <AnalyticsQuestionStatsPanel packs={data.qstatsPacks} loading={loading} />
+        <AnalyticsQuestionStatsPanel
+          packs={data.qstatsPacks}
+          loading={sectionLoading("qstats", data.qstatsPacks != null)}
+        />
       </AnalyticsCollapsibleSection>
     </div>
   );

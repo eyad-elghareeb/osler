@@ -8,7 +8,7 @@ import {
   Cell, Pie, PieChart, ResponsiveContainer, Tooltip,
 } from "recharts";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { ChartCard, MetricBar, StatTile } from "@/components/osler/ui-primitives";
+import { AnimatedDisclosure, ChartCard, MetricBar, StatTile } from "@/components/osler/ui-primitives";
 import {
   ChartContainer, ChartEmpty, ChartTooltip, chartSeries,
 } from "@/components/osler/analytics-primitives";
@@ -228,6 +228,11 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
           </div>
 
           {/* Insight cards: engine mix / freshness / adoption / accuracy bands */}
+          <AnimatedDisclosure
+            label={t("admin.analytics.content.sub.insights")}
+            icon={Layers}
+            defaultOpen
+          >
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
             <MiniCard title={t("admin.analytics.content.engineMix")}>
               <div className="relative">
@@ -336,13 +341,15 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
               </div>
             </MiniCard>
           </div>
+          </AnimatedDisclosure>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             {/* Top content */}
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("admin.analytics.content.topContent")}
-              </div>
+            <AnimatedDisclosure
+              label={t("admin.analytics.content.topContent")}
+              icon={Target}
+              defaultOpen
+            >
               <ul className="divide-y divide-border">
                 {data.packs.map((p, i) => {
                   const info = engineInfo(p.engine, i);
@@ -407,13 +414,14 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
                   );
                 })}
               </ul>
-            </div>
+            </AnimatedDisclosure>
 
             {/* Top learners */}
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("admin.analytics.content.topUsers")}
-              </div>
+            <AnimatedDisclosure
+              label={t("admin.analytics.content.topUsers")}
+              icon={Users}
+              defaultOpen
+            >
               <ul className="divide-y divide-border">
                 {data.topUsers.map((u, i) => {
                   const r = ratingAcc(u.accuracy);
@@ -447,7 +455,7 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
                   );
                 })}
               </ul>
-            </div>
+            </AnimatedDisclosure>
           </div>
         </div>
       )}

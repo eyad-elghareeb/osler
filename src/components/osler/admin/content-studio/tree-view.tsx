@@ -11,8 +11,9 @@
  *
  * Behaviors:
  *   - Folder click toggles expansion; the chevron rotates.
- *   - File click selects (single selection — replaces the current set).
- *   - File double-click opens the editor.
+ *   - File click selects (single selection — replaces the current set);
+ *     tapping the already-selected file opens it (touch-friendly — no
+ *     double-click needed).
  *   - When a search query is active the tree is filtered to matching subtrees
  *     and all folders in the filtered result are force-expanded.
  *
@@ -124,6 +125,7 @@ function TreeRow({ node, depth, expanded, selectedIds, searching, onToggle, onSe
 
   function handleClick() {
     if (isFolder) onToggle(node.id);
+    else if (selected) onOpen(node);
     else onSelect(node);
   }
 

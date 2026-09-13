@@ -40,6 +40,11 @@ const SERIES: Array<{
   { key: "js_error",  index: 4, labelKey: "admin.analytics.series.jsError" },
 ];
 
+/** Live "visitors now" ticker cadence. Each poll is one 5-minute-window
+ *  distinct-count query (`timeseries?live=1`, no bucket scan) and pauses
+ *  while the tab is hidden — the cheapest possible live signal. */
+const VISITORS_POLL_MS = 60_000;
+
 export function DashboardAnalyticsPreview() {
   const { t } = useI18n();
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
@@ -58,9 +63,29 @@ export function DashboardAnalyticsPreview() {
     return () => { alive = false; };
   }, []);
 
+  // Live ticker: refresh only the visitors-now number, never the curve.
+  useEffect(() => {
+    if (failed) return;
+    let alive = true;
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      analyticsApi.visitorsLive()
+        .then((live) => {
+          if (!alive) return;
+          setTimeseries((ts) => (ts ? { ...ts, visitorsNow: live.visitorsNow } : ts));
+        })
+        .catch(() => {});
+    }, VISITORS_POLL_MS);
+    return () => { alive = false; clearInterval(id); };
+  }, [failed]);
+
   if (failed) return null;
 
   const loading = !overview || !timeseries;
+  // Older Workers predate the visitors aggregates — hide the live box
+  // rather than charting a flat zero line.
+  const visitorsSupported =
+    timeseries != null && timeseries.series.some((p) => typeof p.visitors === "number");
   const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString());
   const formatX = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -85,8 +110,8 @@ export function DashboardAnalyticsPreview() {
     >
       {loading ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="rounded-xl border border-border p-3.5 space-y-2">
                 <Skeleton className="h-3 w-16" />
                 <Skeleton className="h-6 w-12" />
@@ -97,7 +122,7 @@ export function DashboardAnalyticsPreview() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className={visitorsSupported ? "grid grid-cols-2 lg:grid-cols-5 gap-3" : "grid grid-cols-2 lg:grid-cols-4 gap-3"}>
             <StatTile
               compact
               label={t("admin.analytics.kpi.events")}
@@ -126,6 +151,45 @@ export function DashboardAnalyticsPreview() {
               icon={AlertTriangle}
               color={overview.jsErrors ? "destructive" : "success"}
             />
+            {visitorsSupported && (
+              <StatTile
+                compact
+                label={t("admin.analytics.visitors.now")}
+                value={
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-success animate-pulse shrink-0" />
+                    {fmt(timeseries.visitorsNow)}
+                  </span>
+                }
+                icon={Users}
+                color="success"
+                footer={
+                  <div className="h-10 mt-2 -mb-1" aria-hidden>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={timeseries.series}
+                        margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="dash-grad-visitors" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={chartSeries(2)} stopOpacity={0.35} />
+                            <stop offset="95%" stopColor={chartSeries(2)} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          type="monotone"
+                          dataKey="visitors"
+                          stroke={chartSeries(2)}
+                          strokeWidth={1.5}
+                          fill="url(#dash-grad-visitors)"
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                }
+              />
+            )}
           </div>
 
           {timeseries.series.length === 0 ? (

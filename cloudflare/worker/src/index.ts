@@ -2879,7 +2879,7 @@ function groupChoiceRows(rows: Array<{ qid: string; choice: number; options_coun
  *
  * Routes:
  *   GET /v1/admin/analytics/overview?range=24h|7d|30d
- *   GET /v1/admin/analytics/timeseries?range=24h|7d|30d
+ *   GET /v1/admin/analytics/timeseries?range=24h|7d|30d[&live=1]
  *   GET /v1/admin/analytics/web-vitals?range=24h|7d|30d
  *   GET /v1/admin/analytics/top-pages?range=24h|7d|30d&limit=20
  *   GET /v1/admin/analytics/errors?range=24h|7d|30d&limit=20
@@ -3218,33 +3218,65 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
     }, 200, origin, log);
   }
 
-  /* ── Timeseries ── */
+  /* ── Timeseries (+ visitors) ──
+   * Carries visitor tracking on the same scan the event-volume chart
+   * already pays for — no extra endpoint, no extra full-range query:
+   *   - `visitors` per bucket = distinct session ids in that bucket,
+   *     computed as one more aggregate over the rows already read.
+   *   - `visitorsNow` = distinct session ids with an event in the last 5
+   *     minutes (one tiny indexed query). The session id rotates per tab
+   *     every 30 minutes and carries no identity, so this counts active
+   *     tabs — guests and signed-in alike, one id space, no double count.
+   *     Clients flush roughly every minute while open, so idle readers
+   *     stay visible without ghosting closed tabs for long.
+   * `?live=1` skips the heavy bucket scan and returns only
+   * `{ range, visitorsNow, at }` — the cheap poll for "visitors now"
+   * tickers (one 5-minute-window query per poll). */
   if (request.method === "GET" && path === "/v1/admin/analytics/timeseries") {
     const range = analyticsRangeLabel(url);
+    const t = now();
+    // Live-only poll: no bucket scan, just the 5-minute distinct count.
+    if (url.searchParams.get("live") === "1") {
+      const nowRow = await telemetryDb(env).prepare(
+        "SELECT COUNT(DISTINCT session_id) AS n FROM analytics_events WHERE created_at >= ?"
+      ).bind(t - 5 * 60 * 1000).first<any>();
+      return json({ range, visitorsNow: Number(nowRow?.n) ?? 0, at: t }, 200, origin, log);
+    }
     const rangeMs = analyticsRangeMs(url);
-    const since = now() - rangeMs;
+    const since = t - rangeMs;
     // Bucket: 1h for 24h, 6h for 7d, 1d for 30d. Keeps the chart readable.
     const bucketMs = range === "24h" ? 60 * 60 * 1000 : range === "7d" ? 6 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-    const rows = await telemetryDb(env).prepare(
-      `SELECT
-         (created_at / CAST(? AS INTEGER)) * CAST(? AS INTEGER) AS bucket,
-         event_type,
-         COUNT(*) AS count
-       FROM analytics_events
-       WHERE created_at >= ?
-       GROUP BY bucket, event_type
-       ORDER BY bucket ASC`
-    ).bind(bucketMs, bucketMs, since).all<any>();
+    const [rows, nowRow] = await Promise.all([
+      telemetryDb(env).prepare(
+        `SELECT
+           (created_at / CAST(? AS INTEGER)) * CAST(? AS INTEGER) AS bucket,
+           event_type,
+           COUNT(*) AS count,
+           COUNT(DISTINCT session_id) AS visitors
+         FROM analytics_events
+         WHERE created_at >= ?
+         GROUP BY bucket, event_type
+         ORDER BY bucket ASC`
+      ).bind(bucketMs, bucketMs, since).all<any>(),
+      telemetryDb(env).prepare(
+        "SELECT COUNT(DISTINCT session_id) AS n FROM analytics_events WHERE created_at >= ?"
+      ).bind(t - 5 * 60 * 1000).first<any>(),
+    ]);
     const buckets = new Map<number, Record<string, number>>();
+    // The distinct-session count repeats on every event_type row of a
+    // bucket — keep the max so each bucket reports it exactly once.
+    const bucketVisitors = new Map<number, number>();
     for (const r of (rows.results || [])) {
       const b = Number(r.bucket);
       if (!buckets.has(b)) buckets.set(b, {});
       buckets.get(b)![r.event_type] = (buckets.get(b)![r.event_type] ?? 0) + Number(r.count);
+      const v = Number(r.visitors);
+      if (Number.isFinite(v)) bucketVisitors.set(b, Math.max(bucketVisitors.get(b) ?? 0, v));
     }
     // Fill in missing buckets so the chart has continuous x-axis.
-    const series: Array<{ ts: number; page_view: number; web_vital: number; js_error: number; api_call: number; route_change: number }> = [];
+    const series: Array<{ ts: number; page_view: number; web_vital: number; js_error: number; api_call: number; route_change: number; visitors: number }> = [];
     const startBucket = Math.floor(since / bucketMs) * bucketMs;
-    const endBucket = Math.floor(now() / bucketMs) * bucketMs;
+    const endBucket = Math.floor(t / bucketMs) * bucketMs;
     for (let b = startBucket; b <= endBucket; b += bucketMs) {
       const ev = buckets.get(b) ?? {};
       series.push({
@@ -3254,9 +3286,10 @@ async function handleAnalytics(request: Request, env: Env, url: URL, origin: str
         js_error: ev["js_error"] ?? 0,
         api_call: ev["api_call"] ?? 0,
         route_change: ev["route_change"] ?? 0,
+        visitors: bucketVisitors.get(b) ?? 0,
       });
     }
-    return json({ range, bucketMs, series }, 200, origin, log);
+    return json({ range, bucketMs, visitorsNow: Number(nowRow?.n) ?? 0, series }, 200, origin, log);
   }
 
   /* ── Web Vitals ── */
@@ -4392,7 +4425,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           env.DB.prepare("SELECT COUNT(*) as n FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?").bind(targetId, now()).first(),
           env.DB.prepare("SELECT id, title, status, content_type, updated_at FROM content_objects WHERE created_by = ? ORDER BY updated_at DESC LIMIT 25").bind(targetId).all(),
         ]);
-        return json({ ...adminPublicUser(user), hasPassword: !!user.has_password, hasGeminiKey: !!user.gemini_api_key, emailVerified: !!user.email_verified_at && user.email_verified_at > 0, activeSessionCount: (sessions as any)?.n ?? 0, content: (content.results || []).map((c: any) => ({ id: c.id, title: c.title, status: c.status, contentType: c.content_type, updatedAt: c.updated_at })) }, 200, origin, log);
+        return json({ ...adminPublicUser(user), hasPassword: !!user.has_password, hasGeminiKey: !!user.gemini_api_key, geminiModel: user.gemini_model ?? null, geminiMaxWait: user.gemini_max_wait ?? null, emailVerified: !!user.email_verified_at && user.email_verified_at > 0, activeSessionCount: (sessions as any)?.n ?? 0, content: (content.results || []).map((c: any) => ({ id: c.id, title: c.title, status: c.status, contentType: c.content_type, updatedAt: c.updated_at })) }, 200, origin, log);
       }
       if (request.method === "PATCH") {
         const body = await readJson(request);

@@ -10,7 +10,6 @@ import {
   AtSign,
   Mail,
   ShieldCheck,
-  EyeOff,
   Hash,
   BookOpen,
   BrainCircuit,
@@ -161,7 +160,7 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
     setClearing(true);
     try {
       await adminApi.clearUserGeminiKey(user.id);
-      setUser((prev) => (prev ? { ...prev, hasGeminiKey: false } : prev));
+      setUser((prev) => (prev ? { ...prev, hasGeminiKey: false, geminiModel: null, geminiMaxWait: null } : prev));
       toast({ title: t("admin.userDetail.gemini.cleared") });
       setClearKeyOpen(false);
     } catch {
@@ -298,24 +297,46 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
         </div>
       </div>
 
-      {/* Gemini key action */}
-      {user.hasGeminiKey && (
-        <div className="rounded-xl border border-border bg-card p-5 md:p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <SectionHeading icon={EyeOff}>{t("admin.userDetail.gemini.clearKey")}</SectionHeading>
-              <p className="text-sm text-muted-foreground mt-1">{t("admin.userDetail.gemini.noKey")}</p>
+      {/* Gemini key — stored-key status plus the non-sensitive preferences
+          (model + max wait) so admins can see how the user's AI calls run
+          without ever seeing the key value itself. */}
+      <div className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">
+        <SectionHeading icon={KeyRound}>{t("admin.userDetail.gemini.title")}</SectionHeading>
+        {user.hasGeminiKey ? (
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0 flex-1">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("admin.userDetail.gemini.status")}</p>
+                <Badge variant="outline" className="border-success/30 text-success text-xs">
+                  {t("admin.userDetail.gemini.stored")}
+                </Badge>
+              </div>
+              <div className="space-y-1 min-w-0">
+                <p className="text-xs text-muted-foreground">{t("admin.userDetail.gemini.model")}</p>
+                <p className="text-sm font-medium font-mono truncate">{user.geminiModel ?? t("admin.userDetail.gemini.notSet")}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("admin.userDetail.gemini.maxWait")}</p>
+                <p className="text-sm font-medium tabular-nums">
+                  {user.geminiMaxWait != null
+                    ? t("admin.userDetail.gemini.maxWaitSec", { n: String(Math.round(user.geminiMaxWait / 1000)) })
+                    : t("admin.userDetail.gemini.notSet")}
+                </p>
+              </div>
             </div>
             <Button
               variant="destructive"
               size="sm"
+              className="shrink-0"
               onClick={() => { haptic("light"); setClearKeyOpen(true); }}
             >
               {t("admin.userDetail.gemini.clearKey")}
             </Button>
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">{t("admin.userDetail.gemini.noKey")}</p>
+        )}
+      </div>
 
       {/* Progress */}
       <div className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">

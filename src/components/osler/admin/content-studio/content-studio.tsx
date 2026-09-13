@@ -85,6 +85,22 @@ import { buildManifestAdminTree } from "./manifest-tree";
 
 // ── Main component ──────────────────────────────────────────────────────────
 
+/**
+ * Bounded-concurrency pool: `fn` runs over `items` with at most `size`
+ * workers in flight. Used to hydrate R2 listings without firing the whole
+ * category set at the Worker at once.
+ */
+async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await fn(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
 export interface ContentStudioProps {
   capabilities: AdminCapabilities;
 }
@@ -155,51 +171,84 @@ export function ContentStudio({ capabilities }: ContentStudioProps) {
   // Live progress of a direct-staging drag-and-drop upload.
   const [uploadJob, setUploadJob] = React.useState<UploadProgress | null>(null);
 
+  // Generation guard — overlapping reloads (refresh while a background pass
+  // is still running) must not let the older pass overwrite newer state.
+  const loadGen = React.useRef(0);
+  // Mirror of the open folder for hydration prioritization only (kept out of
+  // the callback deps so navigating never re-triggers a full reload).
+  const activeFolderRef = React.useRef(activeFolder);
+  activeFolderRef.current = activeFolder;
+
   // ── Load unified tree (managed objects + loose R2 keys) ──────────────
+  //
+  // Manifests paint first (see the mount effect below — memoized in
+  // content.ts, so revisits skip the network). This pass then hydrates the
+  // heavier R2 state progressively: the open category's content-files first
+  // with bounded concurrency, merging each category into the tree as it
+  // resolves instead of waiting for the slowest one. The rarely-populated
+  // content-staging scope fills in on a deferred second pass so it never
+  // blocks the interactive tree.
   const loadUnified = React.useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    const gen = ++loadGen.current;
+    const alive = () => gen === loadGen.current;
     if (!background) setUnifiedLoading(true);
     setR2Missing(false);
     let hydrationCompleted = false;
     try {
       const res = await adminApi.listAllContent("all");
+      if (!alive()) return;
       setUnifiedObjects(res);
 
-      // Fetch loose R2 keys (content-files/ + content-staging/) per category so
-      // folders created via `.keep` markers and files outside the managed set
-      // still render. Follows the cursor so categories with many keys don't
-      // silently truncate.
-      const r2ByCat: Record<string, R2Item[]> = {};
-      const stagedByCat: Record<string, R2Item[]> = {};
+      // Fetch loose R2 keys per category so folders created via `.keep`
+      // markers and files outside the managed set still render. Follows the
+      // cursor so categories with many keys don't silently truncate.
       if (capabilities.manageUsers) {
-        const results = await Promise.allSettled(
-          CATEGORIES.map(async (cat) => {
-            const collect = async (scope: "content-files" | "content-staging") => {
-              const items: R2Item[] = [];
-              let cursor: string | undefined;
-              for (let page = 0; page < 10; page++) {
-                const listed = await adminApi.listR2Keys(cat.folder, cursor, scope);
-                items.push(...(listed.items || []));
-                if (!listed.cursor) break;
-                cursor = listed.cursor;
-              }
-              return items;
-            };
-            const [r2, staged] = await Promise.all([collect("content-files"), collect("content-staging")]);
-            return { folder: cat.folder, items: r2, stagedItems: staged };
-          }),
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            r2ByCat[r.value.folder] = r.value.items;
-            stagedByCat[r.value.folder] = r.value.stagedItems;
-          } else if ((r.reason as any)?.status === 503) {
-            setR2Missing(true);
+        const activeCat = activeFolderRef.current.split("/")[0] || null;
+        const ordered = [...CATEGORIES].sort((a, b) =>
+          a.folder === activeCat ? -1 : b.folder === activeCat ? 1 : 0);
+        const collect = async (
+          folder: string,
+          scope: "content-files" | "content-staging",
+        ): Promise<R2Item[] | null> => {
+          const items: R2Item[] = [];
+          let cursor: string | undefined;
+          for (let page = 0; page < 10; page++) {
+            let listed;
+            try {
+              listed = await adminApi.listR2Keys(folder, cursor, scope);
+            } catch (err: any) {
+              if (err?.status === 503) setR2Missing(true);
+              return null;
+            }
+            if (!alive()) return null;
+            items.push(...(listed.items || []));
+            if (!listed.cursor) break;
+            cursor = listed.cursor;
           }
-        }
+          return items;
+        };
+        // Pass 1 — content-files, two categories at a time, hydrating each
+        // into the tree the moment it resolves.
+        await pool(ordered, 2, async (cat) => {
+          const items = await collect(cat.folder, "content-files");
+          if (items && alive()) {
+            setUnifiedR2ByCat((prev) => ({ ...prev, [cat.folder]: items }));
+          }
+        });
+        if (!alive()) return;
+        hydrationCompleted = true;
+        setHydrated(true);
+        if (!background) setUnifiedLoading(false);
+        // Pass 2 — staging scope (rarely populated) fills in right after.
+        await pool(ordered, 2, async (cat) => {
+          const items = await collect(cat.folder, "content-staging");
+          if (items && alive()) {
+            setUnifiedStagedByCat((prev) => ({ ...prev, [cat.folder]: items }));
+          }
+        });
+      } else {
+        hydrationCompleted = true;
       }
-      setUnifiedR2ByCat(r2ByCat);
-      setUnifiedStagedByCat(stagedByCat);
-      hydrationCompleted = true;
     } catch (err: any) {
       if (err?.status === 503) {
         setR2Missing(true);

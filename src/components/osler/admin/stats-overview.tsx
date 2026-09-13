@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Users, Activity, FileText, ClipboardList, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { EmptyState, StatTile, MetricBar } from "@/components/osler/ui-primitives";
 import { Skeleton } from "@/components/ui/skeleton";
+import { haptic } from "@/lib/osler/native";
 import { adminApi, type AdminStats } from "@/components/osler/admin/admin-api";
 
 /**
@@ -19,8 +21,14 @@ import { adminApi, type AdminStats } from "@/components/osler/admin/admin-api";
  */
 export function StatsOverview() {
   const { t } = useI18n();
+  const router = useRouter();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState(false);
+
+  function go(href: string) {
+    haptic("selection");
+    router.push(href);
+  }
 
   useEffect(() => {
     adminApi.stats()
@@ -73,6 +81,7 @@ export function StatsOverview() {
     icon: LucideIcon;
     color: "primary" | "success" | "warning" | "destructive" | "info";
     footerNote?: string;
+    href: string;
   }> = [
     {
       label: t("admin.stats.users"),
@@ -84,14 +93,16 @@ export function StatsOverview() {
       footerNote: (stats.guestCount ?? 0) > 0
         ? t("admin.users.guestsCount", { n: String(stats.guestCount) })
         : undefined,
+      href: "/admin/users",
     },
-    { label: t("admin.stats.sessions"), value: stats.sessionCount, icon: Activity, color: "info" },
-    { label: t("admin.stats.content"), value: stats.contentCount, icon: FileText, color: "success" },
+    { label: t("admin.stats.sessions"), value: stats.sessionCount, icon: Activity, color: "info", href: "/admin/users" },
+    { label: t("admin.stats.content"), value: stats.contentCount, icon: FileText, color: "success", href: "/admin/content" },
     {
       label: t("admin.stats.pending"),
       value: stats.pendingCount,
       icon: ClipboardList,
       color: stats.pendingCount ? "warning" : "primary",
+      href: "/admin/review",
     },
   ];
 
@@ -104,6 +115,7 @@ export function StatsOverview() {
           value={tile.value}
           icon={tile.icon}
           color={tile.color}
+          onClick={() => go(tile.href)}
           footer={
             <>
               <MetricBar
