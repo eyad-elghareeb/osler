@@ -5770,6 +5770,13 @@ export default {
         const r2Key = `content-files/${contentPath}`;
         const ext = contentPath.split(".").pop()?.toLowerCase() ?? "";
         const cacheable = ext !== "json" && ext !== "md";
+        // A `?v=<content-version>` request is immutable by construction — a
+        // publish or hotfix bumps the version stamp, so the key (which
+        // includes the query) can never go stale. Pack JSON/md clients
+        // already send it (see content-url.ts), so versioned pack files
+        // join the edge cache; unversioned JSON/md stay uncached.
+        const versionedJson = url.searchParams.has("v") && (ext === "json" || ext === "md");
+        const useEdgeCache = cacheable || versionedJson;
         // A Range request must never be answered from (or populate) the edge
         // cache: the cache key carries no Range, so a cached full body would
         // wrongly satisfy a partial request and vice versa.
@@ -5778,7 +5785,7 @@ export default {
         // Edge-cache lookup first — an immutable asset served from cache bills
         // neither a Worker subrequest nor an R2 read. Cache hits skip the R2
         // round-trip entirely, protecting the free-tier request budget.
-        if (cacheable && !isRangeRequest) {
+        if (useEdgeCache && !isRangeRequest) {
           try {
             const cached = await caches.default.match(new Request(request.url, { method: "GET" }));
             if (cached) return cached;
@@ -5826,7 +5833,7 @@ export default {
         // malicious/compromised content upload can never turn the Worker into
         // a script host. Images, PDFs and data files stay inline.
         const forceDownload = ["html", "htm", "svg", "js", "mjs", "xml", "xhtml"].includes(ext);
-        const cacheControl = cacheable ? "public, max-age=86400, immutable" : "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
+        const cacheControl = cacheable ? "public, max-age=86400, immutable" : versionedJson ? "public, max-age=31536000, immutable" : "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
         const contentHeaders: Record<string, string> = {
           "content-type": contentType,
           "cache-control": cacheControl,
@@ -5846,12 +5853,13 @@ export default {
           "cross-origin-resource-policy": "cross-origin",
         };
         const response = new Response(bodyObj.body, { status: range ? 206 : 200, headers: contentHeaders as any });
-        // Cache immutable assets at the Cloudflare edge. Workers responses are
-        // NOT auto-cached from cache-control headers alone; without an explicit
-        // Cache API put, every pack fetch bills a Worker request + an R2 read,
-        // which can exhaust the free-tier 100k requests/day under classroom load.
+        // Cache immutable assets and versioned pack files at the Cloudflare
+        // edge. Workers responses are NOT auto-cached from cache-control
+        // headers alone; without an explicit Cache API put, every pack fetch
+        // bills a Worker request + an R2 read, which can exhaust the
+        // free-tier 100k requests/day under classroom load.
         // Partial (206) responses are never cached — see isRangeRequest above.
-        if (cacheable && !range) {
+        if (useEdgeCache && !range) {
           const req = new Request(request.url, { method: "GET" });
           // Edge-cache population is post-response work. Waiting here adds a
           // second network/storage operation to every cold asset request even
