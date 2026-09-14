@@ -7,6 +7,7 @@ import {
   Play,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ArrowLeft,
   Clock,
   Tag,
@@ -20,6 +21,8 @@ import {
   ArrowDownUp,
   Check,
   CheckCircle2,
+  Minus,
+  Plus,
 } from "lucide-react";
 import "plyr/dist/plyr.css";
 import {
@@ -63,7 +66,34 @@ import { staggerContainer, fadeUp } from "@/lib/osler/motion";
 
 const VIDEO_COLOR = ENGINE_META.video.color;
 
-const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+/**
+ * Speeds offered in the Plyr settings menu and the quick preset list. The
+ * range extends past YouTube's native 2× cap: direct-file backends (mp4 /
+ * hls / r2 via Plyr) honor the full range through `video.playbackRate`,
+ * while the YouTube IFrame API rounds down to its nearest supported rate
+ * (≤2×) — the quick control still applies there, it just clamps.
+ */
+const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
+const SPEED_MIN = 0.25;
+const SPEED_MAX = 4;
+const SPEED_STEP = 0.1;
+
+function clampRate(next: number): number {
+  const rounded = Math.round(next * 100) / 100;
+  return Math.min(SPEED_MAX, Math.max(SPEED_MIN, rounded));
+}
+
+function parseStoredRate(val: string | null | undefined): number {
+  if (val == null) return 1;
+  const n = Number.parseFloat(val);
+  if (!Number.isFinite(n)) return 1;
+  return clampRate(n);
+}
+
+/** "1x" / "1.5x" / "2.25x" — trims float drift from repeated ±0.1 steps. */
+function fmtRate(r: number): string {
+  return `${String(Number.parseFloat(r.toFixed(2)))}x`;
+}
 
 /** Alternative YouTube frontend host (set via NEXT_PUBLIC_INVIDIOUS_HOST in .env.local). */
 const INVIDIOUS_HOST = process.env.NEXT_PUBLIC_INVIDIOUS_HOST;
@@ -77,6 +107,7 @@ const INVIDIOUS_HOST = process.env.NEXT_PUBLIC_INVIDIOUS_HOST;
  */
 let cachedAltHost: boolean | null = null;
 let cachedAutoplay: boolean | null = null;
+let cachedSpeed: number | null = null;
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
@@ -820,21 +851,29 @@ function VideoPlayerView({
   const [invidiousStart, setInvidiousStart] = React.useState<number | undefined>(undefined);
   const [showFullDescription, setShowFullDescription] = React.useState(false);
   const [autoplay, setAutoplay] = React.useState<boolean>(() => cachedAutoplay ?? true);
+  // Persisted playback speed (default 1×) — applied to whichever backend
+  // boots (YouTube IFrame or Plyr) and adjustable live via the quick
+  // control, presets, or the ] / [ / \ shortcuts.
+  const [playbackRate, setPlaybackRateState] = React.useState<number>(() => cachedSpeed ?? 1);
   // Gates player boot until the stored prefs resolve, so the first (and
   // only) boot uses the right player. Seeded from the module cache above,
   // so only the first open per page load waits (a microtask or two — the
   // stage is a black box meanwhile, indistinguishable from player load).
-  const [prefsReady, setPrefsReady] = React.useState<boolean>(() => cachedAltHost !== null && cachedAutoplay !== null);
+  const [prefsReady, setPrefsReady] = React.useState<boolean>(() => cachedAltHost !== null && cachedAutoplay !== null && cachedSpeed !== null);
 
   // Latest auto-advance behavior for the player event callbacks (which are
   // bound once at player init and would otherwise capture stale props).
   const autoAdvanceRef = React.useRef<() => void>(() => {});
+  // Latest rate for the same reason — the YT onReady closure and the Plyr
+  // init both read through this instead of a stale render capture.
+  const rateRef = React.useRef(playbackRate);
+  rateRef.current = playbackRate;
   autoAdvanceRef.current = () => {
     if (autoplay) onNext();
   };
 
   React.useEffect(() => {
-    if (cachedAltHost !== null && cachedAutoplay !== null) return;
+    if (cachedAltHost !== null && cachedAutoplay !== null && cachedSpeed !== null) return;
     let cancelled = false;
     // Never hold the player hostage on a wedged settings read — resolve
     // the gate on completion OR after a short fallback either way.
@@ -842,6 +881,7 @@ function VideoPlayerView({
       if (!cancelled) {
         cachedAltHost ??= false;
         cachedAutoplay ??= true;
+        cachedSpeed ??= 1;
         setPrefsReady(true);
       }
     }, 800);
@@ -856,6 +896,11 @@ function VideoPlayerView({
         cachedAutoplay = val == null ? true : val === "true";
         setAutoplay(cachedAutoplay);
       }),
+      settings.get("video-speed").then((val) => {
+        if (cancelled) return;
+        cachedSpeed = parseStoredRate(val);
+        setPlaybackRateState(cachedSpeed);
+      }),
     ])
       .catch(() => {})
       .finally(() => {
@@ -863,6 +908,7 @@ function VideoPlayerView({
         if (!cancelled) {
           cachedAltHost ??= false;
           cachedAutoplay ??= true;
+          cachedSpeed ??= 1;
           setPrefsReady(true);
         }
       });
@@ -912,6 +958,49 @@ function VideoPlayerView({
       if (changed) haptic("success");
     });
   }, [video.id]);
+
+  // ── Playback speed (shared by the YouTube + Plyr backends) ──
+  // The single setter persists the pref and pushes the rate live into
+  // whichever backend is mounted. Plyr honors the full 0.25–4× range;
+  // YouTube's IFrame API clamps to its supported rates (≤2×) internally.
+  // The alt-host (Invidious) iframe exposes no JS API, so live stepping is
+  // disabled there — the saved rate is still passed as `&speed=` when its
+  // embed (re)loads.
+  const applyRate = React.useCallback((next: number) => {
+    const clamped = clampRate(next);
+    if (clamped === rateRef.current) return;
+    haptic("selection");
+    cachedSpeed = clamped;
+    rateRef.current = clamped;
+    setPlaybackRateState(clamped);
+    void settings.set("video-speed", String(clamped));
+    const yt = youtubeRef.current;
+    if (yt && typeof yt.setPlaybackRate === "function") {
+      try {
+        yt.setPlaybackRate(clamped);
+      } catch {
+        /* player torn down mid-flight */
+      }
+    }
+    const plyr = plyrRef.current;
+    if (plyr) {
+      try {
+        plyr.speed = clamped;
+      } catch {
+        /* noop */
+      }
+    }
+  }, []);
+
+  const stepRate = React.useCallback((delta: number) => {
+    if (invidiousMode) return;
+    applyRate(rateRef.current + delta);
+  }, [applyRate, invidiousMode]);
+
+  const resetRate = React.useCallback(() => {
+    if (invidiousMode) return;
+    applyRate(1);
+  }, [applyRate, invidiousMode]);
 
   // A chapter jump stamps invidiousStart — clear it when the video
   // changes so the next embed doesn't inherit the old timestamp.
@@ -965,7 +1054,7 @@ function VideoPlayerView({
           "duration", "mute", "volume", "settings", "pip", "fullscreen",
         ],
         settings: ["speed"],
-        speed: { selected: 1, options: PLAYBACK_RATES },
+        speed: { selected: rateRef.current, options: PLAYBACK_RATES },
         keyboard: { focused: true, global: false },
         tooltips: { controls: true, seek: true },
         seekTime: 10,
@@ -977,6 +1066,11 @@ function VideoPlayerView({
         markFinished();
         autoAdvanceRef.current();
       });
+      try {
+        p.speed = rateRef.current;
+      } catch {
+        /* pre-ready player */
+      }
       plyrRef.current = p;
       requestAnimationFrame(() => {
         const el = containerRef.current?.querySelector<HTMLElement>(".plyr");
@@ -1030,7 +1124,13 @@ function VideoPlayerView({
           },
           events: {
             onReady: () => {
-              if (!destroyed) player.playVideo();
+              if (destroyed) return;
+              try {
+                player.setPlaybackRate(rateRef.current);
+              } catch {
+                /* rate unsupported on this video */
+              }
+              player.playVideo();
             },
             onStateChange: (event: { data: number }) => {
               // 0 === YT.PlayerState.ENDED
@@ -1115,6 +1215,15 @@ function VideoPlayerView({
             plyrRef.current.muted = !plyrRef.current.muted;
           }
           break;
+        case "videos.speedUp":
+          stepRate(SPEED_STEP);
+          break;
+        case "videos.speedDown":
+          stepRate(-SPEED_STEP);
+          break;
+        case "videos.speedReset":
+          resetRate();
+          break;
       }
     },
     { ignoreInputs: true },
@@ -1181,6 +1290,15 @@ function VideoPlayerView({
             className="hidden sm:flex"
           />
         )}
+        <PlayerSpeedControl
+          rate={playbackRate}
+          onStep={stepRate}
+          onReset={resetRate}
+          onPreset={applyRate}
+          disabled={invidiousMode}
+          disabledTitle={t("videos.speedStandardOnly")}
+          className="hidden sm:flex"
+        />
         {isYouTube && INVIDIOUS_HOST && (
           <PlayerSourceToggle
             invidiousMode={invidiousMode}
@@ -1207,7 +1325,7 @@ function VideoPlayerView({
           <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-e3 border border-border shrink-0">
             {!prefsReady ? null : invidiousMode && videoId ? (
               <iframe
-                src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}`}
+                src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}${playbackRate !== 1 ? `&speed=${playbackRate}` : ""}`}
                 className="absolute inset-0 w-full h-full"
                 style={{ border: "none" }}
                 allow="autoplay; encrypted-media; fullscreen"
@@ -1340,6 +1458,15 @@ function VideoPlayerView({
                   className="h-9"
                 />
               )}
+              <PlayerSpeedControl
+                rate={playbackRate}
+                onStep={stepRate}
+                onReset={resetRate}
+                onPreset={applyRate}
+                disabled={invidiousMode}
+                disabledTitle={t("videos.speedStandardOnly")}
+                className="h-9"
+              />
               {isYouTube && INVIDIOUS_HOST && (
                 <PlayerSourceToggle
                   invidiousMode={invidiousMode}
@@ -1478,6 +1605,104 @@ function PlayerAutoplayToggle({
       <ListVideo className="size-3.5" />
       <span className={labelClassName}>{t("videos.autoplay")}</span>
     </button>
+  );
+}
+
+/* ── Playback-speed quick control (−0.1 / rate / +0.1 + presets) ──
+ *
+ * One control drives both live backends: Plyr honors the full 0.25–4×
+ * range, YouTube's IFrame API clamps to its supported rates (≤2×). The
+ * center badge shows the current rate and resets to 1× on tap; the
+ * chevron opens the preset list for far jumps (e.g. straight to 3×).
+ * Disabled (with an explanatory tooltip) in alt-host mode, whose iframe
+ * exposes no live speed API — the saved rate is still passed to its embed
+ * as `&speed=` on (re)load.
+ */
+function PlayerSpeedControl({
+  rate,
+  onStep,
+  onReset,
+  onPreset,
+  disabled,
+  disabledTitle,
+  className,
+}: {
+  rate: number;
+  onStep: (delta: number) => void;
+  onReset: () => void;
+  onPreset: (rate: number) => void;
+  disabled?: boolean;
+  disabledTitle?: string;
+  className?: string;
+}) {
+  const { t } = useI18n();
+  const stepClass = cn(
+    "size-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors",
+    "disabled:pointer-events-none disabled:opacity-50",
+  );
+  return (
+    <div
+      role="group"
+      aria-label={t("videos.speed")}
+      title={disabled ? disabledTitle : undefined}
+      className={cn(
+        "flex items-center gap-0.5 rounded-md border border-border h-8 px-0.5 bg-card",
+        disabled && "opacity-60",
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onStep(-SPEED_STEP)}
+        disabled={disabled}
+        aria-label={t("videos.speedDown")}
+        title={t("videos.speedDown")}
+        className={stepClass}
+      >
+        <Minus className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={disabled}
+        aria-label={t("videos.speedReset")}
+        title={t("videos.speedReset")}
+        className="min-w-11 px-1 h-7 rounded text-xs font-bold tabular-nums text-foreground hover:bg-muted/60 transition-colors disabled:pointer-events-none disabled:opacity-50"
+      >
+        {fmtRate(rate)}
+      </button>
+      <button
+        type="button"
+        onClick={() => onStep(SPEED_STEP)}
+        disabled={disabled}
+        aria-label={t("videos.speedUp")}
+        title={t("videos.speedUp")}
+        className={stepClass}
+      >
+        <Plus className="size-3.5" />
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={t("videos.speedPresets")}
+            title={t("videos.speedPresets")}
+            className={cn(stepClass, "size-6")}
+          >
+            <ChevronDown className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" aria-label={t("videos.speed")}>
+          {PLAYBACK_RATES.map((preset) => (
+            <DropdownMenuItem key={preset} onClick={() => onPreset(preset)}>
+              {fmtRate(preset)}
+              {Math.abs(preset - rate) < 0.001 && <Check className="size-3.5 ms-auto" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

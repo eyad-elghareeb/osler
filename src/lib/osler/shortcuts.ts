@@ -76,6 +76,9 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   action("videos.fullscreen", "videos", "f"),
   action("videos.mute", "videos", "m"),
   action("videos.exit", "videos", "escape"),
+  action("videos.speedUp", "videos", "]"),
+  action("videos.speedDown", "videos", "["),
+  action("videos.speedReset", "videos", "\\"),
 ];
 
 const STORAGE_KEY = "osler_shortcuts_v1";
