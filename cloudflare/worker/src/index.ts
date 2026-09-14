@@ -43,6 +43,7 @@ import { handleMcpRequest, listApiTokens, mintApiToken, revokeApiToken } from ".
 import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handleRegister, handleServerMetadata, handleToken, type McpOAuthHost } from "./mcp/oauth";
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
 import { parseHttpRange } from "./http-range";
+import { buildAdminUsersListQuery } from "./admin-users";
 // Durable Object classes must be reachable from the entry module for the
 // wrangler migration to bind them.
 export { UserSyncHub };
@@ -4512,21 +4513,24 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
     if (request.method === "GET" && path === "/v1/admin/users") {
       const page = Math.max(1, Number(url.searchParams.get("page") || 1));
-      const q = (url.searchParams.get("q") || "").trim();
       const limit = 25; const offset = (page - 1) * limit;
-      let rows: any, total: any;
-      if (q) {
-        const like = `%${escapeLike(q)}%`;
-        [rows, total] = await Promise.all([
-          env.DB.prepare("SELECT * FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(like, like, like, limit, offset).all(),
-          env.DB.prepare("SELECT COUNT(*) as n FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'").bind(like, like, like).first(),
-        ]);
-      } else {
-        [rows, total] = await Promise.all([
-          env.DB.prepare("SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all(),
-          env.DB.prepare("SELECT COUNT(*) as n FROM users").first(),
-        ]);
-      }
+      // Attribute filters + sort live in admin-users.ts (pure, unit-tested).
+      // Every filter is tri-state ("1" / "0" / absent); unknown role/sort
+      // values fall back to no-constraint / default order (never 500).
+      const { where, binds, orderBy } = buildAdminUsersListQuery({
+        q: url.searchParams.get("q"),
+        role: url.searchParams.get("role"),
+        hasPassword: url.searchParams.get("hasPassword"),
+        hasGoogle: url.searchParams.get("hasGoogle"),
+        hasEmail: url.searchParams.get("hasEmail"),
+        hasKey: url.searchParams.get("hasKey"),
+        verified: url.searchParams.get("verified"),
+        sort: url.searchParams.get("sort"),
+      });
+      const [rows, total] = await Promise.all([
+        env.DB.prepare(`SELECT * FROM users ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all(),
+        env.DB.prepare(`SELECT COUNT(*) as n FROM users ${where}`).bind(...binds).first(),
+      ]);
       // Guests (local-only sessions, reported via /v1/guest/presence) ride
       // along so the admin Users section shows every learner by name.
       // guest_presence lives in core; each guest's answered-question count
@@ -4537,7 +4541,8 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       let guests: Array<{ aid: string; displayName: string; firstSeenAt: number; lastSeenAt: number; answers: number }> = [];
       let guestTotal = 0;
       try {
-        const like = q ? `%${escapeLike(q)}%` : null;
+        const guestQ = (url.searchParams.get("q") || "").trim();
+        const like = guestQ ? `%${escapeLike(guestQ)}%` : null;
         const where = like ? "WHERE display_name LIKE ? ESCAPE '\\' " : "";
         const binds: unknown[] = like ? [like] : [];
         const [grows, gtotal] = await Promise.all([
@@ -4561,7 +4566,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       } catch {
         // migration 0005 not applied yet — guests stay empty
       }
-      return json({ users: (rows.results || []).map(adminPublicUser), total: (total as any)?.n ?? 0, page, limit, guests, guestTotal }, 200, origin, log);
+      return json({ users: ((rows.results as any[]) || []).map(adminPublicUser), total: (total as any)?.n ?? 0, page, limit, guests, guestTotal }, 200, origin, log);
     }
     const sessionsMatch = path.match(/^\/v1\/admin\/users\/([^/]+)\/sessions$/);
     if (sessionsMatch && request.method === "GET") {
