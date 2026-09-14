@@ -93,22 +93,28 @@ const OslerThemeContext = React.createContext<OslerThemeContextValue | null>(nul
  * navigation bar, iOS standalone status bar) at the actually-painted app
  * background. The static media-bound fallbacks in <head> track the OS
  * scheme, but the app theme can override it (pinned dark/light choice,
- * custom palette), so every theme application collapses them into a single
- * exact meta holding the resolved `--background`.
+ * custom palette), so every theme application rewrites their content to
+ * the resolved `--background` — whichever media query matches, the OS
+ * gets the app background.
+ *
+ * Updates are attribute-only: the metas are rendered by Next's metadata
+ * boundary, and removing nodes it manages breaks its reconciliation
+ * (dead UI after hydration). Mutating `content` is invisible to React.
  */
 function syncPwaThemeColor() {
   if (typeof document === "undefined") return;
   try {
     const bg = getComputedStyle(document.documentElement).getPropertyValue("--background").trim();
     if (!bg) return;
-    document.head.querySelectorAll('meta[name="theme-color"][media]').forEach((m) => m.remove());
-    let meta = document.head.querySelector('meta[name="theme-color"]');
-    if (!meta) {
-      meta = document.createElement("meta");
+    const metas = document.head.querySelectorAll('meta[name="theme-color"]');
+    if (metas.length === 0) {
+      const meta = document.createElement("meta");
       meta.setAttribute("name", "theme-color");
+      meta.setAttribute("content", bg);
       document.head.appendChild(meta);
+      return;
     }
-    meta.setAttribute("content", bg);
+    metas.forEach((m) => m.setAttribute("content", bg));
   } catch {
     // ignore — the static fallback metas stay in place
   }
