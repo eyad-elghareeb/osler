@@ -783,19 +783,18 @@ export function TrackerTab({
         {overall.attempted === 0 ? (
           <EmptyState icon={Activity} title={t("qbank.tracker.noRecords")} />
         ) : (
-          <SectionList className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <SectionList className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             <SectionItem>
-              <StatTile compact label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
+              <StatTile label={t("qbank.tracker.attempted")} value={overall.attempted} icon={ListChecks} color="primary" />
             </SectionItem>
             <SectionItem>
-              <StatTile compact label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
+              <StatTile label={t("qbank.tracker.correctLabel")} value={overall.correct} icon={CheckCircle2} color="success" />
             </SectionItem>
             <SectionItem>
-              <StatTile compact label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
+              <StatTile label={t("qbank.tracker.wrongLabel")} value={overall.wrong} icon={X} color="destructive" />
             </SectionItem>
             <SectionItem>
               <StatTile
-                compact
                 label={t("qbank.tracker.accuracy")}
                 value={`${overall.accuracy}%`}
                 icon={Target}
@@ -814,7 +813,6 @@ export function TrackerTab({
             </SectionItem>
             <SectionItem>
               <StatTile
-                compact
                 label={t("qbank.tracker.avgTime")}
                 value={timingStats.avgTimeMs > 0 ? formatMs(timingStats.avgTimeMs) : "—"}
                 icon={Timer}
@@ -837,7 +835,6 @@ export function TrackerTab({
             </SectionItem>
             <SectionItem>
               <StatTile
-                compact
                 label={t("qbank.tracker.firstAttempt")}
                 value={timingStats.firstTryAcc > 0 ? `${timingStats.firstTryAcc}%` : "—"}
                 icon={Target}
