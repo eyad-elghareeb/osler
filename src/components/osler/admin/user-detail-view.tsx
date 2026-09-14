@@ -438,48 +438,38 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
           <LoadingState label={t("admin.table.loading")} />
         ) : progress ? (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <StatTile
-                compact
-                label={t("admin.userDetail.activity.totalRecords")}
-                value={activity.totalRecords}
-                icon={Activity}
-                color="primary"
-              />
-              <StatTile
-                compact
-                label={t("admin.userDetail.activity.mostActive")}
-                value={activity.mostActive ? t(`admin.userDetail.activity.kind.${activity.mostActive.kind}` as any) : "—"}
-                icon={activity.mostActive?.icon ?? Trophy}
-                color={activity.mostActive?.color ?? "warning"}
-                footer={
-                  activity.mostActive ? (
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {t("admin.userDetail.progress.records", { n: String(activity.mostActive.count) })}
-                    </span>
-                  ) : undefined
-                }
-              />
-              <StatTile
-                compact
-                label={t("admin.userDetail.activity.lastActive")}
-                value={activity.lastActiveAt > 0 ? new Date(activity.lastActiveAt).toLocaleDateString() : t("admin.userDetail.progress.never")}
-                icon={History}
-                color="info"
-              />
-              <StatTile
-                compact
-                label={t("admin.userDetail.activity.accountAge")}
-                value={t("admin.userDetail.activity.days", { n: String(activity.accountAgeDays) })}
-                icon={Calendar}
-                color="success"
-                footer={
-                  <span className="text-xs text-muted-foreground">
-                    {t("admin.userDetail.activity.joinedOn", { date: new Date(user.createdAt).toLocaleDateString() })}
+            {/* Compact summary — the per-area grid below already carries the
+                counts, so the insights stay a single line, not four
+                half-empty tiles. */}
+            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+              <div className="flex items-center gap-1.5">
+                <dt className="text-muted-foreground">{t("admin.userDetail.activity.totalRecords")}</dt>
+                <dd className="font-semibold tabular-nums">{activity.totalRecords}</dd>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <dt className="text-muted-foreground">{t("admin.userDetail.activity.mostActive")}</dt>
+                <dd className="font-semibold">
+                  {activity.mostActive
+                    ? `${t(`admin.userDetail.activity.kind.${activity.mostActive.kind}` as any)} · ${t("admin.userDetail.progress.records", { n: String(activity.mostActive.count) })}`
+                    : "—"}
+                </dd>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <dt className="text-muted-foreground">{t("admin.userDetail.activity.lastActive")}</dt>
+                <dd className="font-semibold">
+                  {activity.lastActiveAt > 0 ? new Date(activity.lastActiveAt).toLocaleDateString() : t("admin.userDetail.progress.never")}
+                </dd>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <dt className="text-muted-foreground">{t("admin.userDetail.activity.accountAge")}</dt>
+                <dd className="font-semibold">
+                  {t("admin.userDetail.activity.days", { n: String(activity.accountAgeDays) })}
+                  <span className="font-normal text-muted-foreground">
+                    {" "}· {t("admin.userDetail.activity.joinedOn", { date: new Date(user.createdAt).toLocaleDateString() })}
                   </span>
-                }
-              />
-            </div>
+                </dd>
+              </div>
+            </dl>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
               {activity.kinds.map((k) => (
                 <StatTile
