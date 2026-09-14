@@ -685,11 +685,11 @@ export function QuizView({
 
               if (showResult) {
                 if (isCorrect) {
-                  stateClass = "border-success bg-success/10";
+                  stateClass = "border-success bg-success-soft";
                   letterBg = "bg-success text-success-foreground border-success";
                   letterContent = <Check className="size-4" />;
                 } else if (isSelected && !isCorrect) {
-                  stateClass = "border-destructive bg-destructive/10";
+                  stateClass = "border-destructive bg-destructive-soft";
                   letterBg = "bg-destructive text-destructive-foreground border-destructive";
                   letterContent = <X className="size-4" />;
                 } else {
@@ -864,7 +864,7 @@ export function QuizView({
                 onClick={() => onRate(question.id, "hard")}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                   qRating === "hard"
-                    ? "border-destructive bg-destructive/10 text-destructive"
+                    ? "border-destructive bg-destructive-soft text-destructive"
                     : "border-border hover:border-destructive/40"
                 }`}
               >
@@ -875,7 +875,7 @@ export function QuizView({
                 onClick={() => onRate(question.id, "unknown")}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                   qRating === "unknown"
-                    ? "border-warning bg-warning/10 text-warning"
+                    ? "border-warning bg-warning-soft text-warning"
                     : "border-border hover:border-warning/40"
                 }`}
               >
@@ -886,7 +886,7 @@ export function QuizView({
                 onClick={() => onRate(question.id, "easy")}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
                   qRating === "easy"
-                    ? "border-success bg-success/10 text-success"
+                    ? "border-success bg-success-soft text-success"
                     : "border-border hover:border-success/40"
                 }`}
               >
@@ -1756,7 +1756,7 @@ export function QuizView({
                 <Button
                   variant="outline" size="sm" onClick={onToggleFlag}
                   data-walkthrough="qbank-flag"
-                  className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning hover:bg-warning/15" : ""}`}
+                  className={`h-9 rounded-lg ${session.flagged[session.current] ? "border-warning bg-warning-soft text-warning" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagQuestion") : t("qbank.session.flagForReview")}
                 >
                   <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />
@@ -1832,7 +1832,7 @@ export function QuizView({
                   variant="outline" size="icon"
                   onClick={onToggleFlag}
                   data-walkthrough="qbank-flag"
-                  className={`size-10 rounded-lg shrink-0 osler-touch-target ${session.flagged[session.current] ? "border-warning bg-warning/10 text-warning" : ""}`}
+                  className={`size-10 rounded-lg shrink-0 osler-touch-target ${session.flagged[session.current] ? "border-warning bg-warning-soft text-warning" : ""}`}
                   title={session.flagged[session.current] ? t("qbank.session.unflagShort") : t("qbank.session.flag")}
                 >
                   <Flag className={`size-4 ${session.flagged[session.current] ? "fill-warning text-warning" : ""}`} />

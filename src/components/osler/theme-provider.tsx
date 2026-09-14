@@ -78,6 +78,10 @@ interface OslerThemeContextValue {
   /** Toggle between dark and light (the legacy behaviour). Custom themes are
    *  not toggled — use `setThemeId` from the theme switcher. */
   toggleTheme: () => void;
+  /** Switch to the dark/light variant of the current theme family (e.g.
+   *  Forest Dark ↔ Forest Light). Falls back to the built-in theme when the
+   *  family has no such counterpart. */
+  setVariant: (variant: "dark" | "light") => void;
   /** All available themes: built-in + custom from osler.config. */
   availableThemes: Array<{ id: string; name: string; variant: "dark" | "light" }>;
 }
@@ -388,6 +392,33 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
     setThemeId(isDark ? "light" : "dark");
   }, [theme, themeChoice, customThemes, setThemeId]);
 
+  const setVariant = React.useCallback(
+    (variant: "dark" | "light") => {
+      // Same counterpart search as toggleTheme, but targeted: stay inside
+      // the current family (e.g. "forest" → "forest-light") instead of
+      // jumping to the built-in theme.
+      const custom = customThemes.find((t) => t.id === theme);
+      if (custom) {
+        const baseName = custom.id
+          .replace(/-dark$/i, "")
+          .replace(/-light$/i, "");
+        const counterpart =
+          customThemes.find(
+            (t) => t.id !== custom.id && t.variant === variant && t.id.startsWith(baseName),
+          ) ??
+          customThemes.find(
+            (t) => t.id !== custom.id && t.variant === variant,
+          );
+        if (counterpart) {
+          setThemeId(counterpart.id);
+          return;
+        }
+      }
+      setThemeId(variant);
+    },
+    [theme, customThemes, setThemeId],
+  );
+
   const isDark = React.useMemo(() => {
     const custom = customThemes.find((t) => t.id === theme);
     return custom ? custom.variant === "dark" : theme === "dark";
@@ -407,8 +438,8 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
   const followSystem = themeChoice === SYSTEM_THEME_CHOICE;
 
   const value = React.useMemo<OslerThemeContextValue>(
-    () => ({ theme, themeChoice, followSystem, isDark, setTheme, setThemeId, setFollowSystem, toggleTheme, availableThemes }),
-    [theme, themeChoice, followSystem, isDark, setTheme, setThemeId, setFollowSystem, toggleTheme, availableThemes],
+    () => ({ theme, themeChoice, followSystem, isDark, setTheme, setThemeId, setFollowSystem, toggleTheme, setVariant, availableThemes }),
+    [theme, themeChoice, followSystem, isDark, setTheme, setThemeId, setFollowSystem, toggleTheme, setVariant, availableThemes],
   );
 
   return (
@@ -427,6 +458,7 @@ const DEFAULT_THEME_VALUE: OslerThemeContextValue = {
   setThemeId: () => {},
   setFollowSystem: () => {},
   toggleTheme: () => {},
+  setVariant: () => {},
   availableThemes: [
     { id: "dark", name: "Dark", variant: "dark" },
     { id: "light", name: "Light", variant: "light" },

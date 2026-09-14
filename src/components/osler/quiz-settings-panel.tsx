@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { haptic } from "@/lib/osler/native";
 import { usePlatform } from "@/hooks/use-platform";
 import { useQuizSettings } from "@/hooks/use-quiz-settings";
 import { useOslerTheme } from "./theme-provider";
@@ -88,7 +89,7 @@ export function QuizSettingsPanel({
 }: QuizSettingsPanelProps) {
   const platform = usePlatform();
   const { t, rtl } = useI18n();
-  const { theme, setTheme } = useOslerTheme();
+  const { isDark, setVariant } = useOslerTheme();
   const { settings, update, reset } = useQuizSettings();
   const isPhone = platform.isPhone;
 
@@ -177,18 +178,18 @@ export function QuizSettingsPanel({
           session tour spotlight each section (auto-opening this panel via
           the consumer's onEnterAction). */}
       <div className="flex-1 overflow-y-auto osler-scroll px-4 md:px-6 py-5 space-y-7">
-        {/* Theme switcher — quick dark/light toggle at the top */}
+        {/* Theme switcher — dark/light variant of the current theme family */}
         <div data-walkthrough="quiz-settings-theme">
           <Section
-            icon={theme === "dark" ? Moon : Sun}
+            icon={isDark ? Moon : Sun}
             title={t("settings.theme.title")}
           >
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => setTheme("light")}
+                onClick={() => { haptic("selection"); setVariant("light"); }}
                 className={cn(
                   "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
-                  theme === "light"
+                  !isDark
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border hover:border-primary/40 text-muted-foreground"
                 )}
@@ -197,10 +198,10 @@ export function QuizSettingsPanel({
                 <span className="text-xs font-medium">{t("settings.theme.light")}</span>
               </button>
               <button
-                onClick={() => setTheme("dark")}
+                onClick={() => { haptic("selection"); setVariant("dark"); }}
                 className={cn(
                   "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
-                  theme === "dark"
+                  isDark
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border hover:border-primary/40 text-muted-foreground"
                 )}
