@@ -899,6 +899,7 @@ export const en = {
     "videos.speedDown": "Slow down by 0.1×",
     "videos.speedReset": "Reset speed to 1×",
     "videos.speedPresets": "Playback speed",
+    "videos.youtubeSpeedCap": "YouTube caps speed at 2× — direct files play up to 4×",
     "videos.speedStandardOnly": "Live speed control needs the Standard player — switch back to apply it instantly. The saved speed still applies when the video opens.",
     "videos.chapters": "Chapters",
     "videos.loading": "Loading video…",

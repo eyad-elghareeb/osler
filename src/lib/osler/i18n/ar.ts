@@ -900,6 +900,7 @@ export const ar = {
     "videos.speedDown": "تقليل السرعة بمقدار 0.1×",
     "videos.speedReset": "إعادة السرعة إلى 1×",
     "videos.speedPresets": "سرعة التشغيل",
+    "videos.youtubeSpeedCap": "يوتيوب يحدّ السرعة عند 2× — الملفات المباشرة تعمل حتى 4×",
     "videos.speedStandardOnly": "التحكم المباشر في السرعة يتطلب المشغّل القياسي — عُد إليه لتطبيقها فوراً. تُطبَّق السرعة المحفوظة عند فتح الفيديو.",
     "videos.chapters": "الفصول",
     "videos.loading": "جارٍ تحميل الفيديو…",

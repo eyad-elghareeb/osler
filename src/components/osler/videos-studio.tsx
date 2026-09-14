@@ -46,6 +46,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { setImmersiveMode } from "./immersive-mode";
 import { useShortcutListener } from "@/hooks/use-shortcuts";
@@ -67,15 +69,17 @@ import { staggerContainer, fadeUp } from "@/lib/osler/motion";
 const VIDEO_COLOR = ENGINE_META.video.color;
 
 /**
- * Speeds offered in the Plyr settings menu and the quick preset list. The
- * range extends past YouTube's native 2× cap: direct-file backends (mp4 /
- * hls / r2 via Plyr) honor the full range through `video.playbackRate`,
- * while the YouTube IFrame API rounds down to its nearest supported rate
- * (≤2×) — the quick control still applies there, it just clamps.
+ * Speeds offered in the Plyr settings menu and the quick preset list.
+ * Direct-file backends (mp4 / hls / r2 via Plyr) honor the full 0.25–4×
+ * range through `video.playbackRate`. YouTube's IFrame API caps at 2×, so
+ * the YouTube backend gets the capped subset — users never see a preset
+ * the player can't honor.
  */
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
 const SPEED_MIN = 0.25;
 const SPEED_MAX = 4;
+const YT_MAX_RATE = 2;
+const YT_PLAYBACK_RATES = PLAYBACK_RATES.filter((r) => r <= YT_MAX_RATE);
 const SPEED_STEP = 0.1;
 
 function clampRate(next: number): number {
@@ -961,15 +965,19 @@ function VideoPlayerView({
 
   // ── Playback speed (shared by the YouTube + Plyr backends) ──
   // The single setter persists the pref and pushes the rate live into
-  // whichever backend is mounted. Plyr honors the full 0.25–4× range;
-  // YouTube's IFrame API clamps to its supported rates (≤2×) internally.
+  // whichever backend is mounted. Plyr honors the full 0.25–4× range; the
+  // YouTube backend is capped at 2× (its IFrame API can't go past that),
+  // so YouTube never offers — or holds — a rate it can't play.
   // The alt-host (Invidious) iframe exposes no JS API, so live stepping is
   // disabled there — the saved rate is still passed as `&speed=` when its
   // embed (re)loads.
-  const applyRate = React.useCallback((next: number) => {
-    const clamped = clampRate(next);
+  const maxRate = isYouTube && !invidiousMode ? YT_MAX_RATE : SPEED_MAX;
+  const maxRateRef = React.useRef(maxRate);
+  maxRateRef.current = maxRate;
+  const applyRate = React.useCallback((next: number, silent = false) => {
+    const clamped = Math.min(maxRateRef.current, clampRate(next));
     if (clamped === rateRef.current) return;
-    haptic("selection");
+    if (!silent) haptic("selection");
     cachedSpeed = clamped;
     rateRef.current = clamped;
     setPlaybackRateState(clamped);
@@ -1001,6 +1009,16 @@ function VideoPlayerView({
     if (invidiousMode) return;
     applyRate(1);
   }, [applyRate, invidiousMode]);
+
+  // A rate saved from a direct-file video (up to 4×) must not linger on
+  // the badge when a YouTube video opens — snap it to the 2× cap silently
+  // (no haptic: this isn't a user gesture) so the display never promises
+  // what the player can't play.
+  React.useEffect(() => {
+    if (isYouTube && !invidiousMode && rateRef.current > YT_MAX_RATE) {
+      applyRate(YT_MAX_RATE, true);
+    }
+  }, [isYouTube, invidiousMode, applyRate]);
 
   // A chapter jump stamps invidiousStart — clear it when the video
   // changes so the next embed doesn't inherit the old timestamp.
@@ -1292,6 +1310,8 @@ function VideoPlayerView({
         )}
         <PlayerSpeedControl
           rate={playbackRate}
+          presets={isYouTube ? YT_PLAYBACK_RATES : PLAYBACK_RATES}
+          capNote={isYouTube ? t("videos.youtubeSpeedCap") : undefined}
           onStep={stepRate}
           onReset={resetRate}
           onPreset={applyRate}
@@ -1460,6 +1480,8 @@ function VideoPlayerView({
               )}
               <PlayerSpeedControl
                 rate={playbackRate}
+                presets={isYouTube ? YT_PLAYBACK_RATES : PLAYBACK_RATES}
+                capNote={isYouTube ? t("videos.youtubeSpeedCap") : undefined}
                 onStep={stepRate}
                 onReset={resetRate}
                 onPreset={applyRate}
@@ -1610,16 +1632,18 @@ function PlayerAutoplayToggle({
 
 /* ── Playback-speed quick control (−0.1 / rate / +0.1 + presets) ──
  *
- * One control drives both live backends: Plyr honors the full 0.25–4×
- * range, YouTube's IFrame API clamps to its supported rates (≤2×). The
- * center badge shows the current rate and resets to 1× on tap; the
- * chevron opens the preset list for far jumps (e.g. straight to 3×).
- * Disabled (with an explanatory tooltip) in alt-host mode, whose iframe
- * exposes no live speed API — the saved rate is still passed to its embed
- * as `&speed=` on (re)load.
+ * One control drives both live backends, but each backend declares its own
+ * ceiling via `presets`: Plyr offers the full 0.25–4× range, YouTube only
+ * up to 2× (with a footnote saying so — the menu never implies a rate the
+ * player can't honor). The center badge shows the current rate and resets
+ * to 1× on tap. Disabled (with an explanatory tooltip) in alt-host mode,
+ * whose iframe exposes no live speed API — the saved rate is still passed
+ * to its embed as `&speed=` on (re)load.
  */
 function PlayerSpeedControl({
   rate,
+  presets,
+  capNote,
   onStep,
   onReset,
   onPreset,
@@ -1628,6 +1652,8 @@ function PlayerSpeedControl({
   className,
 }: {
   rate: number;
+  presets: number[];
+  capNote?: string;
   onStep: (delta: number) => void;
   onReset: () => void;
   onPreset: (rate: number) => void;
@@ -1694,12 +1720,20 @@ function PlayerSpeedControl({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" aria-label={t("videos.speed")}>
-          {PLAYBACK_RATES.map((preset) => (
+          {presets.map((preset) => (
             <DropdownMenuItem key={preset} onClick={() => onPreset(preset)}>
               {fmtRate(preset)}
               {Math.abs(preset - rate) < 0.001 && <Check className="size-3.5 ms-auto" />}
             </DropdownMenuItem>
           ))}
+          {capNote && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="max-w-48 whitespace-normal text-xs font-normal leading-snug text-muted-foreground">
+                {capNote}
+              </DropdownMenuLabel>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
