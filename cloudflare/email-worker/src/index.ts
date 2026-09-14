@@ -140,8 +140,11 @@ function tokenMatches(a: string, b: string): boolean {
 }
 
 /** RFC 2047: encode a header value as =?UTF-8?B?…?= so Arabic subjects
- *  survive every relay. */
+ *  survive every relay. Pure-ASCII values go out raw — an encoded-word
+ *  wrapper around plain "Osler" / "Reset your password" is an unusual
+ *  fingerprint that spam filters notice on a cold sender. */
 function encodeHeaderValue(value: string): string {
+  if (/^[\x20-\x7E]*$/.test(value)) return value;
   return `=?UTF-8?B?${btoa(unescape(encodeURIComponent(value)))}?=`;
 }
 
@@ -160,6 +163,10 @@ function buildMessage(env: Env, to: string, subject: string, text: string, html?
     `Subject: ${encodeHeaderValue(subject)}`,
     `Date: ${new Date().toUTCString()}`,
     `Message-ID: <${crypto.randomUUID()}@${env.GMAIL_USER.split("@")[1] ?? "gmail"}>`,
+    // Marks the message as machine-generated transactional mail (password
+    // resets, verifications) — the correct signal for auto mail, and one
+    // less reason for a filter to treat it as unsolicited bulk.
+    "Auto-Submitted: auto-generated",
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ].join("\r\n");
