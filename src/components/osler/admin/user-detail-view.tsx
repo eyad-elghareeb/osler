@@ -10,7 +10,6 @@ import {
   AtSign,
   Mail,
   ShieldCheck,
-  Hash,
   BookOpen,
   BrainCircuit,
   Monitor,
@@ -20,6 +19,15 @@ import {
   ChevronDown,
   MailCheck,
   Loader2,
+  Activity,
+  Layers,
+  History,
+  StickyNote,
+  Highlighter,
+  Bookmark,
+  MonitorPlay,
+  Trophy,
+  Settings2,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,12 +61,30 @@ import {
   type UserProgressSummary,
   type AdminSession,
 } from "@/components/osler/admin/admin-api";
-import { SectionHeading, LoadingState, EmptyState, StatTile } from "@/components/osler/ui-primitives";
+import { SectionHeading, LoadingState, EmptyState, StatTile, AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { useToast } from "@/hooks/use-toast";
 
 interface UserDetailViewProps {
   userId: string;
 }
+
+/** Sync-kind metadata for the activity grid — one entry per SYNC_KIND the
+ *  progress endpoint can report. Icons/colors are display-only. */
+const KIND_META: Array<{
+  kind: string;
+  icon: LucideIcon;
+  color: "primary" | "success" | "warning" | "destructive" | "info";
+}> = [
+  { kind: "qbank", icon: BookOpen, color: "primary" },
+  { kind: "flashcards", icon: Layers, color: "info" },
+  { kind: "sessions", icon: History, color: "success" },
+  { kind: "notes", icon: StickyNote, color: "warning" },
+  { kind: "articleHighlights", icon: Highlighter, color: "primary" },
+  { kind: "bookmarks", icon: Bookmark, color: "info" },
+  { kind: "videos", icon: MonitorPlay, color: "success" },
+  { kind: "achievements", icon: Trophy, color: "warning" },
+  { kind: "settings", icon: Settings2, color: "primary" },
+];
 
 export function UserDetailView({ userId }: UserDetailViewProps) {
   const { t } = useI18n();
@@ -66,8 +92,17 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
   const { toast } = useToast();
 
   const [user, setUser] = React.useState<AdminUserDetail | null>(null);
+  // Heavy sections lazy-load on first expand — the mount fetch only pulls
+  // the account record (content list rides along). Progress reads every
+  // sync doc; sessions hits a second table. Neither runs until opened.
   const [progress, setProgress] = React.useState<UserProgressSummary | null>(null);
+  const [progressLoading, setProgressLoading] = React.useState(false);
+  const [progressOpen, setProgressOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<AdminSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = React.useState(false);
+  const [sessionsLoaded, setSessionsLoaded] = React.useState(false);
+  const [sessionsOpen, setSessionsOpen] = React.useState(false);
+  const [contentOpen, setContentOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [clearKeyOpen, setClearKeyOpen] = React.useState(false);
@@ -140,19 +175,46 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
   React.useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([
-      adminApi.getUser(userId),
-      adminApi.getUserProgress(userId).catch(() => null),
-      adminApi.userSessions(userId).then((r) => r.sessions).catch(() => []),
-    ])
-      .then(([u, p, s]) => {
-        setUser(u);
-        setProgress(p);
-        setSessions(s);
-      })
+    // Reset lazy sections when switching users so a new account never
+    // flashes the previous one's progress/sessions.
+    setProgress(null);
+    setProgressOpen(false);
+    setSessions([]);
+    setSessionsLoaded(false);
+    setSessionsOpen(false);
+    setContentOpen(false);
+    adminApi.getUser(userId)
+      .then(setUser)
       .catch(() => setError(t("admin.userDetail.loadFailed")))
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, t]);
+
+  function handleProgressOpenChange(open: boolean) {
+    haptic("selection");
+    setProgressOpen(open);
+    if (open && !progress && !progressLoading) {
+      setProgressLoading(true);
+      adminApi.getUserProgress(userId)
+        .then(setProgress)
+        .catch(() => setProgress(null))
+        .finally(() => setProgressLoading(false));
+    }
+  }
+
+  function handleSessionsOpenChange(open: boolean) {
+    haptic("selection");
+    setSessionsOpen(open);
+    if (open && !sessionsLoaded && !sessionsLoading) {
+      setSessionsLoading(true);
+      adminApi.userSessions(userId)
+        .then((r) => {
+          setSessions(r.sessions);
+          setSessionsLoaded(true);
+        })
+        .catch(() => setSessionsLoaded(false))
+        .finally(() => setSessionsLoading(false));
+    }
+  }
 
   async function handleClearKey() {
     if (!user) return;
@@ -169,6 +231,28 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
       setClearing(false);
     }
   }
+
+  // Activity overview derived from the per-kind progress summary. It sits
+  // above the early returns (hooks rule) and tolerates a null user — the
+  // section only renders once `user` exists. Every kind is optional (older
+  // Workers only return qbank/flashcards): a missing kind counts as zero
+  // records / never synced.
+  const activity = React.useMemo(() => {
+    const kinds = KIND_META.map((m) => {
+      const stats = progress?.[m.kind];
+      return { ...m, count: stats?.recordCount ?? 0, updatedAt: stats?.updatedAt ?? 0 };
+    });
+    const totalRecords = kinds.reduce((n, k) => n + k.count, 0);
+    const mostActive = kinds.reduce<(typeof kinds)[number] | null>(
+      (best, k) => (k.count > 0 && (!best || k.count > best.count) ? k : best),
+      null,
+    );
+    const lastActiveAt = kinds.reduce((latest, k) => Math.max(latest, k.updatedAt), 0);
+    const accountAgeDays = user
+      ? Math.max(0, Math.floor((Date.now() - user.createdAt) / 86_400_000))
+      : 0;
+    return { kinds, totalRecords, mostActive, lastActiveAt, accountAgeDays };
+  }, [progress, user]);
 
   if (loading) return <LoadingState label={t("admin.table.loading")} />;
   if (!user && error) {
@@ -205,6 +289,8 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
     content_admin: "bg-warning/15 text-warning border-warning/30",
     admin: "bg-primary/15 text-primary border-primary/30",
   };
+
+
 
   return (
     <div className="space-y-6">
@@ -338,37 +424,99 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
         )}
       </div>
 
-      {/* Progress */}
-      <div className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">
-        <SectionHeading icon={Hash}>{t("admin.userDetail.progress.title")}</SectionHeading>
-        {progress ? (
-          <div className="grid grid-cols-2 gap-4">
-            <StatTile
-              compact
-              label={t("admin.userDetail.progress.qbank")}
-              value={t("admin.userDetail.progress.records", { n: String(progress.qbank.recordCount) })}
-              icon={BookOpen}
-              color="primary"
-            />
-            <StatTile
-              compact
-              label={t("admin.userDetail.progress.flashcards")}
-              value={t("admin.userDetail.progress.records", { n: String(progress.flashcards.recordCount) })}
-              icon={BrainCircuit}
-              color="info"
-            />
-          </div>
+      {/* Activity & progress — collapsed until opened; the progress fetch
+          reads every sync doc so it only runs on first expand. Every kind
+          is optional (older Workers only return qbank/flashcards), so
+          missing kinds render as zero/never rather than crashing. */}
+      <AnimatedDisclosure
+        icon={Activity}
+        label={t("admin.userDetail.progress.title")}
+        open={progressOpen}
+        onOpenChange={handleProgressOpenChange}
+      >
+        {progressLoading ? (
+          <LoadingState label={t("admin.table.loading")} />
+        ) : progress ? (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatTile
+                compact
+                label={t("admin.userDetail.activity.totalRecords")}
+                value={activity.totalRecords}
+                icon={Activity}
+                color="primary"
+              />
+              <StatTile
+                compact
+                label={t("admin.userDetail.activity.mostActive")}
+                value={activity.mostActive ? t(`admin.userDetail.activity.kind.${activity.mostActive.kind}` as any) : "—"}
+                icon={activity.mostActive?.icon ?? Trophy}
+                color={activity.mostActive?.color ?? "warning"}
+                footer={
+                  activity.mostActive ? (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {t("admin.userDetail.progress.records", { n: String(activity.mostActive.count) })}
+                    </span>
+                  ) : undefined
+                }
+              />
+              <StatTile
+                compact
+                label={t("admin.userDetail.activity.lastActive")}
+                value={activity.lastActiveAt > 0 ? new Date(activity.lastActiveAt).toLocaleDateString() : t("admin.userDetail.progress.never")}
+                icon={History}
+                color="info"
+              />
+              <StatTile
+                compact
+                label={t("admin.userDetail.activity.accountAge")}
+                value={t("admin.userDetail.activity.days", { n: String(activity.accountAgeDays) })}
+                icon={Calendar}
+                color="success"
+                footer={
+                  <span className="text-xs text-muted-foreground">
+                    {t("admin.userDetail.activity.joinedOn", { date: new Date(user.createdAt).toLocaleDateString() })}
+                  </span>
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              {activity.kinds.map((k) => (
+                <StatTile
+                  key={k.kind}
+                  compact
+                  label={t(`admin.userDetail.activity.kind.${k.kind}` as any)}
+                  value={t("admin.userDetail.progress.records", { n: String(k.count) })}
+                  icon={k.icon}
+                  color={k.color}
+                  footer={
+                    <span className="text-xs text-muted-foreground">
+                      {k.updatedAt > 0
+                        ? `${t("admin.userDetail.progress.lastSync")} ${new Date(k.updatedAt).toLocaleDateString()}`
+                        : t("admin.userDetail.progress.never")}
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          </>
         ) : (
           <p className="text-sm text-muted-foreground">{t("admin.userDetail.progress.loadFailed")}</p>
         )}
-      </div>
+      </AnimatedDisclosure>
 
-      {/* Sessions */}
-      <div className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">
-        <SectionHeading icon={Monitor}>
-          {t("admin.userDetail.sessions.title", { count: String(sessions.length) })}
-        </SectionHeading>
-        {sessions.length === 0 ? (
+      {/* Sessions — collapsed until opened; fetched lazily on first expand.
+          The header count falls back to the detail record's active-session
+          count until the list loads. */}
+      <AnimatedDisclosure
+        icon={Monitor}
+        label={t("admin.userDetail.sessions.title", { count: String(sessionsLoaded ? sessions.length : user.activeSessionCount) })}
+        open={sessionsOpen}
+        onOpenChange={handleSessionsOpenChange}
+      >
+        {sessionsLoading ? (
+          <LoadingState label={t("admin.table.loading")} />
+        ) : sessions.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("admin.userDetail.sessions.empty")}</p>
         ) : (
           <div className="overflow-x-auto">
@@ -404,14 +552,20 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
             </table>
           </div>
         )}
-      </div>
+      </AnimatedDisclosure>
 
-      {/* Content — if user has authored content */}
+      {/* Content — already on the account record, but long lists stay
+          collapsed until opened. */}
       {user.content.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4">
-          <SectionHeading icon={ScrollText}>
-            {t("admin.userDetail.content.title", { count: String(user.content.length) })}
-          </SectionHeading>
+        <AnimatedDisclosure
+          icon={ScrollText}
+          label={t("admin.userDetail.content.title", { count: String(user.content.length) })}
+          open={contentOpen}
+          onOpenChange={(open) => {
+            haptic("selection");
+            setContentOpen(open);
+          }}
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -446,7 +600,7 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
               </tbody>
             </table>
           </div>
-        </div>
+        </AnimatedDisclosure>
       )}
 
       {/* Actions */}

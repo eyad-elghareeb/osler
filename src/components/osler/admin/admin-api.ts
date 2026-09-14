@@ -34,9 +34,12 @@ export interface AdminUserDetail extends AdminUser {
   }>;
 }
 
+/** Per-sync-kind record counts + last-write timestamps from
+ *  GET /v1/admin/users/:id/progress. Keyed by SYNC_KIND — older Workers may
+ *  only return qbank/flashcards, so every consumer must tolerate missing
+ *  kinds. */
 export interface UserProgressSummary {
-  qbank: { recordCount: number; updatedAt: number };
-  flashcards: { recordCount: number; updatedAt: number };
+  [kind: string]: { recordCount: number; updatedAt: number };
 }
 
 export interface AdminCapabilities {
@@ -86,6 +89,32 @@ export interface AdminUsersPage {
   guests?: AdminGuest[];
   /** Total matching guests across all pages (absent on older Workers). */
   guestTotal?: number;
+}
+
+/** Server-side attribute filters for GET /v1/admin/users. Every field is
+ *  tri-state: `true` = only-with, `false` = only-without, `undefined` =
+ *  no constraint. `sort` falls back to `newest` on unknown values. */
+export interface AdminUsersFilter {
+  role?: "student" | "content_admin" | "admin";
+  hasPassword?: boolean;
+  hasGoogle?: boolean;
+  hasEmail?: boolean;
+  hasKey?: boolean;
+  verified?: boolean;
+  sort?: "newest" | "oldest" | "username" | "name" | "updated";
+}
+
+export function buildUsersQuery(page: number, q: string, f: AdminUsersFilter = {}): string {
+  const params = new URLSearchParams({ page: String(page) });
+  if (q.trim()) params.set("q", q.trim());
+  if (f.role) params.set("role", f.role);
+  if (f.hasPassword !== undefined) params.set("hasPassword", f.hasPassword ? "1" : "0");
+  if (f.hasGoogle !== undefined) params.set("hasGoogle", f.hasGoogle ? "1" : "0");
+  if (f.hasEmail !== undefined) params.set("hasEmail", f.hasEmail ? "1" : "0");
+  if (f.hasKey !== undefined) params.set("hasKey", f.hasKey ? "1" : "0");
+  if (f.verified !== undefined) params.set("verified", f.verified ? "1" : "0");
+  if (f.sort && f.sort !== "newest") params.set("sort", f.sort);
+  return `/v1/admin/users?${params.toString()}`;
 }
 
 export interface AdminAuditEntry {
@@ -304,7 +333,7 @@ export const adminApi = {
                                                   req<AdminAuditPage>(`/v1/admin/audit?page=${page}${action ? `&action=${encodeURIComponent(action)}` : ""}`),
 
   // User management (admin only)
-  users:           (page: number, q: string)     => req<AdminUsersPage>(`/v1/admin/users?page=${page}&q=${encodeURIComponent(q)}`),
+  users:           (page: number, q: string, f: AdminUsersFilter = {}) => req<AdminUsersPage>(buildUsersQuery(page, q, f)),
   getUser:         (id: string)                  => req<AdminUserDetail>(`/v1/admin/users/${id}`),
   updateUser:      (id: string, patch: { role?: string; displayName?: string }) => req<AdminUser>(`/v1/admin/users/${id}`, "PATCH", patch),
   resetUserPassword: (id: string, password: string) => req<{ ok: boolean }>(`/v1/admin/users/${id}/reset-password`, "POST", { password }),

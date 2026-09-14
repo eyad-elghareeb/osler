@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical, ShieldCheck, Trash2, UserRound, Loader2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, KeyRound, Eye, MoreVertical, ShieldCheck, Trash2, UserRound, Loader2, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -19,7 +22,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { MOTION_TRANSITION } from "@/lib/osler/motion";
-import { adminApi, type AdminUser, type AdminGuest } from "@/components/osler/admin/admin-api";
+import { adminApi, type AdminUser, type AdminGuest, type AdminUsersFilter } from "@/components/osler/admin/admin-api";
 import { Label } from "@/components/ui/label";
 import { EmptyState, SectionHeading } from "@/components/osler/ui-primitives";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +51,75 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
+/** Small labeled select for the users filter bar — label sits above the
+ *  trigger so the active choice stays readable at a glance. */
+function FilterSelect({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor={id} className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} size="sm" className="w-auto min-w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Tri-state (all / yes / no) wrapper over FilterSelect for boolean filters. */
+function TriFilterSelect({
+  id,
+  label,
+  value,
+  onChange,
+  anyLabel,
+  yesLabel,
+  noLabel,
+}: {
+  id: string;
+  label: string;
+  value: boolean | undefined;
+  onChange: (v: boolean | undefined) => void;
+  anyLabel: string;
+  yesLabel: string;
+  noLabel: string;
+}) {
+  return (
+    <FilterSelect
+      id={id}
+      label={label}
+      value={value === undefined ? "all" : value ? "yes" : "no"}
+      onChange={(v) => onChange(v === "all" ? undefined : v === "yes")}
+      options={[
+        { value: "all", label: anyLabel },
+        { value: "yes", label: yesLabel },
+        { value: "no", label: noLabel },
+      ]}
+    />
+  );
+}
+
 function AvatarInitials({ name, role }: { name: string; role: string }) {
   return (
     <div
@@ -72,6 +144,7 @@ export function UsersTable() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [filters, setFilters] = useState<AdminUsersFilter>({});
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
@@ -84,13 +157,33 @@ export function UsersTable() {
     return () => clearTimeout(t);
   }, [q]);
 
+  const updateFilters = useCallback((patch: Partial<AdminUsersFilter>) => {
+    haptic("selection");
+    setFilters((prev) => ({ ...prev, ...patch }));
+    setPage(1);
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    haptic("selection");
+    setFilters({});
+    setPage(1);
+  }, []);
+
+  const activeFilterCount =
+    (filters.role ? 1 : 0) +
+    (filters.hasPassword !== undefined ? 1 : 0) +
+    (filters.hasGoogle !== undefined ? 1 : 0) +
+    (filters.hasEmail !== undefined ? 1 : 0) +
+    (filters.hasKey !== undefined ? 1 : 0) +
+    (filters.verified !== undefined ? 1 : 0);
+
   const load = useCallback(() => {
     setLoading(true);
-    adminApi.users(page, debouncedQ)
+    adminApi.users(page, debouncedQ, filters)
       .then((r) => { setUsers(r.users); setTotal(r.total); setGuests(r.guests ?? []); setGuestTotal(r.guestTotal ?? 0); })
       .catch(() => toast({ title: t("admin.toast.failedLoadUsers"), variant: "destructive" }))
       .finally(() => setLoading(false));
-  }, [page, debouncedQ]);
+  }, [page, debouncedQ, filters]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -164,6 +257,86 @@ export function UsersTable() {
             <span className="ms-2">· {t("admin.users.guestsCount", { n: String(guestTotal) })}</span>
           )}
         </span>
+      </div>
+
+      {/* Attribute filters + sort — server-side via GET /v1/admin/users params */}
+      <div className="mb-4 flex flex-wrap items-end gap-x-3 gap-y-2">
+        <FilterSelect
+          id="admin-users-filter-role"
+          label={t("admin.users.filters.role")}
+          value={filters.role ?? "all"}
+          onChange={(v) => updateFilters({ role: (v === "all" ? undefined : v) as AdminUsersFilter["role"] })}
+          options={[
+            { value: "all", label: t("common.all") },
+            { value: "student", label: t("admin.users.roles.student" as any) },
+            { value: "content_admin", label: t("admin.users.roles.content_admin" as any) },
+            { value: "admin", label: t("admin.users.roles.admin" as any) },
+          ]}
+        />
+        <TriFilterSelect
+          id="admin-users-filter-password"
+          label={t("admin.users.filters.password")}
+          value={filters.hasPassword}
+          onChange={(v) => updateFilters({ hasPassword: v })}
+          anyLabel={t("common.all")}
+          yesLabel={t("admin.users.filters.passwordYes")}
+          noLabel={t("admin.users.filters.passwordNo")}
+        />
+        <TriFilterSelect
+          id="admin-users-filter-google"
+          label={t("admin.users.filters.google")}
+          value={filters.hasGoogle}
+          onChange={(v) => updateFilters({ hasGoogle: v })}
+          anyLabel={t("common.all")}
+          yesLabel={t("admin.users.filters.googleYes")}
+          noLabel={t("admin.users.filters.googleNo")}
+        />
+        <TriFilterSelect
+          id="admin-users-filter-email"
+          label={t("admin.users.filters.email")}
+          value={filters.hasEmail}
+          onChange={(v) => updateFilters({ hasEmail: v })}
+          anyLabel={t("common.all")}
+          yesLabel={t("admin.users.filters.emailYes")}
+          noLabel={t("admin.users.filters.emailNo")}
+        />
+        <TriFilterSelect
+          id="admin-users-filter-key"
+          label={t("admin.users.filters.apiKey")}
+          value={filters.hasKey}
+          onChange={(v) => updateFilters({ hasKey: v })}
+          anyLabel={t("common.all")}
+          yesLabel={t("admin.users.filters.apiKeyYes")}
+          noLabel={t("admin.users.filters.apiKeyNo")}
+        />
+        <TriFilterSelect
+          id="admin-users-filter-verified"
+          label={t("admin.users.filters.verified")}
+          value={filters.verified}
+          onChange={(v) => updateFilters({ verified: v })}
+          anyLabel={t("common.all")}
+          yesLabel={t("admin.users.filters.verifiedYes")}
+          noLabel={t("admin.users.filters.verifiedNo")}
+        />
+        <FilterSelect
+          id="admin-users-sort"
+          label={t("admin.users.sort.label")}
+          value={filters.sort ?? "newest"}
+          onChange={(v) => updateFilters({ sort: v as NonNullable<AdminUsersFilter["sort"]> })}
+          options={[
+            { value: "newest", label: t("admin.users.sort.newest") },
+            { value: "oldest", label: t("admin.users.sort.oldest") },
+            { value: "username", label: t("admin.users.sort.username") },
+            { value: "name", label: t("admin.users.sort.name") },
+            { value: "updated", label: t("admin.users.sort.updated") },
+          ]}
+        />
+        {activeFilterCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="mb-px h-8 text-xs">
+            <X className="size-3.5 me-1" />
+            {t("admin.users.filters.clear", { n: String(activeFilterCount) })}
+          </Button>
+        )}
       </div>
 
       {loading && users.length === 0 ? (
