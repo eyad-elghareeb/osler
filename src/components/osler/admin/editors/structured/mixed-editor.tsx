@@ -17,9 +17,9 @@ import { WrittenEditor } from "./written-editor";
  * value it receives, so each onChange is merged back key-by-key and no
  * section can clobber the others.
  */
-export function MixedEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+export function MixedEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, focusId }: StructuredEditorProps) {
   const { t } = useI18n();
-  const passthrough = { readOnly, r2KeyBase, rawR2Key, hideChapters: true as const };
+  const passthrough = { readOnly, r2KeyBase, rawR2Key, hideChapters: true as const, focusId };
 
   return (
     <div className="space-y-4">

@@ -22,7 +22,8 @@ const ContentEditor = dynamic(
 
 /**
  * Admin content hub + editor, driven by `?id=<content-uuid>` or
- * `?key=<r2-key>`.
+ * `?key=<r2-key>`, with an optional `?focus=<question-id>` deep link that
+ * expands + scrolls to one question (support-ticket shortcut).
  *
  * Static export friendly: no dynamic route, no `_redirects` fallback needed.
  * `useSearchParams` is wrapped in `<Suspense>` so the page prerenders
@@ -44,11 +45,12 @@ function AdminContentView() {
   const identity = useAdminIdentity();
   const params = useSearchParams();
   const id = params.get("id");
+  const focusId = params.get("focus") ?? params.get("qid");
 
   if (id) {
     return (
       <div className="h-full">
-        <ContentEditor id={id} capabilities={identity.capabilities} />
+        <ContentEditor id={id} focusId={focusId} capabilities={identity.capabilities} />
       </div>
     );
   }

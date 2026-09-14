@@ -6,7 +6,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { StructuredEditorProps, Field, CollapseContext, questionSnippet, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
+import { StructuredEditorProps, Field, CollapseContext, questionSnippet, useCollapseState, useFocusScroll, FOCUS_RING_CLASS, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
 import { PassagesEditor } from "./bank-editor";
 
 /**
@@ -20,16 +20,18 @@ import { PassagesEditor } from "./bank-editor";
  * content_object's R2 folder via the adminApi.uploadFile helper.
  */
 
-export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters }: StructuredEditorProps) {
+export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters, focusId }: StructuredEditorProps) {
   const { t } = useI18n();
   const dndScope = React.useId();
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
   // Hooks must run before the passages early-return below — the value shape
   // can change between renders, and a conditional hook crashes React.
-  const collapseState = useCollapseState(questions.length);
+  const focusIndex = focusId ? questions.findIndex((q) => q?.id === focusId) : -1;
+  const collapseState = useCollapseState(questions.length, focusIndex >= 0 ? focusIndex : undefined);
+  useFocusScroll(focusIndex >= 0 ? focusId : null);
 
   if (Array.isArray(value?.passages)) {
-    return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return <PassagesEditor value={value} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} focusId={focusId} />;
   }
 
   function update(next: any[]) {
@@ -72,8 +74,13 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hid
           <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
         ) : (
           questions.map((q, i) => (
+            <div
+              key={q?.id ?? i}
+              data-focus-id={q?.id ?? undefined}
+              className={cn(focusIndex === i && `rounded-lg ${FOCUS_RING_CLASS}`)}
+            >
             <ItemRow
-              key={i}
+              key={`${q?.id ?? i}-row`}
               index={i}
               total={questions.length}
               onMove={(d) => moveQuestion(i, d)}
@@ -175,6 +182,7 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hid
               />
             </Field>
           </ItemRow>
+            </div>
         ))
       )}
       </div>

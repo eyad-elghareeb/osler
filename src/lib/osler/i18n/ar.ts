@@ -3217,6 +3217,9 @@ export const ar = {
     "admin.tickets.deletedToast": "تم حذف التذكرة",
     "admin.tickets.deleteFailed": "تعذر حذف التذكرة",
     "admin.tickets.open": "فتح التذكرة",
+    "admin.tickets.editQuestion": "تحرير هذا السؤال",
+    "admin.tickets.openArticle": "فتح هذا المقال",
+    "admin.tickets.editResolveFailed": "تعذر العثور على الملف المصدر لهذه التذكرة",
 
     "consent.title": "إشعار خصوصية",
     "consent.description": "يخزّن Osler البيانات محليّاً على جهازك لتشغيل تقدمك الدراسي والوصول غير المتصل. لا تُستخدم ملفات تتبع أو تحليلات طرف ثالث.",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BookOpen,
   CheckCircle2,
@@ -10,6 +11,7 @@ import {
   ClipboardList,
   LifeBuoy,
   Loader2,
+  Pencil,
   Save,
   Settings2,
   Trash2,
@@ -34,6 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 import { haptic } from "@/lib/osler/native";
 import { adminApi, type AdminSupportTicket, type TicketStatusFilter } from "@/components/osler/admin/admin-api";
 import { TICKET_CATEGORY_I18N, TICKET_STATUS_I18N } from "@/lib/osler/support";
+import { loadNodeByUid } from "@/lib/osler/content";
 
 const SOURCE_ICON = { qbank: ClipboardList, library: BookOpen, settings: Settings2 };
 const STATUS_BADGE_CLASS: Record<AdminSupportTicket["status"], string> = {
@@ -140,11 +143,13 @@ function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
+  const router = useRouter();
   const [status, setStatus] = useState(ticket.status);
   const [reply, setReply] = useState(ticket.reply ?? "");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const SourceIcon = SOURCE_ICON[ticket.source] ?? Settings2;
 
   // Re-sync local fields whenever another ticket is opened or the list refreshes.
@@ -196,6 +201,111 @@ function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
         [t("support.contextArticle"), ctx.articleTitle],
       ]
     : [];
+
+  // Shortcut: jump straight into the editor for the reported file, focused
+  // on the reported question. Resolves packUid → manifest path → R2 key →
+  // managed object (or raw file), then deep-links with `?focus=<qid>`.
+  const openInEditor = async () => {
+    if (!ctx || resolving) return;
+    haptic("selection");
+    // Library tickets carry the article file directly — no manifest lookup.
+    if (ctx.articleFile && !ctx.packUid) {
+      setResolving(true);
+      try {
+        const key = ctx.articleFile.startsWith("content-files/")
+          ? ctx.articleFile
+          : `content-files/library/${ctx.articleFile.replace(/^\/+/, "")}`;
+        try {
+          const lookup = await adminApi.lookupByR2Key(key);
+          if (lookup.found && lookup.object) {
+            router.push(`/admin/content?id=${encodeURIComponent(lookup.object.id)}`);
+            return;
+          }
+        } catch {
+          // Fall through to the raw editor.
+        }
+        router.push(`/admin/content/raw?key=${encodeURIComponent(key)}`);
+      } catch {
+        haptic("error");
+        toast({ title: t("admin.tickets.editResolveFailed"), variant: "destructive" });
+      } finally {
+        setResolving(false);
+      }
+      return;
+    }
+    if (!ctx.packUid) return;
+    setResolving(true);
+    try {
+      const focusSuffix = ctx.qid ? `&focus=${encodeURIComponent(ctx.qid)}` : "";
+      const openKey = async (key: string) => {
+        try {
+          const lookup = await adminApi.lookupByR2Key(key);
+          if (lookup.found && lookup.object) {
+            router.push(`/admin/content?id=${encodeURIComponent(lookup.object.id)}${focusSuffix}`);
+            return;
+          }
+        } catch {
+          // Fall through to the raw editor.
+        }
+        router.push(`/admin/content/raw?key=${encodeURIComponent(key)}${focusSuffix}`);
+      };
+      // 1. Manifest node gives the pack folder + data filenames.
+      const node = await loadNodeByUid(ctx.packUid).catch(() => null);
+      if (node) {
+        let candidates = (node.files ?? []).map((f) => `content-files/qbank/${node.path}${f}`);
+        if (candidates.length === 0) {
+          // No filenames on the node — discover files under the pack prefix.
+          try {
+            const listing = await adminApi.listR2Keys(`qbank/${node.path}`);
+            candidates = (listing.items ?? []).map((it) => it.key).filter((k) => k.endsWith(".json"));
+          } catch {
+            candidates = [];
+          }
+        }
+        if (candidates.length === 1) {
+          await openKey(candidates[0]);
+          return;
+        }
+        if (candidates.length > 1 && ctx.qid) {
+          // Pick the file that actually contains the reported question.
+          for (const key of candidates) {
+            try {
+              const r = await adminApi.getR2Content(key);
+              if (r.body.includes(`"${ctx.qid}"`)) {
+                await openKey(key);
+                return;
+              }
+            } catch {
+              continue;
+            }
+          }
+        }
+        if (candidates.length > 0) {
+          await openKey(candidates[0]);
+          return;
+        }
+      }
+      // 2. Fallback: search managed objects by pack title.
+      if (ctx.packTitle) {
+        try {
+          const r = await adminApi.listContent("all", ctx.packTitle, 1, 5);
+          const match = (r.items ?? [])[0];
+          if (match) {
+            router.push(`/admin/content?id=${encodeURIComponent(match.id)}${focusSuffix}`);
+            return;
+          }
+        } catch {
+          // Fall through to the failure toast.
+        }
+      }
+      haptic("error");
+      toast({ title: t("admin.tickets.editResolveFailed"), variant: "destructive" });
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  const canEdit = !!ctx?.packUid || !!ctx?.articleFile;
 
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -254,6 +364,20 @@ function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
           )}
 
           <ReportedQuestion question={ctx?.question} />
+
+          {canEdit && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openInEditor}
+              disabled={resolving}
+              loading={resolving}
+              className="w-full"
+            >
+              {!resolving && <Pencil className="size-3.5" />}
+              {ctx?.packUid ? t("admin.tickets.editQuestion") : t("admin.tickets.openArticle")}
+            </Button>
+          )}
 
           <Textarea
             value={reply}

@@ -3222,6 +3222,9 @@ export const en = {
     "admin.tickets.deletedToast": "Ticket deleted",
     "admin.tickets.deleteFailed": "Could not delete the ticket",
     "admin.tickets.open": "Open ticket",
+    "admin.tickets.editQuestion": "Edit this question",
+    "admin.tickets.openArticle": "Open this article",
+    "admin.tickets.editResolveFailed": "Could not locate the source file for this ticket",
 
     // ── Cookie Consent ─────────────────────────────────────────────────────
     "consent.title": "Privacy Notice",

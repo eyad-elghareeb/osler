@@ -4,7 +4,7 @@ import * as React from "react";
 import { Tags } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { Input } from "@/components/ui/input";
-import { StructuredEditorProps, Field, SectionLabel, CollapseContext, questionSnippet, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
+import { StructuredEditorProps, Field, SectionLabel, CollapseContext, questionSnippet, useCollapseState, useFocusScroll, FOCUS_RING_CLASS, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
 import { QuizEditor, ChoicesEditor } from "./quiz-editor";
 
 /**
@@ -18,11 +18,19 @@ import { QuizEditor, ChoicesEditor } from "./quiz-editor";
  * content_object's R2 folder via the adminApi.uploadFile helper.
  */
 
-export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, focusId }: StructuredEditorProps) {
   const { t } = useI18n();
   const dndScope = React.useId();
   const passages: any[] = Array.isArray(value?.passages) ? value.passages : [];
-  const collapseState = useCollapseState(passages.length);
+  // A deep link may target a passage id or a nested question id.
+  const focusPassageIndex = focusId
+    ? passages.findIndex((p) => p?.id === focusId || (Array.isArray(p?.questions) && p.questions.some((q: any) => q?.id === focusId)))
+    : -1;
+  const collapseState = useCollapseState(passages.length, focusPassageIndex >= 0 ? focusPassageIndex : undefined);
+  // Only scroll at this level when the passage itself is the target — nested
+  // question targets are scrolled by the inner QuizEditor once mounted.
+  const passageItselfFocused = focusId && passages[focusPassageIndex]?.id === focusId;
+  useFocusScroll(passageItselfFocused ? focusId : null);
 
   function update(next: any[]) {
     onChange({ ...value, passages: next });
@@ -52,8 +60,13 @@ export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key 
       <div className="space-y-3">
         <ListToolbar onAdd={addPassage} addLabel="Add passage" readOnly={readOnly} showCollapseControls />
         {passages.map((p, i) => (
+          <div
+            key={p?.id ?? i}
+            data-focus-id={p?.id ?? undefined}
+            className={focusPassageIndex === i && passageItselfFocused ? `rounded-lg ${FOCUS_RING_CLASS}` : undefined}
+          >
           <ItemRow
-            key={i}
+            key={`${p?.id ?? i}-row`}
             index={i}
             total={passages.length}
             onMove={(d) => movePassage(i, d)}
@@ -100,9 +113,11 @@ export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key 
               readOnly={readOnly}
               r2KeyBase={r2KeyBase}
               rawR2Key={rawR2Key}
+              focusId={focusId}
             />
           </Field>
         </ItemRow>
+          </div>
       ))}
       </div>
     </CollapseContext.Provider>
@@ -111,10 +126,10 @@ export function PassagesEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key 
 
 // ── Flashcard editor (basic + cloze + subdecks) ────────────────────────────
 
-export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters }: StructuredEditorProps) {
+export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters, focusId }: StructuredEditorProps) {
   const hasPassages = Array.isArray(value?.passages) && value.passages.length > 0;
   const hasFlatQuestions = Array.isArray(value?.questions) && value.questions.length > 0;
-  const passthrough = { readOnly, r2KeyBase, rawR2Key };
+  const passthrough = { readOnly, r2KeyBase, rawR2Key, focusId };
 
   // Chapters stay visible in every shape — the section edits value.chapters
   // directly and preserves all other keys.
@@ -161,11 +176,13 @@ export function BankEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hid
 }
 
 // ── Flat questions editor for bank files without passages ─────────────────
-export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key }: StructuredEditorProps) {
+export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, focusId }: StructuredEditorProps) {
   const { t } = useI18n();
   const dndScope = React.useId();
   const questions: any[] = Array.isArray(value?.questions) ? value.questions : [];
-  const collapseState = useCollapseState(questions.length);
+  const focusIndex = focusId ? questions.findIndex((q) => q?.id === focusId) : -1;
+  const collapseState = useCollapseState(questions.length, focusIndex >= 0 ? focusIndex : undefined);
+  useFocusScroll(focusIndex >= 0 ? focusId : null);
 
   function update(next: any[]) {
     onChange({ ...value, questions: next });
@@ -206,8 +223,13 @@ export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, 
           <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noQuestions")}</p>
         ) : (
           questions.map((q, i) => (
+            <div
+              key={q?.id ?? i}
+              data-focus-id={q?.id ?? undefined}
+              className={focusIndex === i ? `rounded-lg ${FOCUS_RING_CLASS}` : undefined}
+            >
             <ItemRow
-              key={i}
+              key={`${q?.id ?? i}-row`}
               index={i}
               total={questions.length}
               onMove={(d) => moveQuestion(i, d)}
@@ -300,6 +322,7 @@ export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, 
                 />
               </Field>
             </ItemRow>
+            </div>
           ))
         )}
       </div>

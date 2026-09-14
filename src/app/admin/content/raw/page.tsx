@@ -29,10 +29,11 @@ function AdminRawContentView() {
   const identity = useAdminIdentity();
   const params = useSearchParams();
   const key = params.get("key") ?? "";
+  const focusId = params.get("focus") ?? params.get("qid");
 
   if (!key) return <MissingKeyView />;
 
-  return <ContentEditor rawR2Key={key} capabilities={identity.capabilities} />;
+  return <ContentEditor rawR2Key={key} focusId={focusId} capabilities={identity.capabilities} />;
 }
 
 export default function AdminRawContentEditorPage() {

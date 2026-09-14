@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { StructuredEditorProps, Field, SectionLabel, CollapseContext, useCollapseState, ListToolbar, arrayMove, ItemRow, TagListField, MilkdownEditor, ChaptersEditor } from "./shared";
+import { StructuredEditorProps, Field, SectionLabel, CollapseContext, useCollapseState, useFocusScroll, FOCUS_RING_CLASS, ListToolbar, arrayMove, ItemRow, TagListField, MilkdownEditor, ChaptersEditor } from "./shared";
 
 /**
  * Structured content editors — full React port of
@@ -20,11 +20,13 @@ import { StructuredEditorProps, Field, SectionLabel, CollapseContext, useCollaps
  * content_object's R2 folder via the adminApi.uploadFile helper.
  */
 
-export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters }: StructuredEditorProps) {
+export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hideChapters, focusId }: StructuredEditorProps) {
   const { t } = useI18n();
   const dndScope = React.useId();
   const prompts: any[] = Array.isArray(value?.prompts) ? value.prompts : [];
-  const collapseState = useCollapseState(prompts.length);
+  const focusIndex = focusId ? prompts.findIndex((p) => p?.id === focusId) : -1;
+  const collapseState = useCollapseState(prompts.length, focusIndex >= 0 ? focusIndex : undefined);
+  useFocusScroll(focusIndex >= 0 ? focusId : null);
 
   function update(next: any[]) {
     onChange({ ...value, prompts: next });
@@ -67,8 +69,13 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, 
           <p className="text-sm text-muted-foreground text-center py-6">{t("admin.structured.noPrompts")}</p>
         ) : (
           prompts.map((p, i) => (
+            <div
+              key={p?.id ?? i}
+              data-focus-id={p?.id ?? undefined}
+              className={focusIndex === i ? `rounded-lg ${FOCUS_RING_CLASS}` : undefined}
+            >
             <ItemRow
-              key={i}
+              key={`${p?.id ?? i}-row`}
               index={i}
               total={prompts.length}
               onMove={(d) => movePrompt(i, d)}
@@ -163,6 +170,7 @@ export function WrittenEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, 
               rawR2Key={rawR2Key}
             />
           </ItemRow>
+            </div>
         ))
       )}
       </div>

@@ -89,12 +89,15 @@ interface ContentEditorProps {
    *  directly from the Worker's /v1/content/* endpoint and saves via
    *  /v1/admin/content/upload-file. */
   rawR2Key?: string;
+  /** Question/prompt id to expand + scroll to on load (`?focus=` deep link,
+   *  e.g. from a support-ticket shortcut). */
+  focusId?: string | null;
   capabilities: AdminCapabilities;
 }
 
 type EditorMode = "form" | "code";
 
-export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps) {
+export function ContentEditor({ id, rawR2Key, focusId, capabilities }: ContentEditorProps) {
   const { t } = useI18n();
   const { settings } = useAdminSettings();
   const identity = useAdminIdentity();
@@ -1072,6 +1075,7 @@ export function ContentEditor({ id, rawR2Key, capabilities }: ContentEditorProps
                   readOnly={isReadOnly}
                   r2KeyBase={isRawMode ? undefined : obj?.r2_key_base}
                   rawR2Key={isRawMode ? rawR2Key : undefined}
+                  focusId={focusId}
                 />
               )}
             </div>
@@ -1276,6 +1280,7 @@ function FormEditorSwitch({
   readOnly,
   r2KeyBase,
   rawR2Key,
+  focusId,
 }: {
   contentType: ContentType;
   parsed: any;
@@ -1283,6 +1288,7 @@ function FormEditorSwitch({
   readOnly?: boolean;
   r2KeyBase?: string;
   rawR2Key?: string;
+  focusId?: string | null;
 }) {
   const { t } = useI18n();
   // Mixed packs (MCQ questions/passages + written prompts) get the dedicated
@@ -1293,7 +1299,7 @@ function FormEditorSwitch({
     (Array.isArray(parsed?.passages) && parsed.passages.length > 0);
   const hasWritten = Array.isArray(parsed?.prompts) && parsed.prompts.length > 0;
   if (hasMcq && hasWritten) {
-    return <MixedEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return <MixedEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} focusId={focusId} />;
   }
   if (Array.isArray(parsed?.stations)) {
     return <OsceEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
@@ -1307,19 +1313,19 @@ function FormEditorSwitch({
   if (Array.isArray(parsed?.passages)) {
     // Distinguish bank vs quiz-by-passages: bank passages have `content`,
     // quiz passages have `stem`. We pass to BankEditor which handles both.
-    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} focusId={focusId} />;
   }
   if (Array.isArray(parsed?.prompts)) {
-    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return <WrittenEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} focusId={focusId} />;
   }
   if (Array.isArray(parsed?.questions)) {
     // Bank files may have a flat questions[] array without passages.
     // If the content type is explicitly "bank", use BankEditor;
     // otherwise use QuizEditor for regular quiz packs.
     if (contentType === "bank") {
-      return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+      return <BankEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} focusId={focusId} />;
     }
-    return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} />;
+    return <QuizEditor value={parsed} onChange={onChange} readOnly={readOnly} r2KeyBase={r2KeyBase} rawR2Key={rawR2Key} focusId={focusId} />;
   }
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-6">

@@ -81,6 +81,9 @@ export interface StructuredEditorProps {
   /** Hide the pack-level ChaptersEditor section. Used by MixedEditor, which
    *  renders one shared chapters section above its embedded sub-editors. */
   hideChapters?: boolean;
+  /** Question/prompt id to expand, scroll to and highlight on mount.
+   *  Set from `?focus=<qid>` deep links (e.g. support-ticket shortcuts). */
+  focusId?: string | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -139,11 +142,15 @@ export function questionSnippet(q: any): string {
   return `: ${text.length > 60 ? text.slice(0, 60) + "…" : text}`;
 }
 
-export function useCollapseState(total: number) {
+export function useCollapseState(total: number, focusIndex?: number | null) {
   const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>(() => {
     if (total <= LARGE_LIST) return {};
     const next: Record<number, boolean> = {};
-    for (let i = 0; i < total; i++) next[i] = true;
+    for (let i = 0; i < total; i++) {
+      // A deep-linked question stays expanded so the admin lands on it.
+      if (focusIndex != null && i === focusIndex) continue;
+      next[i] = true;
+    }
     return next;
   });
   const toggle = React.useCallback((i: number) => {
@@ -158,6 +165,30 @@ export function useCollapseState(total: number) {
     setCollapsed({});
   }, []);
   return { collapsed, toggle, collapseAll, expandAll, total };
+}
+
+/** Ring highlight for a deep-linked row (support-ticket `?focus=` shortcut). */
+export const FOCUS_RING_CLASS = "border-primary/60 ring-2 ring-primary/20";
+
+/** Scroll the row tagged `data-focus-id="<id>"` into view on mount. Runs
+ *  after a short delay so lazy editors (Milkdown) have mounted and layout
+ *  has settled. Respects prefers-reduced-motion. */
+export function useFocusScroll(focusId?: string | null) {
+  React.useEffect(() => {
+    if (!focusId) return;
+    const reduced = typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const timer = setTimeout(() => {
+      try {
+        const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(focusId) : focusId;
+        const el = document.querySelector(`[data-focus-id="${escaped}"]`);
+        el?.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
+      } catch {
+        // Non-critical — the row is still expanded + highlighted.
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [focusId]);
 }
 
 export function ListToolbar({
