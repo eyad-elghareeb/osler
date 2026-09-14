@@ -342,29 +342,29 @@ export function SpotlightWalkthrough({
         <>
           {/* top strip */}
           <div
-            className="absolute z-10 pointer-events-auto"
-            style={{ top: 0, left: 0, right: 0, height: spotlightRect.top, backgroundColor: "rgba(5,12,24,0.82)" }}
+            className="absolute z-10 pointer-events-auto bg-background/80"
+            style={{ top: 0, left: 0, right: 0, height: spotlightRect.top }}
             aria-hidden="true"
             onClick={handleBackdropClick}
           />
           {/* bottom strip */}
           <div
-            className="absolute z-10 pointer-events-auto"
-            style={{ top: spotlightRect.top + spotlightRect.height, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(5,12,24,0.82)" }}
+            className="absolute z-10 pointer-events-auto bg-background/80"
+            style={{ top: spotlightRect.top + spotlightRect.height, left: 0, right: 0, bottom: 0 }}
             aria-hidden="true"
             onClick={handleBackdropClick}
           />
           {/* left strip */}
           <div
-            className="absolute z-10 pointer-events-auto"
-            style={{ top: spotlightRect.top, height: spotlightRect.height, left: 0, width: spotlightRect.left, backgroundColor: "rgba(5,12,24,0.82)" }}
+            className="absolute z-10 pointer-events-auto bg-background/80"
+            style={{ top: spotlightRect.top, height: spotlightRect.height, left: 0, width: spotlightRect.left }}
             aria-hidden="true"
             onClick={handleBackdropClick}
           />
           {/* right strip */}
           <div
-            className="absolute z-10 pointer-events-auto"
-            style={{ top: spotlightRect.top, height: spotlightRect.height, left: spotlightRect.left + spotlightRect.width, right: 0, backgroundColor: "rgba(5,12,24,0.82)" }}
+            className="absolute z-10 pointer-events-auto bg-background/80"
+            style={{ top: spotlightRect.top, height: spotlightRect.height, left: spotlightRect.left + spotlightRect.width, right: 0 }}
             aria-hidden="true"
             onClick={handleBackdropClick}
           />
@@ -372,8 +372,7 @@ export function SpotlightWalkthrough({
       ) : (
         /* No spotlight found — full dim backdrop catches clicks */
         <div
-          className="absolute inset-0 z-10 pointer-events-auto"
-          style={{ backgroundColor: "rgba(5,12,24,0.82)" }}
+          className="absolute inset-0 z-10 pointer-events-auto bg-background/80"
           aria-hidden="true"
           onClick={handleBackdropClick}
         />

@@ -527,8 +527,7 @@ export function VideosStudio({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-90" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div
-                    className="size-12 rounded-full flex items-center justify-center backdrop-blur-sm bg-black/40 border border-white/30 group-hover:scale-110 group-hover:bg-black/60 transition-all"
-                    style={{ color: "white" }}
+                    className="size-12 rounded-full flex items-center justify-center backdrop-blur-sm bg-black/40 border border-white/30 text-white group-hover:scale-110 group-hover:bg-black/60 transition-all"
                   >
                     <Play className="size-5 ms-0.5" fill="currentColor" />
                   </div>
