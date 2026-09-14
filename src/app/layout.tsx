@@ -151,8 +151,8 @@ export const viewport = {
   // the URL bar and add the native app-switcher snapshot when launched
   // from the home screen.
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#050911" },
+    { media: "(prefers-color-scheme: light)", color: "#f9fcff" },
   ],
 } as const;
 
@@ -168,8 +168,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="dark" data-blur="off">
       <head>
-        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#050911" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#f9fcff" media="(prefers-color-scheme: light)" />
         {/* Resource hints — warm the critical cross-origin sockets before first
             fetch. DNS prefetch + preconnect pair helps on older browsers. Only
             the 3 most-used origins are hinted to avoid wasting slots. */}

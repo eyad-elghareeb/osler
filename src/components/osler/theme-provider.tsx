@@ -89,6 +89,32 @@ interface OslerThemeContextValue {
 const OslerThemeContext = React.createContext<OslerThemeContextValue | null>(null);
 
 /**
+ * Point the OS chrome (Chrome top bar / task switcher, Samsung Internet
+ * navigation bar, iOS standalone status bar) at the actually-painted app
+ * background. The static media-bound fallbacks in <head> track the OS
+ * scheme, but the app theme can override it (pinned dark/light choice,
+ * custom palette), so every theme application collapses them into a single
+ * exact meta holding the resolved `--background`.
+ */
+function syncPwaThemeColor() {
+  if (typeof document === "undefined") return;
+  try {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--background").trim();
+    if (!bg) return;
+    document.head.querySelectorAll('meta[name="theme-color"][media]').forEach((m) => m.remove());
+    let meta = document.head.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", bg);
+  } catch {
+    // ignore — the static fallback metas stay in place
+  }
+}
+
+/**
  * Apply a theme by id. Built-in ids ("dark", "light") toggle the .dark / .light
  * class on <html>. Custom themes add their own class (`theme-<id>`) and the
  * CSS variable overrides are injected into a <style> tag in <head>.
@@ -116,6 +142,9 @@ function applyThemeClass(id: string, customThemes: CustomThemeConfig[]) {
     // Built-in: just add the variant class.
     root.classList.add(id === "light" ? "light" : "dark");
   }
+  // Custom palettes restyle --background via the injected <style> block, so
+  // read the color after the class lands and push it to the OS chrome.
+  syncPwaThemeColor();
 }
 
 /**
@@ -239,7 +268,12 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
       const syncCustom = getCustomThemes();
       if (stored === "dark" || stored === "light") {
         if (stored !== "dark") apply(stored, syncCustom);
-        else if (syncCustom.length > 0) setCustomThemes(syncCustom);
+        else {
+          if (syncCustom.length > 0) setCustomThemes(syncCustom);
+          // applyThemeClass didn't run (already on dark) — still point the
+          // OS chrome at the app background in case the OS scheme is light.
+          syncPwaThemeColor();
+        }
         return;
       }
       if (stored && stored !== SYSTEM_THEME_CHOICE) {
@@ -249,12 +283,18 @@ export function OslerThemeProvider({ children }: { children: React.ReactNode }) 
         }
         const def = getDefaultTheme();
         if (def && def !== "dark") apply(def, syncCustom);
-        else if (syncCustom.length > 0) setCustomThemes(syncCustom);
+        else {
+          if (syncCustom.length > 0) setCustomThemes(syncCustom);
+          syncPwaThemeColor();
+        }
         return;
       }
       const sys = systemTheme();
       if (sys !== "dark") apply(sys, syncCustom);
-      else if (syncCustom.length > 0) setCustomThemes(syncCustom);
+      else {
+        if (syncCustom.length > 0) setCustomThemes(syncCustom);
+        syncPwaThemeColor();
+      }
     } catch {
       // ignore — the async config load recovers below
     }
