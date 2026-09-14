@@ -813,7 +813,8 @@ export interface EmailOverview {
 
 export const emailApi = {
   overview: () => req<EmailOverview>("/v1/admin/email"),
-  sendTest: () => req<{ ok: boolean; providerStatus: number }>("/v1/admin/email/test", "POST"),
+  sendTest: (to?: string) =>
+    req<{ ok: boolean; providerStatus: number }>("/v1/admin/email/test", "POST", to ? { to } : undefined),
 };
 
 export const analyticsApi = {

@@ -4319,12 +4319,27 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
   if (path === "/v1/admin/email" || path === "/v1/admin/email/test") {
     if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
 
-    // POST /v1/admin/email/test — send a branded test email to the acting
-    // admin's own address. The fastest way to verify the Gmail relay or
-    // Resend setup end to end.
+    // POST /v1/admin/email/test — send a branded test email to an explicit
+    // { to } address (e.g. a mail-tester.com diagnostic address), falling
+    // back to the acting admin's own address when omitted. The fastest way
+    // to verify the Gmail relay or Resend setup end to end. Admin-gated, so
+    // an arbitrary recipient is acceptable — but the format is still
+    // validated to keep junk payloads out of the delivery log.
     if (request.method === "POST" && path === "/v1/admin/email/test") {
       if (!emailProviderReady(env) || !env.APP_ORIGIN) return json({ error: "Email is not configured" }, 400, origin, log);
-      const to = session.user.email;
+      let to: string | null = session.user.email;
+      try {
+        const body = (await request.json()) as { to?: unknown };
+        if (typeof body?.to === "string" && body.to.trim() !== "") {
+          const candidate = body.to.trim().toLowerCase();
+          if (!/^[^\s@<>,;:"']+@[^\s@<>,;:"']+\.[^\s@<>,;:"']+$/.test(candidate) || candidate.length > 254) {
+            return json({ error: "Invalid email address" }, 400, origin, log);
+          }
+          to = candidate;
+        }
+      } catch {
+        /* empty or non-JSON body → the admin's own address */
+      }
       if (!to) return json({ error: "Your account has no email address to send to" }, 400, origin, log);
       try {
         const { html, text } = testEmail(env.APP_ORIGIN);

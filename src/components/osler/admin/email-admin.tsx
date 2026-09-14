@@ -5,6 +5,7 @@ import { Mail, Send, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Clock } fr
 import { useI18n } from "@/components/osler/i18n-provider";
 import { LoadingState, StatTile } from "@/components/osler/ui-primitives";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { emailApi, type EmailOverview } from "@/components/osler/admin/admin-api";
@@ -23,6 +24,9 @@ export function EmailAdmin() {
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // Explicit test recipient (e.g. a mail-tester.com diagnostic address).
+  // Blank falls back to the acting admin's own address server-side.
+  const [testTo, setTestTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,10 +45,16 @@ export function EmailAdmin() {
   }, [load]);
 
   const sendTest = useCallback(async () => {
+    const to = testTo.trim();
+    if (to !== "" && !/^[^\s@<>,;:"']+@[^\s@<>,;:"']+\.[^\s@<>,;:"']+$/.test(to)) {
+      haptic("error");
+      setTestResult({ ok: false, msg: t("admin.email.invalidAddress") });
+      return;
+    }
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await emailApi.sendTest();
+      const res = await emailApi.sendTest(to === "" ? undefined : to);
       haptic("success");
       setTestResult({ ok: true, msg: t("admin.email.testQueued", { status: res.providerStatus }) });
       await load();
@@ -54,7 +64,7 @@ export function EmailAdmin() {
     } finally {
       setTesting(false);
     }
-  }, [load, t]);
+  }, [load, t, testTo]);
 
   if (loading && !data) {
     return <LoadingState label={t("common.loading")} />;
@@ -128,14 +138,26 @@ export function EmailAdmin() {
           ) : null}
         </dl>
         <div className="mt-3 pt-3 border-t border-border">
-          <Button onClick={sendTest} loading={testing} disabled={!data.provider.ready}>
-            <Send className="size-3.5" />
-            {testing ? t("admin.email.sending") : t("admin.email.sendTest")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="email"
+              dir="ltr"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              placeholder={t("admin.email.testToPlaceholder")}
+              aria-label={t("admin.email.testTo")}
+              className="h-9 max-w-64 font-mono text-xs"
+              disabled={!data.provider.ready || testing}
+            />
+            <Button onClick={sendTest} loading={testing} disabled={!data.provider.ready}>
+              <Send className="size-3.5" />
+              {testing ? t("admin.email.sending") : t("admin.email.sendTest")}
+            </Button>
+          </div>
           {testResult ? (
-            <span className={cn("ms-3 text-xs", testResult.ok ? "text-success" : "text-destructive")}>{testResult.msg}</span>
+            <p className={cn("mt-2 text-xs", testResult.ok ? "text-success" : "text-destructive")}>{testResult.msg}</p>
           ) : (
-            <span className="ms-3 text-xs text-muted-foreground">{t("admin.email.sendTestHint")}</span>
+            <p className="mt-2 text-xs text-muted-foreground">{t("admin.email.sendTestHint")}</p>
           )}
         </div>
       </div>
