@@ -470,7 +470,7 @@ export function UserDetailView({ userId }: UserDetailViewProps) {
                 </dd>
               </div>
             </dl>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
               {activity.kinds.map((k) => (
                 <StatTile
                   key={k.kind}
