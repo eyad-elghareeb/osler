@@ -319,9 +319,28 @@ export const EpubReader = React.memo(function EpubReader({
   );
 
 /**
-   * Per-section document wiring: images → lightbox, external links → new tab,
-   * and text selection → highlight (when a colour is armed).
-   */
+ * Remove nodes the browser would only reject loudly: publisher `<script>`
+ * elements (the section sandbox has no script rights, so each one logs a
+ * "blocked script execution" error) and publisher stylesheet `<link>`s
+ * (rewritten to blob: URLs, which the CSP `style-src` intentionally doesn't
+ * allow-list — the injected Osler theme owns section styling). Neither can
+ * ever take effect, so stripping them changes nothing visually and keeps the
+ * console clean on script/CSS-heavy books.
+ */
+function stripBlockedSectionNodes(contents: Contents): void {
+  const doc = contents.document;
+  if (!doc) return;
+  try {
+    doc.querySelectorAll("script, link[rel~='stylesheet']").forEach((el) => el.remove());
+  } catch {
+    // A half-parsed section document — the sandbox/CSP blocks apply anyway.
+  }
+}
+
+/**
+ * Per-section document wiring: images → lightbox, external links → new tab,
+ * and text selection → highlight (when a colour is armed).
+ */
   const attachContentsHandlers = React.useCallback(
     (contents: Contents) => {
       const doc = contents.document;
@@ -526,6 +545,7 @@ export const EpubReader = React.memo(function EpubReader({
 
         rendition.hooks.content.register((contents: Contents) => {
           void contents.addStylesheetRules(layoutRef.current, EPUB_LAYOUT_KEY)?.catch?.(() => {});
+          stripBlockedSectionNodes(contents);
           attachContentsHandlers(contents);
         });
         rendition.on("relocated", onRelocated);

@@ -628,6 +628,18 @@ export function getCachedAllArticles(): ArticleMeta[] | null {
  *  are cached (see articleHtmlCache) so revisits skip the fetch + unified
  *  parse entirely. */
 export async function loadArticleContent(filePath: string): Promise<Article | null> {
+  // Basename-only deep links (shared links, bookmarks, cross-links) carry no
+  // folder — resolve against the manifest before anything else so the body,
+  // sidecar, and fileUrl lookups below can't 404 on a bare filename.
+  if (!filePath.includes("/")) {
+    try {
+      const leaves = await listLeafNodes();
+      const hitPath = leaves
+        .flatMap((n) => (n.files ?? []).map((f) => `${n.path}${f}`))
+        .find((p) => p === filePath || p.endsWith(`/${filePath}`));
+      if (hitPath) filePath = hitPath;
+    } catch {}
+  }
   const key = articleCacheKey(filePath);
   const hit = articleHtmlCache.get(key);
   if (hit) return hit;

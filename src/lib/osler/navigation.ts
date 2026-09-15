@@ -140,18 +140,17 @@ export function useOslerRouter() {
       // tap that triggered this intent. The route still loads normally after
       // navigation; capable devices retain eager hover/focus prefetching.
       if (isConstrainedDevice()) return;
+      // Static export ships no RSC flight endpoint, so router.prefetch()
+      // only produces a 404 console error per call (caught but still logged
+      // by the browser) — skip the code fetch entirely. Data warming below
+      // is the half that actually shortens hub paint and hits real URLs.
       try {
-        const targetPath = routeFor(view, params);
-        router.prefetch(targetPath);
+        warmViewData(view);
       } catch {
         // Ignore prefetch error
       }
-      // Warm the view's data too: router prefetch only fetches code, so
-      // without this the hub still hangs on its first manifest round trip
-      // after commit. Memoized/SW-cached — free on repeat hovers.
-      warmViewData(view);
     },
-    [router]
+    []
   );
 
   const prefetchAll = React.useCallback(() => {

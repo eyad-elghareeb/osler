@@ -109,6 +109,13 @@ let sessionId: string = "";
 let sessionIssuedAt: number = 0;
 let consecutiveFailures = 0;
 let lastPingAt = 0;
+/**
+ * Circuit-breaker for an unreachable endpoint (ad-blocker, offline, DNS).
+ * Chrome logs every blocked fetch to the console even when the rejection is
+ * caught, so retrying on a timer spams the console forever — back off
+ * exponentially instead and let later events ride the next probe.
+ */
+let blockedUntil = 0;
 
 // ─── Privacy / enabling ────────────────────────────────────────────────────
 //
@@ -369,6 +376,7 @@ function apiUrl(): string | null {
 export async function flush(): Promise<void> {
   if (!analyticsEnabled()) return;
   if (flushing || buffer.length === 0) return;
+  if (Date.now() < blockedUntil) return;
   const base = apiUrl();
   if (!base) return;
   flushing = true;
@@ -395,6 +403,7 @@ export async function flush(): Promise<void> {
         });
         if (res.ok) {
           consecutiveFailures = 0;
+          blockedUntil = 0;
           continue;
         }
         if (res.status === 429) {
@@ -424,8 +433,12 @@ export async function flush(): Promise<void> {
         requeue(events);
         return;
       } catch {
-        // Network error — same failure-counter treatment.
+        // Network error (offline, DNS, ad-blocker) — same failure-counter
+        // treatment, plus a cooldown so the next flush doesn't immediately
+        // fire another console-logged blocked fetch. Backoff doubles per
+        // consecutive failure up to 30 minutes; a success resets it.
         consecutiveFailures += 1;
+        blockedUntil = Date.now() + Math.min(30 * 60_000, 60_000 * 2 ** Math.min(consecutiveFailures, 5));
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           buffer = [];
           return;
