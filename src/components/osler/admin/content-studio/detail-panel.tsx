@@ -17,7 +17,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   Eye, Pencil, Send, CloudUpload, Copy, Download, Trash2,
-  PackagePlus, Sparkles, Repeat2, Layers, FolderOpen, FolderInput,
+  PackagePlus, Sparkles, Repeat2, Layers, FolderOpen, FolderInput, FileText,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -355,12 +355,20 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   const [loading, setLoading] = React.useState(true);
   const isImage = !!node.r2Key && isImageR2Key(node.r2Key);
   const isEpub = !isImage && (!!node.r2Key && isEpubR2Key(node.r2Key));
-  const isMarkdown = !isImage && !isEpub && (node.r2Key?.endsWith(".md") ?? false);
+  const isPdf = !isImage && !isEpub && (node.r2Key?.toLowerCase().endsWith(".pdf") ?? false);
+  const isMarkdown = !isImage && !isEpub && !isPdf && (node.r2Key?.endsWith(".md") ?? false);
 
   React.useEffect(() => {
     if (!node.r2Key) { setLoading(false); return; }
     setLoading(true);
     setTruncated(false);
+    // Clear the previous file's preview so a slow fetch never flashes stale
+    // content (the parent remounts per node, this is the backstop).
+    setBody(null);
+    setImageUrl(null);
+    // PDFs preview as a placeholder — text-decoding the archive only yields
+    // mojibake and multi-megabyte <pre> dumps.
+    if (node.r2Key.toLowerCase().endsWith(".pdf")) { setLoading(false); return; }
 
     const fetchText = (p: Promise<string>) =>
       p.then((text) => {
@@ -375,10 +383,12 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
         .finally(() => setLoading(false));
     // EPUB archives preview through the real book reader — fetched as a blob
     // so staged (private) keys work and the worker URL is never embedded.
+    // The blob is used as-is: re-wrapping with `new Blob([blob])` copies the
+    // whole book in memory, and the reader sniffs bytes, not the MIME type.
     const fetchEpub = (p: Promise<Blob>) =>
       p.then((blob) => {
         if (blob.size === 0) { setImageUrl(null); return; }
-        setImageUrl(URL.createObjectURL(new Blob([blob], { type: "application/epub+zip" })));
+        setImageUrl(URL.createObjectURL(blob));
       })
         .catch(() => setImageUrl(null))
         .finally(() => setLoading(false));
@@ -430,6 +440,20 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
         <div className="shrink-0 border-t border-border px-2.5 py-1 text-xs text-muted-foreground">
           {node.name}{node.size != null ? ` · ${formatBytes(node.size)}` : ""}
         </div>
+      </div>
+    );
+  }
+
+  // Binary artifacts (PDF) render as a compact placeholder — decoding the
+  // archive as text only produces mojibake. The editor owns view/replace.
+  if (isPdf) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+        <FileText className="size-10 text-warning" />
+        <p className="text-sm font-medium">{node.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {node.size != null ? `${formatBytes(node.size)} · ` : ""}{t("admin.studio.previewBinaryHint")}
+        </p>
       </div>
     );
   }

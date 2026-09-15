@@ -32,6 +32,84 @@ export interface EpubToMarkdownResult {
   chaptersTotal: number;
 }
 
+/** Canonical MIME for EPUB archives staged as data URIs. */
+export const EPUB_MIME = "application/epub+zip";
+
+/** Canonical MIME for PDF artifacts staged as data URIs. */
+export const PDF_MIME = "application/pdf";
+
+/**
+ * Chunked ArrayBuffer → base64. The `btoa(String.fromCharCode(...bytes))`
+ * spread form throws a RangeError past ~100k arguments, so every upload path
+ * must go through here (or FileReader) for real-world multi-megabyte files.
+ */
+export function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** Single-read File → canonical `data:<mime>;base64,…` URI (no MIME sniffing). */
+export function arrayBufferToDataUri(buf: ArrayBuffer, mime: string): string {
+  return `data:${mime};base64,${arrayBufferToBase64(buf)}`;
+}
+
+/**
+ * Chunked `data:…;base64,…` → bytes. Used instead of `fetch(dataUri)` so
+ * multi-megabyte archives don't duplicate in memory through a data-URL fetch.
+ * Returns null when the body isn't a base64 data URI.
+ */
+export function dataUriToBytes(body: string): Uint8Array | null {
+  if (!body.startsWith("data:")) return null;
+  const comma = body.indexOf(",");
+  if (comma < 0 || !body.slice(0, comma).includes(";base64")) return null;
+  const b64 = body.slice(comma + 1).replace(/\s+/g, "");
+  if (!b64) return null;
+  try {
+    const binary = atob(b64);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** True when bytes look like a ZIP archive (EPUBs are ZIPs: `PK\x03\x04`). */
+export function hasZipMagic(bytes: ArrayBuffer | Uint8Array): boolean {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return b.length > 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
+}
+
+/** True when bytes look like a PDF (`%PDF-`). */
+export function hasPdfMagic(bytes: ArrayBuffer | Uint8Array): boolean {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return b.length > 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d;
+}
+
+/**
+ * True when a staged body is an EPUB archive. Accepts the canonical
+ * `data:application/epub…` prefix plus the legacy `data:application/octet-stream`
+ * prefix older uploads produced when the OS had no `.epub` MIME mapping
+ * (FileReader stamps `blob.type`, which is empty on Windows) — verified by
+ * ZIP magic so a PDF saved as octet-stream never matches.
+ */
+export function isEpubDataUri(body: string): boolean {
+  if (body.startsWith("data:application/epub")) return true;
+  if (!body.startsWith("data:application/octet-stream;base64,")) return false;
+  const bytes = dataUriToBytes(body);
+  return bytes !== null && hasZipMagic(bytes);
+}
+
+/** True when a staged body is a PDF artifact. */
+export function isPdfDataUri(body: string): boolean {
+  return body.startsWith("data:application/pdf");
+}
+
 type ZipEntry = { async: (kind: "string" | "uint8array") => Promise<string | Uint8Array> };
 type ZipLike = { file: (path: string) => ZipEntry | null };
 
@@ -57,7 +135,14 @@ async function readText(zip: ZipLike, path: string): Promise<string | null> {
 function resolveOpfPath(opfDir: string, href: string): string {
   const clean = href.split("#")[0].split("?")[0];
   if (!clean) return "";
-  const decoded = decodeURIComponent(clean);
+  // Filenames with a literal `%` (or non-UTF8 escapes) make
+  // decodeURIComponent throw — one bad href must not kill the whole book.
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(clean);
+  } catch {
+    decoded = clean;
+  }
   if (decoded.startsWith("/")) return decoded.slice(1);
   const parts = [...opfDir.split("/").filter(Boolean), ...decoded.split("/")];
   const out: string[] = [];
@@ -106,7 +191,17 @@ async function readTocTitles(zip: ZipLike, opfDir: string, opf: string | null): 
     const navHtml = await readText(zip, resolveOpfPath(opfDir, nav));
     if (navHtml) {
       const navDoc = new DOMParser().parseFromString(navHtml, "text/html");
-      const navEl = navDoc.querySelector("nav[*|type='toc'], nav");
+      // The namespaced `*|type` selector throws a SyntaxError in engines
+      // without a namespace context — fall back to plain selectors.
+      let navEl: Element | null = null;
+      for (const selector of ["nav[*|type='toc']", "nav[epub\\:type='toc']", "nav[role='doc-toc']", "nav"]) {
+        try {
+          navEl = navDoc.querySelector(selector);
+        } catch {
+          navEl = null;
+        }
+        if (navEl) break;
+      }
       for (const a of Array.from(navEl?.querySelectorAll("a[href]") ?? [])) {
         const href = a.getAttribute("href") ?? "";
         const label = a.textContent?.trim() ?? "";

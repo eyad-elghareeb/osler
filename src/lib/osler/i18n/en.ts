@@ -2719,6 +2719,7 @@ export const en = {
     "admin.studio.tree.noMatches": "No files match your search.",
     "admin.studio.content": "Content",
     "admin.studio.previewHint": "Read-only preview",
+    "admin.studio.previewBinaryHint": "Binary file — open in the editor to view or replace",
     "admin.studio.back": "Back",
     "admin.studio.forward": "Forward",
     "admin.studio.up": "Up one level",

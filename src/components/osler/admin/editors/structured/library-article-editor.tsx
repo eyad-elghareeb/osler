@@ -10,7 +10,16 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { StructuredEditorProps, Field, TagListField, MilkdownEditor } from "./shared";
-import { readEpubMeta, type EpubMeta } from "@/components/osler/admin/editors/epub-tools";
+import {
+  arrayBufferToDataUri,
+  hasPdfMagic,
+  hasZipMagic,
+  isEpubDataUri,
+  readEpubMeta,
+  EPUB_MIME,
+  PDF_MIME,
+  type EpubMeta,
+} from "@/components/osler/admin/editors/epub-tools";
 
 /**
  * Structured content editors — full React port of
@@ -102,7 +111,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
     ? value.contentType
     : rawValue.startsWith("data:application/pdf;")
     ? "pdf"
-    : rawValue.startsWith("data:application/epub+zip;")
+    : isEpubDataUri(rawValue)
     ? "epub"
     : rawValue.startsWith("<") && !rawValue.startsWith("---")
     ? "html"
@@ -118,6 +127,9 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
 
   // Store content type in the value object so content-editor.tsx can read it
   const currentBody = typeof value === "string" ? rawValue : (value?.body ?? "");
+  // Legacy octet-stream EPUB bodies need a magic check (base64 decode), so
+  // memoize — never decode megabytes on every render.
+  const isEpubBody = React.useMemo(() => isEpubDataUri(currentBody), [currentBody]);
 
   // Markdown articles keep their metadata OUT of the editable surface: the
   // frontmatter block is parsed off and shown as form fields instead, merged
@@ -149,13 +161,17 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
 
   async function handlePdfUpload(file: File) {
     try {
+      // Single ArrayBuffer read + chunked base64 — the btoa-spread form
+      // throws a RangeError past ~100k arguments, i.e. every real PDF.
       const buf = await file.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      const dataUri = `data:application/pdf;base64,${b64}`;
+      if (!hasPdfMagic(buf)) throw new Error("Not a PDF file");
+      const dataUri = arrayBufferToDataUri(buf, PDF_MIME);
       setContentType("pdf");
       update(dataUri, "pdf");
+      haptic("success");
       toast({ title: `Loaded ${file.name}` });
     } catch (err) {
+      haptic("error");
       toast({ title: `Failed to read PDF: ${String(err)}`, variant: "destructive" });
     }
   }
@@ -163,24 +179,20 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
   async function handleEpubUpload(file: File) {
     setEpubUploading(true);
     try {
-      // FileReader (not btoa-spread) — EPUBs are multi-megabyte and the
-      // spread form throws a RangeError past ~100k arguments.
-      const [dataUri, buf] = await Promise.all([
-        new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result ?? ""));
-          reader.onerror = () => reject(reader.error ?? new Error("FileReader error"));
-          reader.readAsDataURL(file);
-        }),
-        file.arrayBuffer(),
-      ]);
-      if (!dataUri.startsWith("data:application/epub")) {
-        throw new Error("Not an EPUB file");
-      }
+      // Single ArrayBuffer read — FileReader's data-URL MIME comes from
+      // `file.type`, which is empty on systems with no `.epub` registry
+      // mapping (Windows), so sniffing it rejects valid books. The ZIP
+      // magic (`PK\x03\x04`) is the ground truth; the data URI is built
+      // with the canonical MIME and chunked base64 (spread-btoa throws
+      // past ~100k args on multi-megabyte books).
+      const buf = await file.arrayBuffer();
+      if (!hasZipMagic(buf)) throw new Error("Not an EPUB file");
+      const dataUri = arrayBufferToDataUri(buf, EPUB_MIME);
       // Best-effort OPF parse so the metadata panel can be one click.
+      // readEpubMeta never mutates the buffer, so no clone is needed.
       let parsed: EpubMeta | null = null;
       try {
-        parsed = await readEpubMeta(buf.slice(0));
+        parsed = await readEpubMeta(buf);
       } catch {
         parsed = null;
       }
@@ -415,7 +427,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
             </div>
           )}
           <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed border-border p-8">
-          {currentBody.startsWith("data:application/epub") ? (
+          {isEpubBody ? (
             <div className="flex flex-col items-center gap-3">
               <BookOpen className="size-12 text-info" />
               <p className="text-sm font-medium">{t("admin.content.editor.epubLoaded")} ({Math.round(chars / 1024)} KB base64)</p>

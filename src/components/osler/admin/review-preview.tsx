@@ -11,16 +11,26 @@
  *    it the same way, with a compact file selector for multi-file groups.
  *
  * Images open in the shared ImageLightbox; oversized bodies degrade to a
- * "too large" hint instead of freezing the browser.
+ * "too large" hint instead of freezing the browser. EPUB artifacts (pending
+ * data-URI bodies and staged `.epub` keys) preview in the real book reader
+ * and PDFs as a placeholder — base64 archives never reach the text path.
  */
 
 import * as React from "react";
-import { Eye, FolderOpen } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Eye, FileText, FolderOpen } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { adminApi, type ContentObject } from "@/components/osler/admin/admin-api";
-import { isImageR2Key, formatBytes } from "@/components/osler/admin/editors/image-upload";
+import { isEpubR2Key, isImageR2Key, formatBytes } from "@/components/osler/admin/editors/image-upload";
+import { dataUriToBytes, isEpubDataUri } from "@/components/osler/admin/editors/epub-tools";
 import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
+// epubjs only loads when an EPUB preview actually opens — same split the
+// studio detail panel uses.
+const EpubReader = dynamic(
+  () => import("@/components/osler/epub-reader").then((m) => ({ default: m.EpubReader })),
+  { ssr: false, loading: () => null },
+);
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
 import {
   MarkdownBody,
@@ -73,12 +83,19 @@ export function ReviewPreview({
   const [body, setBody] = React.useState<string | null>(null);
   const [truncated, setTruncated] = React.useState(false);
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  // Binary artifact previews: EPUBs render in the real book reader, PDFs as
+  // a placeholder. Both must stay OUT of the text path — a multi-megabyte
+  // base64 body in MarkdownBody/<pre> freezes the tab.
+  const [epubUrl, setEpubUrl] = React.useState<string | null>(null);
+  const [pdfArtifact, setPdfArtifact] = React.useState(false);
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     setBody(null);
     setImageUrl(null);
+    setEpubUrl(null);
+    setPdfArtifact(false);
     setTruncated(false);
     if (!target) { setLoading(false); return; }
 
@@ -92,12 +109,38 @@ export function ReviewPreview({
       else setBody(text);
     };
 
+    /** Route a staged data-URI body to the binary preview when it is one. */
+    const finishDataBody = (text: string | null | undefined) => {
+      if (!alive) return;
+      if (text && isEpubDataUri(text)) {
+        const raw = dataUriToBytes(text);
+        if (raw) {
+          objUrl = URL.createObjectURL(new Blob([raw as unknown as BlobPart], { type: "application/epub+zip" }));
+          setEpubUrl(objUrl);
+        } else {
+          setBody(null);
+        }
+        return;
+      }
+      if (text && text.startsWith("data:application/pdf")) {
+        setPdfArtifact(true);
+        return;
+      }
+      if (text) finish(text);
+      else setBody(null);
+    };
+
     const load = async () => {
       try {
         if (target.kind === "pending") {
           const content = await adminApi.getContent(target.item.id);
-          if (alive && content.body) finish(content.body);
-          else if (alive) setBody(null);
+          finishDataBody(content.body);
+        } else if (isEpubR2Key(target.fileKey)) {
+          const blob = await adminApi.getR2Binary(target.fileKey);
+          objUrl = URL.createObjectURL(blob);
+          if (alive) setEpubUrl(objUrl);
+        } else if (target.fileKey.toLowerCase().endsWith(".pdf")) {
+          if (alive) setPdfArtifact(true);
         } else if (isImageR2Key(target.fileKey)) {
           const blob = await adminApi.getR2Binary(target.fileKey);
           objUrl = URL.createObjectURL(blob);
@@ -107,7 +150,7 @@ export function ReviewPreview({
           finish(res.body);
         }
       } catch {
-        if (alive) { setBody(null); setImageUrl(null); }
+        if (alive) { setBody(null); setImageUrl(null); setEpubUrl(null); setPdfArtifact(false); }
       } finally {
         if (alive) setLoading(false);
       }
@@ -180,8 +223,14 @@ export function ReviewPreview({
         </div>
       )}
 
-      {/* Body */}
-      <div dir={lang === "ar" ? "rtl" : "ltr"} className="min-h-0 flex-1 overflow-auto osler-scroll-y p-3">
+      {/* Body — the book reader owns its scroller, so the EPUB branch drops
+          the host `overflow-auto` padding (same rule as the studio panel). */}
+      <div
+        dir={lang === "ar" ? "rtl" : "ltr"}
+        className={epubUrl && !loading
+          ? "min-h-0 flex-1 overflow-hidden flex flex-col"
+          : "min-h-0 flex-1 overflow-auto osler-scroll-y p-3"}
+      >
         {!target ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-8 text-center">
             <div className="osler-empty__icon"><Eye className="size-6" /></div>
@@ -190,6 +239,21 @@ export function ReviewPreview({
           </div>
         ) : loading ? (
           <LoadingState size="sm" />
+        ) : epubUrl ? (
+          <EpubReader
+            fileUrl={epubUrl}
+            fileKey={`admin-review:${fetchKey}`}
+            title={name}
+            fontSize={15}
+            lineHeight={1.7}
+            maxWidth={640}
+          />
+        ) : pdfArtifact ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 py-8 text-center">
+            <FileText className="size-10 text-warning" />
+            <p className="text-sm font-medium">{name}</p>
+            <p className="text-xs text-muted-foreground">{t("admin.studio.previewBinaryHint")}</p>
+          </div>
         ) : imageUrl ? (
           <button
             type="button"

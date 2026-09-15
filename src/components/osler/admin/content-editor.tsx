@@ -73,6 +73,22 @@ import {
   MixedEditor,
 } from "@/components/osler/admin/editors/structured-editors";
 import { r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
+import {
+  arrayBufferToDataUri,
+  isEpubDataUri,
+  EPUB_MIME,
+  PDF_MIME,
+} from "@/components/osler/admin/editors/epub-tools";
+
+/** True for artifact keys whose bytes must travel as data URIs, never text. */
+function isBinaryArtifactKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return lower.endsWith(".pdf") || lower.endsWith(".epub");
+}
+
+function binaryMimeForKey(key: string): string {
+  return key.toLowerCase().endsWith(".pdf") ? PDF_MIME : EPUB_MIME;
+}
 
 const STATUS_COLOR: Record<string, string> = {
   draft: "text-muted-foreground",
@@ -259,6 +275,30 @@ export function ContentEditor({ id, rawR2Key, focusId, capabilities }: ContentEd
               if (!cancelled && text) setArticleMeta(JSON.parse(text));
             } catch {}
           };
+          // Binary artifacts (EPUB/PDF) must be fetched as bytes and staged
+          // as data URIs — `res.text()` UTF-8-decodes the archive into
+          // mojibake, and saving that back silently corrupts the book.
+          const loadBinaryBody = async (): Promise<string> => {
+            const mime = binaryMimeForKey(rawR2Key);
+            if (rawR2Key.startsWith("content-staging/")) {
+              const blob = await adminApi.getR2Binary(rawR2Key);
+              return arrayBufferToDataUri(await blob.arrayBuffer(), mime);
+            }
+            const binUrl = r2KeyToWorkerUrl(rawR2Key);
+            if (!binUrl) throw new Error("Cloud not configured");
+            const binRes = await fetch(binUrl);
+            if (!binRes.ok) throw new Error(`${binRes.status}`);
+            return arrayBufferToDataUri(await binRes.arrayBuffer(), mime);
+          };
+          if (isBinaryArtifactKey(rawR2Key)) {
+            const dataUri = await loadBinaryBody();
+            if (cancelled) return;
+            bodyRef.current = dataUri;
+            setBody(dataUri);
+            inferModeFromBody(dataUri, parsedRef.current, rawR2Key);
+            await loadSidecar();
+            return;
+          }
           if (rawR2Key.startsWith("content-staging/")) {
             const res = await adminApi.getR2Content(rawR2Key);
             if (cancelled) return;
@@ -328,7 +368,7 @@ export function ContentEditor({ id, rawR2Key, focusId, capabilities }: ContentEd
       setMode("form");
       const b = obj.body ?? "";
       if (b.startsWith("data:application/pdf;base64,")) setArtifactContentType("pdf");
-      else if (b.startsWith("data:application/epub")) setArtifactContentType("epub");
+      else if (isEpubDataUri(b)) setArtifactContentType("epub");
       else if (b.startsWith("<") && !b.startsWith("---")) setArtifactContentType("html");
       else setArtifactContentType("md");
       return;

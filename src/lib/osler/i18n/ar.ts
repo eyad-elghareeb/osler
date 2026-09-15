@@ -2714,6 +2714,7 @@ export const ar = {
     "admin.studio.tree.noMatches": "لا توجد ملفات تطابق بحثك.",
     "admin.studio.content": "المحتوى",
     "admin.studio.previewHint": "معاينة للقراءة فقط",
+    "admin.studio.previewBinaryHint": "ملف ثنائي — افتحه في المحرر للعرض أو الاستبدال",
     "admin.studio.back": "للخلف",
     "admin.studio.forward": "للأمام",
     "admin.studio.up": "مستوى لأعلى",

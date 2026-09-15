@@ -37,7 +37,7 @@ import {
 } from "@/components/osler/admin/admin-api";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
 import { r2KeyToWorkerUrl, isEpubR2Key } from "@/components/osler/admin/editors/image-upload";
-import { epubToMarkdown } from "@/components/osler/admin/editors/epub-tools";
+import { dataUriToBytes, epubToMarkdown, hasZipMagic } from "@/components/osler/admin/editors/epub-tools";
 import {
   convertOptionsFrom,
   convertContent,
@@ -92,19 +92,28 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
       try {
         // Managed leaf → fetch body via adminApi.getContent. A managed EPUB
         // draft stores its archive as a data URI — decode it to bytes so the
-        // extractor runs instead of the text converters.
+        // extractor runs instead of the text converters. Decoded with a
+        // chunked base64 pass (not `fetch(dataUri)`, which duplicates
+        // multi-megabyte archives in memory), and ZIP-magic-verified so
+        // legacy `octet-stream` bodies are recognised too.
         if (node.managed && node.cloudObject) {
           const obj = await adminApi.getContent(node.cloudObject.id);
           const nextBody = obj.body ?? "";
+          const epubBytes = nextBody.startsWith("data:")
+            ? (() => {
+                const raw = dataUriToBytes(nextBody);
+                return raw && hasZipMagic(raw) ? raw.buffer as ArrayBuffer : null;
+              })()
+            : null;
+          if (epubBytes) {
+            finishEpubBytes(epubBytes);
+            setBodyLoading(false);
+            return;
+          }
           if (nextBody.startsWith("data:application/epub")) {
-            try {
-              finishEpubBytes(await (await fetch(nextBody)).blob().then((b) => b.arrayBuffer()));
-            } catch (err) {
-              toast({ title: t("admin.studio.convertLoadFailed"), description: String(err), variant: "destructive" });
-              onOpenChange(false);
-            } finally {
-              setBodyLoading(false);
-            }
+            toast({ title: t("admin.studio.convertLoadFailed"), variant: "destructive" });
+            onOpenChange(false);
+            setBodyLoading(false);
             return;
           }
           setBody(nextBody);
