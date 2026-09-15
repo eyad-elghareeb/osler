@@ -359,13 +359,20 @@ export function FloatingArticleModal({
                 )}
               </AnimatePresence>
 
-              {/* Article content */}
-              <div className="flex-1 overflow-y-auto osler-scroll">
+              {/* Article content — a book owns its own scroller (standalone
+                  chrome renders the chapter bar + footer), so the epub branch
+                  must NOT sit inside another `overflow-y-auto`. */}
+              <div
+                className={cn(
+                  "flex-1 min-h-0",
+                  article?.contentType === "epub" ? "flex flex-col overflow-hidden" : "overflow-y-auto osler-scroll",
+                )}
+              >
                 {article ? (
                   article.contentType === "pdf" ? (
                     <PdfViewer url={article.fileUrl!} title={article.title} />
                   ) : article.contentType === "epub" ? (
-                    <div className="h-full min-h-[60vh] flex flex-col">
+                    <div className="flex-1 min-h-0 flex flex-col">
                       <EpubReader
                         fileUrl={article.fileUrl!}
                         fileKey={activeId ?? article.file}

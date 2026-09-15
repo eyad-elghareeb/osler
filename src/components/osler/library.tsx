@@ -25,6 +25,7 @@ import {
   MessageSquareWarning,
   Share2,
   Link2,
+  ChevronLeft,
   List,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -43,6 +44,7 @@ import { articleBookmarks } from "@/lib/osler/storage";
 import { WalkthroughDialog, isWalkthroughCompleted } from "@/components/osler/walkthrough";
 import type { ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SkeletonText, EmptyState as SharedEmptyState, ComingSoonState } from "./ui-primitives";
@@ -56,6 +58,8 @@ import { HighlighterToolbar } from "./highlighter-toolbar";
 import { ContentCacheButton } from "./content-cache-button";
 import { FolderTreeNav } from "./folder-tree-nav";
 import { NavigationStack } from "./navigation-stack";
+import { EpubChapterFooter, EpubChaptersPopover, EpubChaptersSheet } from "./epub-chapters";
+import type { EpubReaderControls, EpubReaderState } from "@/lib/osler/epub";
 import { applyHighlightsToHtml } from "@/lib/osler/article-highlights";
 import { setArticleViewContext, clearArticleViewContext } from "@/lib/osler/article-view-registry";
 
@@ -228,6 +232,30 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
     articleId: activeFile,
     enabled: true,
   });
+
+  // EPUB reader state — the book reader renders no chrome of its own (the
+  // `embedded` mode), so the desktop top bar, the mobile top bar and the
+  // desktop footer all read the book's chapters/position from here. Chrome is
+  // deliberately host-owned: the desktop reader keeps ONE top bar (title +
+  // chapters) and the mobile reader keeps its floating pill clear of any
+  // bottom bar.
+  const [epubState, setEpubState] = React.useState<EpubReaderState | null>(null);
+  const [epubChaptersOpen, setEpubChaptersOpen] = React.useState(false);
+  const epubControls = React.useRef<EpubReaderControls | null>(null);
+  const handleEpubState = React.useCallback((next: EpubReaderState) => setEpubState(next), []);
+  const handleEpubChapter = React.useCallback((href: string) => {
+    setEpubChaptersOpen(false);
+    epubControls.current?.goto(href);
+  }, []);
+  const handleEpubPrev = React.useCallback(() => epubControls.current?.prev(), []);
+  const handleEpubNext = React.useCallback(() => epubControls.current?.next(), []);
+
+  // The reader reports its own state on mount; drop the previous book's so a
+  // stale chapter never flashes in the header.
+  React.useEffect(() => {
+    setEpubState(null);
+    setEpubChaptersOpen(false);
+  }, [activeFile]);
 
   // Swipe-back gesture to navigate to Learn hub (disabled when an article is
   // open on mobile, or whenever a highlighter tool is active — the drag-to-
@@ -582,6 +610,17 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             articleContentRef={articleContentRef}
             processedHtml={processedArticleHtml}
             hlCtrl={hlCtrl}
+            epub={
+              activeArticle.contentType === "epub" && epubState
+                ? {
+                    state: epubState,
+                    onState: handleEpubState,
+                    onSelectChapter: handleEpubChapter,
+                    onSelectChapters: () => setEpubChaptersOpen(true),
+                  }
+                : null
+            }
+            epubControls={epubControls}
             onExportPdf={() => setPdfDialogOpen(true)}
             onReport={onReportProblem}
             onShare={handleShareArticle}
@@ -613,6 +652,15 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
           onExport={handleExportArticlePdf}
         />
         {notesPanel}
+        {activeArticle?.contentType === "epub" && epubState && (
+          <EpubChaptersSheet
+            data={epubState}
+            fallbackTitle={activeArticle.title}
+            open={epubChaptersOpen}
+            onOpenChange={setEpubChaptersOpen}
+            onSelect={handleEpubChapter}
+          />
+        )}
         {reportDialog}
         <WalkthroughDialog
           tour="library"
@@ -692,12 +740,23 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               onDisplayChange={updateDisplay}
               onToggleNotes={() => setNotesOpen((o) => !o)}
               hlCtrl={hlCtrl}
+              epub={activeArticle.contentType === "epub" && epubState ? { state: epubState, onSelect: handleEpubChapter } : null}
               onExportPdf={() => setPdfDialogOpen(true)}
               onReport={onReportProblem}
               onShare={handleShareArticle}
               onCopyLink={handleCopyArticleLink}
             />
-            <div className="flex-1 overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0 relative flex flex-col">
+            <div
+              className={cn(
+                "flex-1 min-h-0 relative flex flex-col",
+                // A book owns its own scroller (`.epub-container`), so the
+                // desktop wrapper must NOT be scrollable — a second scroller
+                // steals the gesture and kills momentum on touch devices.
+                activeArticle.contentType === "epub"
+                  ? "overflow-hidden"
+                  : "overflow-y-auto osler-scroll osler-tabbar-pad md:pb-0",
+              )}
+            >
               {loading ? (
                 <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full">
                   <Skeleton className="h-8 w-2/3 mb-2" />
@@ -709,19 +768,33 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
               ) : activeArticle.contentType === "pdf" ? (
                 <PdfViewer url={activeArticle.fileUrl!} title={activeArticle.title} />
               ) : activeArticle.contentType === "epub" ? (
-                <EpubReader
-                  fileUrl={activeArticle.fileUrl!}
-                  fileKey={activeFile ?? activeArticle.file}
-                  title={activeArticle.title}
-                  fontSize={(display.zoom / 100) * display.fontSize}
-                  lineHeight={LINE_HEIGHTS[display.lineSpacing]}
-                  maxWidth={display.width === "wide" ? 1200 : 768}
-                  fontFamily={
-                    display.fontFamily === "sans"
-                      ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
-                      : undefined
-                  }
-                />
+                <>
+                  <EpubReader
+                    fileUrl={activeArticle.fileUrl!}
+                    fileKey={activeFile ?? activeArticle.file}
+                    title={activeArticle.title}
+                    fontSize={(display.zoom / 100) * display.fontSize}
+                    lineHeight={LINE_HEIGHTS[display.lineSpacing]}
+                    maxWidth={display.width === "wide" ? 1200 : 768}
+                    fontFamily={
+                      display.fontFamily === "sans"
+                        ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
+                        : undefined
+                    }
+                    chrome="embedded"
+                    onState={handleEpubState}
+                    controlsRef={epubControls}
+                  />
+                  {epubState?.status === "ready" && (
+                    <EpubChapterFooter
+                      chapterLabel={epubState.chapterLabel}
+                      atStart={epubState.atStart}
+                      atEnd={epubState.atEnd}
+                      onPrev={handleEpubPrev}
+                      onNext={handleEpubNext}
+                    />
+                  )}
+                </>
               ) : activeArticle.contentType === "html" ? (
                 <div className="flex-1 flex flex-col bg-muted/20">
                   <iframe
@@ -1130,6 +1203,8 @@ function MobileReader({
   articleContentRef,
   processedHtml,
   hlCtrl,
+  epub,
+  epubControls,
   onExportPdf,
   onReport,
   onShare,
@@ -1146,11 +1221,20 @@ function MobileReader({
   articleContentRef: React.RefObject<HTMLDivElement | null>;
   processedHtml: string;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
+  /** Book chrome: the EPUB reader reports its chapters/position here so the
+   *  mobile pill can offer chapter navigation without a second bar. */
+  epub: {
+    state: EpubReaderState;
+    onState: (state: EpubReaderState) => void;
+    onSelectChapter: (href: string) => void;
+    onSelectChapters: () => void;
+  } | null;
+  epubControls: React.RefObject<EpubReaderControls | null>;
   onExportPdf: () => void;
   onReport: () => void;
   onShare: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, rtl } = useI18n();
   // NOTE: The swipe-to-go-back gesture is now handled by the parent
   // NavigationStack (which wraps MobileReader as its subpage). MobileReader
   // itself no longer needs its own edge-swipe ref — the NavigationStack's
@@ -1182,8 +1266,10 @@ function MobileReader({
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold truncate">{article.title}</h1>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span>{article.specialty}</span>
-              {article.readTimeMin && (
+              <span className="truncate">
+                {article.contentType === "epub" && epub ? epub.state.chapterLabel : article.specialty}
+              </span>
+              {article.contentType !== "epub" && article.readTimeMin && (
                 <>
                   <span className="opacity-40">&middot;</span>
                   <span className="flex items-center gap-0.5">
@@ -1194,17 +1280,58 @@ function MobileReader({
               )}
             </div>
           </div>
+
+          {article.contentType === "epub" && epub && (
+            <div className="flex items-center shrink-0 -me-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => epubControls.current?.prev()}
+                disabled={epub.state.atStart}
+                aria-label={t("library.epub.prev")}
+              >
+                <ChevronLeft className={cn("size-4", rtl && "rtl-flip-x")} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => epubControls.current?.next()}
+                disabled={epub.state.atEnd}
+                aria-label={t("library.epub.next")}
+              >
+                <ChevronRight className={cn("size-4", rtl && "rtl-flip-x")} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={epub.onSelectChapters}
+                aria-label={t("library.epub.chapters")}
+              >
+                <List className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Content — `osler-page` puts the scroller on the shared hide-on-scroll
           controller; the bottom padding clears the floating toolbar (plus the
-          safe area) so the pill never covers the end of the article. */}
+          safe area) so the pill never covers the end of the article. A book
+          owns its own scroller (`.epub-container`), so the wrapper must NOT be
+          scrollable — a second scroller steals the gesture on touch. It also
+          skips the clearance padding: the book renders no in-flow footer (its
+          progress hairline lives inside the reader), so padding would just
+          float the stage 84px above the screen edge. */}
       <div
-        className="flex-1 osler-page osler-scroll flex flex-col"
+        className={cn(
+          "flex-1 min-h-0 flex flex-col",
+          article.contentType === "epub" ? "relative overflow-hidden" : "osler-page osler-scroll",
+        )}
         style={{
           touchAction: "pan-y",
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.25rem)",
+          ...(article.contentType === "epub"
+            ? null
+            : { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.25rem)" }),
         }}
       >
         {loading ? (
@@ -1226,6 +1353,9 @@ function MobileReader({
                 ? "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif"
                 : undefined
             }
+            chrome="embedded"
+            onState={epub?.onState}
+            controlsRef={epubControls}
           />
         ) : article.contentType === "html" ? (
           <div className="flex-1 flex flex-col bg-muted/20">
@@ -1299,14 +1429,18 @@ function MobileReader({
 
               <div data-walkthrough="library-tools">
                 <HighlighterToolbar
-                  control={{
-                    tool: hlCtrl.tool,
-                    color: hlCtrl.color,
-                    count: hlCtrl.highlights.length,
-                    onToolChange: hlCtrl.setTool,
-                    onColorChange: hlCtrl.setColor,
-                    onClearAll: hlCtrl.clearAll,
-                  }}
+                  control={
+                    article.contentType === "epub" && epub
+                      ? epub.state.highlight
+                      : {
+                          tool: hlCtrl.tool,
+                          color: hlCtrl.color,
+                          count: hlCtrl.highlights.length,
+                          onToolChange: hlCtrl.setTool,
+                          onColorChange: hlCtrl.setColor,
+                          onClearAll: hlCtrl.clearAll,
+                        }
+                  }
                 />
               </div>
 
@@ -1711,6 +1845,7 @@ function ArticleHeader({
   onDisplayChange,
   onToggleNotes,
   hlCtrl,
+  epub,
   onExportPdf,
   onReport,
   onShare,
@@ -1723,12 +1858,18 @@ function ArticleHeader({
   onDisplayChange: (patch: Partial<ReaderDisplayPrefs>) => void;
   onToggleNotes: () => void;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
+  /** Book chrome: the EPUB reader reports its chapters/position here so the
+   *  title and the chapter menu live in one bar instead of stacking two. */
+  epub: { state: EpubReaderState; onSelect: (href: string) => void } | null;
   onExportPdf: () => void;
   onReport: () => void;
   onShare: () => void;
   onCopyLink: () => void;
 }) {
   const { t } = useI18n();
+
+  const isBook = article.contentType === "epub";
+  const canHighlight = article.contentType === "md" || isBook;
 
   return (
     <header className="shrink-0 h-12 flex items-center px-3 sm:px-4 gap-2 border-b border-border bg-card/60 backdrop-blur-md safe-pt relative z-20">
@@ -1749,7 +1890,11 @@ function ArticleHeader({
           </div>
         )}
 
-        {article.contentType === "md" && (
+        {isBook && epub && (
+          <EpubChaptersPopover data={epub.state} fallbackTitle={article.title} onSelect={epub.onSelect} />
+        )}
+
+        {canHighlight && (
           <>
             <div data-walkthrough="library-display">
               <DisplayMenu display={display} onChange={onDisplayChange} />
@@ -1757,14 +1902,18 @@ function ArticleHeader({
 
             <div data-walkthrough="library-tools">
               <HighlighterToolbar
-                control={{
-                  tool: hlCtrl.tool,
-                  color: hlCtrl.color,
-                  count: hlCtrl.highlights.length,
-                  onToolChange: hlCtrl.setTool,
-                  onColorChange: hlCtrl.setColor,
-                  onClearAll: hlCtrl.clearAll,
-                }}
+                control={
+                  isBook && epub
+                    ? epub.state.highlight
+                    : {
+                        tool: hlCtrl.tool,
+                        color: hlCtrl.color,
+                        count: hlCtrl.highlights.length,
+                        onToolChange: hlCtrl.setTool,
+                        onColorChange: hlCtrl.setColor,
+                        onClearAll: hlCtrl.clearAll,
+                      }
+                }
               />
             </div>
           </>
