@@ -610,8 +610,11 @@ export function Library({ initialArticleId, onNavigateBack: propOnNavigateBack }
             articleContentRef={articleContentRef}
             processedHtml={processedArticleHtml}
             hlCtrl={hlCtrl}
+            // The callbacks travel even before the first state report —
+            // gating the whole object on `epubState` deadlocks the reader:
+            // `onState` would stay undefined, so the state never arrives.
             epub={
-              activeArticle.contentType === "epub" && epubState
+              activeArticle.contentType === "epub"
                 ? {
                     state: epubState,
                     onState: handleEpubState,
@@ -1222,9 +1225,11 @@ function MobileReader({
   processedHtml: string;
   hlCtrl: ReturnType<typeof useArticleHighlighter>;
   /** Book chrome: the EPUB reader reports its chapters/position here so the
-   *  mobile pill can offer chapter navigation without a second bar. */
+   *  mobile pill can offer chapter navigation without a second bar. `state`
+   *  is null until the reader's first report — the callbacks are always
+   *  present so the report can happen at all. */
   epub: {
-    state: EpubReaderState;
+    state: EpubReaderState | null;
     onState: (state: EpubReaderState) => void;
     onSelectChapter: (href: string) => void;
     onSelectChapters: () => void;
@@ -1267,7 +1272,7 @@ function MobileReader({
             <h1 className="text-sm font-semibold truncate">{article.title}</h1>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span className="truncate">
-                {article.contentType === "epub" && epub ? epub.state.chapterLabel : article.specialty}
+                {article.contentType === "epub" && epub?.state ? epub.state.chapterLabel : article.specialty}
               </span>
               {article.contentType !== "epub" && article.readTimeMin && (
                 <>
@@ -1281,7 +1286,7 @@ function MobileReader({
             </div>
           </div>
 
-          {article.contentType === "epub" && epub && (
+          {article.contentType === "epub" && epub?.state && (
             <div className="flex items-center shrink-0 -me-1">
               <Button
                 variant="ghost"
@@ -1430,7 +1435,7 @@ function MobileReader({
               <div data-walkthrough="library-tools">
                 <HighlighterToolbar
                   control={
-                    article.contentType === "epub" && epub
+                    article.contentType === "epub" && epub?.state
                       ? epub.state.highlight
                       : {
                           tool: hlCtrl.tool,
