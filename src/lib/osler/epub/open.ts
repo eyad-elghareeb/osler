@@ -24,18 +24,39 @@ function readingDir(language: string): "ltr" | "rtl" {
   return EPUB_RTL_LANGS.has(primary) ? "rtl" : "ltr";
 }
 
-async function loadEpubFactory(): Promise<(input: ArrayBuffer) => Book> {
-  let mod: { default?: unknown };
-  try {
-    mod = (await import("epubjs")) as unknown as { default?: unknown };
-  } catch {
-    throw new EpubOpenError("engine", "epubjs failed to load");
-  }
-  // ESM build exposes the factory as `.default`; tolerate a CJS shape where
-  // the module itself is the factory.
-  const factory = typeof mod.default === "function" ? mod.default : mod;
-  if (typeof factory !== "function") throw new EpubOpenError("engine", "unexpected epubjs module shape");
-  return factory as (input: ArrayBuffer) => Book;
+type EpubFactory = (input: ArrayBuffer | Blob) => Book;
+
+let epubFactoryPromise: Promise<EpubFactory> | null = null;
+
+/**
+ * Start loading the epubjs engine without waiting for it. The reader calls
+ * this the moment a book is requested so the ~100–400ms module fetch +
+ * parse overlaps the archive download instead of following it. Failures are
+ * swallowed here and re-thrown (once) by `loadEpubFactory`, so a failed
+ * preload never poisons retries.
+ */
+export function preloadEpubEngine(): void {
+  void loadEpubFactory().catch(() => {});
+}
+
+async function loadEpubFactory(): Promise<EpubFactory> {
+  epubFactoryPromise ??= (async () => {
+    let mod: { default?: unknown };
+    try {
+      mod = (await import("epubjs")) as unknown as { default?: unknown };
+    } catch {
+      throw new EpubOpenError("engine", "epubjs failed to load");
+    }
+    // ESM build exposes the factory as `.default`; tolerate a CJS shape where
+    // the module itself is the factory.
+    const factory = typeof mod.default === "function" ? mod.default : mod;
+    if (typeof factory !== "function") throw new EpubOpenError("engine", "unexpected epubjs module shape");
+    return factory as EpubFactory;
+  })().catch((err) => {
+    epubFactoryPromise = null;
+    throw err;
+  });
+  return epubFactoryPromise;
 }
 
 /** Resolve to null instead of hanging — pathological NCX files exist. */
@@ -54,7 +75,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  * chapter fallback for books without a navigation document.
  */
 export async function openEpubBook(
-  data: ArrayBuffer,
+  data: ArrayBuffer | Blob,
   sectionLabel: (n: number) => string,
 ): Promise<OpenEpubBook> {
   const ePub = await loadEpubFactory();
@@ -136,8 +157,27 @@ export async function openEpubBook(
   };
 }
 
-/** Fetch the archive bytes with cancellation (fast article switching). */
-export async function fetchEpubArchive(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+/** Streaming download progress, reported while the archive arrives. */
+export interface EpubDownloadProgress {
+  /** Bytes received so far. */
+  loaded: number;
+  /** From `content-length` — null when the server doesn't send one. */
+  total: number | null;
+}
+
+/**
+ * Fetch the archive with cancellation (fast article switching) and progress.
+ *
+ * The body streams through a reader so the landing overlay can show a
+ * determinate progress bar on multi-megabyte books, and the chunks assemble
+ * straight into a Blob: epubjs (via JSZip) opens Blobs natively, which skips
+ * the extra full-archive copy an `arrayBuffer()` round-trip would add.
+ */
+export async function fetchEpubArchive(
+  url: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: EpubDownloadProgress) => void,
+): Promise<Blob> {
   let res: Response;
   try {
     res = await fetch(url, { signal });
@@ -146,9 +186,39 @@ export async function fetchEpubArchive(url: string, signal?: AbortSignal): Promi
     throw new EpubOpenError("network", "the book request failed");
   }
   if (!res.ok) throw new EpubOpenError("network", `HTTP ${res.status}`);
-  try {
-    return await res.arrayBuffer();
-  } catch {
-    throw new EpubOpenError("network", "the book body could not be read");
+  const totalRaw = Number(res.headers.get("content-length"));
+  const total = Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : null;
+  if (!res.body || typeof res.body.getReader !== "function") {
+    try {
+      const fallback = await res.blob();
+      onProgress?.({ loaded: fallback.size, total: fallback.size });
+      return fallback;
+    } catch {
+      throw new EpubOpenError("network", "the book body could not be read");
+    }
   }
+  const reader = res.body.getReader();
+  const chunks: BlobPart[] = [];
+  let loaded = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        loaded += value.byteLength;
+        onProgress?.({ loaded, total });
+      }
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new EpubOpenError("network", "the book body could not be read");
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Already closed with the stream — harmless.
+    }
+  }
+  return new Blob(chunks, { type: "application/epub+zip" });
 }

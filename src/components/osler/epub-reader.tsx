@@ -22,7 +22,9 @@ import {
   epubProgressKey,
   fetchEpubArchive,
   openEpubBook,
+  preloadEpubEngine,
   readThemePalette,
+  type EpubDownloadProgress,
   type EpubFailureCode,
   type EpubHighlightControl,
   type EpubReaderLayout,
@@ -225,6 +227,10 @@ export const EpubReader = React.memo(function EpubReader({
   const [position, setPosition] = React.useState<ReaderPosition>(EMPTY_POSITION);
   const [reloadNonce, setReloadNonce] = React.useState(0);
   const [themeNonce, setThemeNonce] = React.useState(0);
+  // Archive download progress for the landing overlay. Local only — it moves
+  // per network chunk and must never ride `onState` into host re-renders.
+  const [downloadProgress, setDownloadProgress] = React.useState<EpubDownloadProgress | null>(null);
+  const progressAtRef = React.useRef(0);
 
   const stageRef = React.useRef<HTMLDivElement>(null);
   const bookRef = React.useRef<{ destroy: () => void } | null>(null);
@@ -473,15 +479,29 @@ export const EpubReader = React.memo(function EpubReader({
     setChaptersLoading(true);
     setSpineLength(0);
     setPosition(EMPTY_POSITION);
+    setDownloadProgress(null);
+    progressAtRef.current = 0;
     appliedRef.current = new Set();
     pendingCfiRef.current = "";
     savedCfiRef.current = "";
     savedAtRef.current = 0;
     spineRef.current = 0;
 
+    // The engine module fetch overlaps the archive download (`openEpubBook`
+    // awaits the shared preload promise) instead of following it.
+    preloadEpubEngine();
+
     void (async () => {
       try {
-        const buf = await fetchEpubArchive(fileUrl, controller.signal);
+        const buf = await fetchEpubArchive(fileUrl, controller.signal, (p) => {
+          if (cancelled) return;
+          // Network chunks arrive far faster than the screen needs — paint at
+          // most ~8x/sec, plus the final tick.
+          const now = Date.now();
+          if (p.total != null && p.loaded < p.total && now - progressAtRef.current < 120) return;
+          progressAtRef.current = now;
+          setDownloadProgress(p);
+        });
         if (cancelled) return;
         const opened = await openEpubBook(buf, (n) => tRef.current("library.epub.section", { n }));
         if (cancelled) {
@@ -665,6 +685,14 @@ export const EpubReader = React.memo(function EpubReader({
     [chapters, position.href, position.index],
   );
 
+  // Landing-overlay download meter. Language-neutral numerals only, so no
+  // i18n key is needed for the per-chunk caption.
+  const downloadFraction =
+    downloadProgress?.total != null && downloadProgress.total > 0
+      ? Math.min(1, downloadProgress.loaded / downloadProgress.total)
+      : null;
+  const formatMb = (bytes: number) => `${(bytes / 1048576).toFixed(1)}`;
+
   const chapterLabel = React.useMemo(() => {
     const entry = chapterIndex >= 0 ? chapters[chapterIndex] : undefined;
     if (entry?.label) return entry.label;
@@ -810,10 +838,30 @@ export const EpubReader = React.memo(function EpubReader({
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                {t("library.epub.opening")}
-              </div>
+              {downloadFraction != null ? (
+                <div className="flex w-44 flex-col items-center gap-2">
+                  <div
+                    className="h-1 w-full overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(downloadFraction * 100)}
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-150"
+                      style={{ width: `${downloadFraction * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    {formatMb(downloadProgress!.loaded)} / {formatMb(downloadProgress!.total!)} MB
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {t("library.epub.opening")}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

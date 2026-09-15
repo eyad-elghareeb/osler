@@ -10,7 +10,8 @@
  * the engine, so the book reader's heavy dependency is fetched on first open.
  */
 
-export { fetchEpubArchive, openEpubBook } from "./open";
+export { fetchEpubArchive, openEpubBook, preloadEpubEngine } from "./open";
+export type { EpubDownloadProgress } from "./open";
 
 export {
   createEpubHighlight,

@@ -651,12 +651,14 @@ export async function loadArticleContent(filePath: string): Promise<Article | nu
     // EPUB bodies are parsed client-side by the book reader (see
     // src/lib/osler/epub.ts) straight from `fileUrl` — the Article shell
     // only carries identity + sidecar-merged metadata for the hub/headers.
+    // The URL carries the content-version stamp so repeat opens serve from
+    // the SW CacheFirst handler instead of re-downloading the whole archive.
     const shell: Article = {
       file: filePath.split("/").pop() ?? "",
       title: (filePath.split("/").pop() ?? "").replace(/\.epub$/i, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       content: "",
       html: "",
-      fileUrl: `${libraryBaseUrl()}${filePath}`,
+      fileUrl: cacheBust(`${libraryBaseUrl()}${filePath}`),
       lang: (await lookupNodeLangForFile(filePath)) ?? "en",
       contentType: "epub",
     };
