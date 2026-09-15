@@ -2269,6 +2269,10 @@ export const ar = {
     "admin.content.editor.uploadEpub": "رفع EPUB",
     "admin.content.editor.replaceEpub": "استبدال EPUB",
     "admin.content.editor.epubLoaded": "تم تحميل EPUB",
+    "admin.content.editor.epubSections": "قسمًا",
+    "admin.content.editor.epubWords": "{n} كلمة",
+    "admin.content.editor.epubUseMeta": "استخدام بيانات الكتاب",
+    "admin.content.editor.epubMetaApplied": "تم تطبيق بيانات الكتاب — راجع واحفظ",
 
     // Content browser
     "admin.content.tab.cloud": "العناصر السحابية",
@@ -2734,6 +2738,11 @@ export const ar = {
     "admin.studio.convertConfirm": "تحويل وفتح",
     "admin.studio.convertSuccess": "تم التحويل {from} ← {to}",
     "admin.studio.convertFailed": "فشل التحويل: {error}",
+    "admin.studio.convertLoadFailed": "تعذّر تحميل الملف المصدر",
+    "admin.studio.convertFromEpub": "كتاب EPUB",
+    "admin.studio.convertEpubLabel": "مقال مكتبة (ماركداون)",
+    "admin.studio.convertEpubDesc": "استخراج فصول الكتاب إلى مقال ماركداون بعناوين `## الفصل`.",
+    "admin.studio.convertEpubSummary": "تم تحويل {converted} من {total} قسمًا إلى ماركداون.",
     "admin.studio.convertNoOptions": "لا تتوفر تحويلات لهذا النوع من المحتوى.",
     "admin.studio.convertItemsProduced": "تم إنتاج {n} عنصر",
     "admin.studio.convertMoreChars": "… ({n} حرف إضافي)",

@@ -83,6 +83,12 @@ export function fileToDataUri(file: File | Blob): Promise<string> {
   });
 }
 
+/** True when an R2 key points at an EPUB book (preview with the book reader). */
+const EPUB_KEY_EXT = /\.epub$/i;
+export function isEpubR2Key(key: string): boolean {
+  return EPUB_KEY_EXT.test(key);
+}
+
 /** Human-readable byte size (e.g. "1.2 MB"). */
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";

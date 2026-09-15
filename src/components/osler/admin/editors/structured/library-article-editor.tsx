@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { StructuredEditorProps, Field, TagListField, MilkdownEditor } from "./shared";
+import { readEpubMeta, type EpubMeta } from "@/components/osler/admin/editors/epub-tools";
 
 /**
  * Structured content editors — full React port of
@@ -110,6 +111,10 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
   const [contentType, setContentType] = React.useState<"md" | "pdf" | "html" | "epub">(detectedType);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const epubFileRef = React.useRef<HTMLInputElement>(null);
+  const [epubUploading, setEpubUploading] = React.useState(false);
+  // Parsed OPF metadata of the staged EPUB — offered as one-click metadata.
+  const [epubMeta, setEpubMeta] = React.useState<{ fileName: string; meta: EpubMeta } | null>(null);
+  const [metaBusy, setMetaBusy] = React.useState(false);
 
   // Store content type in the value object so content-editor.tsx can read it
   const currentBody = typeof value === "string" ? rawValue : (value?.body ?? "");
@@ -156,23 +161,39 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
   }
 
   async function handleEpubUpload(file: File) {
+    setEpubUploading(true);
     try {
       // FileReader (not btoa-spread) — EPUBs are multi-megabyte and the
       // spread form throws a RangeError past ~100k arguments.
-      const dataUri = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(reader.error ?? new Error("FileReader error"));
-        reader.readAsDataURL(file);
-      });
+      const [dataUri, buf] = await Promise.all([
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(reader.error ?? new Error("FileReader error"));
+          reader.readAsDataURL(file);
+        }),
+        file.arrayBuffer(),
+      ]);
       if (!dataUri.startsWith("data:application/epub")) {
         throw new Error("Not an EPUB file");
       }
+      // Best-effort OPF parse so the metadata panel can be one click.
+      let parsed: EpubMeta | null = null;
+      try {
+        parsed = await readEpubMeta(buf.slice(0));
+      } catch {
+        parsed = null;
+      }
+      setEpubMeta(parsed ? { fileName: file.name, meta: parsed } : null);
       setContentType("epub");
       update(dataUri, "epub");
+      haptic("success");
       toast({ title: `Loaded ${file.name}` });
     } catch (err) {
+      haptic("error");
       toast({ title: `Failed to read EPUB: ${String(err)}`, variant: "destructive" });
+    } finally {
+      setEpubUploading(false);
     }
   }
 
@@ -345,14 +366,62 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
           />
         </div>
       ) : contentType === "epub" ? (
-        <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed border-border p-8">
+        <div className="flex-1 flex flex-col gap-3">
+          {/* OPF metadata offer — one click fills the sidecar draft. */}
+          {epubMeta && (
+            <div className="rounded-xl border border-info/30 bg-info/10 p-3">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                <BookOpen className="size-3.5 text-info" />
+                <span className="font-semibold">{epubMeta.meta.title || epubMeta.fileName}</span>
+                {epubMeta.meta.creator && (
+                  <span className="text-muted-foreground">· {epubMeta.meta.creator}</span>
+                )}
+                <span className="text-muted-foreground">
+                  · {epubMeta.meta.spineLength} {t("admin.content.editor.epubSections")} ·{" "}
+                  {t("admin.content.editor.epubWords", { n: epubMeta.meta.words.toLocaleString() })}
+                </span>
+                {!readOnly && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ms-auto"
+                    disabled={metaBusy}
+                    onClick={() => {
+                      setMetaBusy(true);
+                      try {
+                        haptic("light");
+                        const m = epubMeta.meta;
+                        const next = {
+                          ...metaDraft,
+                          title: metaDraft.title || m.title,
+                          lang: m.language.slice(0, 2).toLowerCase() === "ar" ? ("ar" as const) : metaDraft.lang,
+                          readTimeMin:
+                            metaDraft.readTimeMin || (m.words > 0 ? String(Math.max(1, Math.round(m.words / 200))) : ""),
+                        };
+                        setMetaDraft(next);
+                        // Keep the EPUB bytes + artifact type — only the
+                        // sidecar draft travels along for the Save flow.
+                        onChange({ body: currentBody, contentType: "epub", meta: cleanMetaDraft(next) });
+                        toast({ title: t("admin.content.editor.epubMetaApplied") });
+                      } finally {
+                        setMetaBusy(false);
+                      }
+                    }}
+                  >
+                    {t("admin.content.editor.epubUseMeta")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="flex-1 flex flex-col items-center justify-center bg-muted/20 rounded-xl border-2 border-dashed border-border p-8">
           {currentBody.startsWith("data:application/epub") ? (
             <div className="flex flex-col items-center gap-3">
               <BookOpen className="size-12 text-info" />
               <p className="text-sm font-medium">{t("admin.content.editor.epubLoaded")} ({Math.round(chars / 1024)} KB base64)</p>
               <div className="flex gap-2">
                 {!readOnly && (
-                  <Button size="sm" variant="outline" onClick={() => epubFileRef.current?.click()}>
+                  <Button size="sm" variant="outline" onClick={() => epubFileRef.current?.click()} disabled={epubUploading}>
                     <Upload className="size-3.5 me-1.5" /> {t("admin.content.editor.replaceEpub")}
                   </Button>
                 )}
@@ -362,8 +431,8 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
             <div className="flex flex-col items-center gap-3">
               <BookOpen className="size-12 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">{t("admin.content.editor.epubDropHint")}</p>
-              <Button size="sm" variant="outline" onClick={() => epubFileRef.current?.click()} disabled={readOnly}>
-                <Upload className="size-3.5 me-1.5" /> {t("admin.content.editor.uploadEpub")}
+              <Button size="sm" variant="outline" onClick={() => epubFileRef.current?.click()} disabled={readOnly || epubUploading}>
+                <Upload className="size-3.5 me-1.5" /> {epubUploading ? t("common.loading") : t("admin.content.editor.uploadEpub")}
               </Button>
             </div>
           )}
@@ -378,6 +447,7 @@ export function LibraryArticleEditor({ value, onChange, readOnly, r2KeyBase, raw
               e.target.value = "";
             }}
           />
+          </div>
         </div>
       ) : contentType === "html" ? (
         <div className="flex-1 flex flex-col">

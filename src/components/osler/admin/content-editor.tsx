@@ -656,7 +656,10 @@ export function ContentEditor({ id, rawR2Key, focusId, capabilities }: ContentEd
       // unsaved-changes guard all fire for library edits too (raw mode's
       // Save button depends on `dirty` being set).
       handleBodyChange(nextBody);
-      if (typeof next === "object") setArticleMeta(next.meta ?? null);
+      // Binary artifact updates (PDF/EPUB uploads, type switches) carry no
+      // `meta` key — only touch the sidecar when the editor sent one, or a
+      // just-applied OPF metadata draft would be wiped before Save.
+      if (typeof next === "object" && "meta" in next) setArticleMeta(next.meta ?? null);
       // Store contentType on the component for publish path logic
       if (typeof next === "object" && next?.contentType) {
         setArtifactContentType(next.contentType);

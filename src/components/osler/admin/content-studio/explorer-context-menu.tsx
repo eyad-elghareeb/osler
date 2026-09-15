@@ -176,6 +176,11 @@ export function ExplorerContextMenu({ node, canManage, actions }: ExplorerContex
             <FolderInput className="size-3.5 me-2 text-primary" /> {t("admin.studio.context.move")}
           </ContextMenuItem>
         )}
+        {actions.onConvert && node.r2Key?.toLowerCase().endsWith('.epub') && (
+          <ContextMenuItem onClick={() => actions.onConvert(node)}>
+            <Repeat2 className="size-3.5 me-2" /> {t("admin.studio.convert")}
+          </ContextMenuItem>
+        )}
         {node.r2Key && (
           <ContextMenuItem onClick={() => copyToClipboard(node.r2Key!)}>
             <Copy className="size-3.5 me-2" /> {t("admin.studio.context.copyKey")}

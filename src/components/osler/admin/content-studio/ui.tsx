@@ -28,6 +28,7 @@ import {
   Clock,
   AlertCircle,
   BookOpen,
+  BookOpenText,
   ListChecks,
   Brain,
   Stethoscope,
@@ -65,6 +66,7 @@ export function NodeIcon({ node, className }: { node: ContentTreeNode; className
   if (ct === "library") return <BookOpen className={className} />;
 
   if (node.ext === "md") return <BookOpen className={className} />;
+  if (node.ext === "epub") return <BookOpenText className={className} />;
   if (node.ext === "pdf" || node.ext === "html") return <FileText className={className} />;
   if (node.ext === "json") return <FileJson className={className} />;
   if (node.ext && IMG_EXTS.has(node.ext)) return <ImageIcon className={className} />;

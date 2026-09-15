@@ -14,6 +14,7 @@
  */
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   Eye, Pencil, Send, CloudUpload, Copy, Download, Trash2,
   PackagePlus, Sparkles, Repeat2, Layers, FolderOpen, FolderInput,
@@ -26,8 +27,14 @@ import {
   adminApi,
   type ContentType,
 } from "@/components/osler/admin/admin-api";
-import { r2KeyToWorkerUrl, isImageR2Key, formatBytes } from "@/components/osler/admin/editors/image-upload";
+import { r2KeyToWorkerUrl, isImageR2Key, isEpubR2Key, formatBytes } from "@/components/osler/admin/editors/image-upload";
 import { ImageLightbox } from "@/components/osler/admin/image-lightbox";
+// epubjs only loads when an EPUB preview actually opens — same split the
+// student article modal uses.
+const EpubReader = dynamic(
+  () => import("@/components/osler/epub-reader").then((m) => ({ default: m.EpubReader })),
+  { ssr: false, loading: () => null },
+);
 import {
   formatRelativeTime,
   type ValidationState,
@@ -347,7 +354,8 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const isImage = !!node.r2Key && isImageR2Key(node.r2Key);
-  const isMarkdown = !isImage && (node.r2Key?.endsWith(".md") ?? false);
+  const isEpub = !isImage && (!!node.r2Key && isEpubR2Key(node.r2Key));
+  const isMarkdown = !isImage && !isEpub && (node.r2Key?.endsWith(".md") ?? false);
 
   React.useEffect(() => {
     if (!node.r2Key) { setLoading(false); return; }
@@ -365,9 +373,19 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
       p.then((blob) => setImageUrl(URL.createObjectURL(blob)))
         .catch(() => setImageUrl(null))
         .finally(() => setLoading(false));
+    // EPUB archives preview through the real book reader — fetched as a blob
+    // so staged (private) keys work and the worker URL is never embedded.
+    const fetchEpub = (p: Promise<Blob>) =>
+      p.then((blob) => {
+        if (blob.size === 0) { setImageUrl(null); return; }
+        setImageUrl(URL.createObjectURL(new Blob([blob], { type: "application/epub+zip" })));
+      })
+        .catch(() => setImageUrl(null))
+        .finally(() => setLoading(false));
 
     if (node.r2Key.startsWith("content-staging/")) {
       if (isImage) fetchImage(adminApi.getR2Binary(node.r2Key));
+      else if (isEpub) fetchEpub(adminApi.getR2Binary(node.r2Key));
       else fetchText(adminApi.getR2Content(node.r2Key).then((r) => r.body));
       return;
     }
@@ -375,14 +393,46 @@ function R2Preview({ node }: { node: ContentTreeNode }) {
     if (!url) { setBody(null); setImageUrl(null); setLoading(false); return; }
     if (isImage) {
       fetchImage(fetch(url).then((r) => r.ok ? r.blob() : Promise.reject(new Error(`${r.status}`))));
+    } else if (isEpub) {
+      fetchEpub(fetch(url).then((r) => r.ok ? r.blob() : Promise.reject(new Error(`${r.status}`))));
     } else {
       fetchText(fetch(url).then((r) => r.ok ? r.text() : Promise.reject(new Error(`${r.status}`))));
     }
-  }, [node.r2Key, isImage]);
+  }, [node.r2Key, isImage, isEpub]);
 
   React.useEffect(() => {
     return () => { if (imageUrl) URL.revokeObjectURL(imageUrl); };
   }, [imageUrl]);
+
+  if (isEpub) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {loading ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">{t("common.loading")}</div>
+          ) : imageUrl ? (
+            // The book owns its scroller (continuous manager) — never nest an
+            // `overflow-y-auto` around the stage or iOS momentum fights itself.
+            <EpubReader
+              fileUrl={imageUrl}
+              fileKey={`admin-preview:${node.r2Key}`}
+              title={node.name}
+              fontSize={15}
+              lineHeight={1.7}
+              maxWidth={640}
+            />
+          ) : (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              {t("admin.content.previewUnavailableR2")}
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 border-t border-border px-2.5 py-1 text-xs text-muted-foreground">
+          {node.name}{node.size != null ? ` · ${formatBytes(node.size)}` : ""}
+        </div>
+      </div>
+    );
+  }
 
   if (isImage) {
     return (

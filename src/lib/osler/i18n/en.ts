@@ -2274,6 +2274,10 @@ export const en = {
     "admin.content.editor.uploadEpub": "Upload EPUB",
     "admin.content.editor.replaceEpub": "Replace EPUB",
     "admin.content.editor.epubLoaded": "EPUB loaded",
+    "admin.content.editor.epubSections": "sections",
+    "admin.content.editor.epubWords": "{n} words",
+    "admin.content.editor.epubUseMeta": "Use book metadata",
+    "admin.content.editor.epubMetaApplied": "Book metadata applied — review and save",
 
     // Content browser
     "admin.content.tab.cloud": "Cloud Objects",
@@ -2739,6 +2743,11 @@ export const en = {
     "admin.studio.convertConfirm": "Convert & open",
     "admin.studio.convertSuccess": "Converted {from} → {to}",
     "admin.studio.convertFailed": "Conversion failed: {error}",
+    "admin.studio.convertLoadFailed": "Couldn't load the source file",
+    "admin.studio.convertFromEpub": "EPUB book",
+    "admin.studio.convertEpubLabel": "Library article (Markdown)",
+    "admin.studio.convertEpubDesc": "Extract the book's chapters into a `## Chapter` markdown article.",
+    "admin.studio.convertEpubSummary": "Converted {converted} of {total} sections into markdown.",
     "admin.studio.convertNoOptions": "No conversions are available for this content type.",
     "admin.studio.convertItemsProduced": "{n} items produced",
     "admin.studio.convertMoreChars": "… ({n} more characters)",

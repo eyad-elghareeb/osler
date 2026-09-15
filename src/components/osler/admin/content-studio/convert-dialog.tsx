@@ -36,7 +36,8 @@ import {
   type ContentType,
 } from "@/components/osler/admin/admin-api";
 import type { ContentTreeNode } from "@/components/osler/admin/content-tree-pane";
-import { r2KeyToWorkerUrl } from "@/components/osler/admin/editors/image-upload";
+import { r2KeyToWorkerUrl, isEpubR2Key } from "@/components/osler/admin/editors/image-upload";
+import { epubToMarkdown } from "@/components/osler/admin/editors/epub-tools";
 import {
   convertOptionsFrom,
   convertContent,
@@ -59,6 +60,13 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
   const router = useRouter();
 
   const [body, setBody] = React.useState<string>("");
+  // EPUB archives can't be fetched as text — the bytes are held here so the
+  // extract-to-markdown tool can run client-side without a second download.
+  const [epubBytes, setEpubBytes] = React.useState<ArrayBuffer | null>(null);
+  // True once a branch has established the source is an EPUB archive (R2 key
+  // or managed data-URI body). Separate from epubBytes so the option grid can
+  // render while the bytes are still decoding.
+  const [epubSource, setEpubSource] = React.useState(false);
   const [bodyLoading, setBodyLoading] = React.useState(false);
   const [selected, setSelected] = React.useState<ConvertOption | null>(null);
   const [converted, setConverted] = React.useState<{ body: string; summary: string; itemCount?: number } | null>(null);
@@ -68,21 +76,60 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
   React.useEffect(() => {
     if (!open || !node) return;
     setBody("");
+    setEpubBytes(null);
+    setEpubSource(false);
     setSelected(null);
     setConverted(null);
     setBodyLoading(true);
 
+  const finishEpubBytes = (buf: ArrayBuffer) => {
+    // Binary source — body stays empty; the extractor works from epubBytes.
+    setEpubSource(true);
+    setEpubBytes(buf);
+  };
+
     (async () => {
       try {
-        // Managed leaf → fetch body via adminApi.getContent
+        // Managed leaf → fetch body via adminApi.getContent. A managed EPUB
+        // draft stores its archive as a data URI — decode it to bytes so the
+        // extractor runs instead of the text converters.
         if (node.managed && node.cloudObject) {
           const obj = await adminApi.getContent(node.cloudObject.id);
-          setBody(obj.body ?? "");
+          const nextBody = obj.body ?? "";
+          if (nextBody.startsWith("data:application/epub")) {
+            try {
+              finishEpubBytes(await (await fetch(nextBody)).blob().then((b) => b.arrayBuffer()));
+            } catch (err) {
+              toast({ title: t("admin.studio.convertLoadFailed"), description: String(err), variant: "destructive" });
+              onOpenChange(false);
+            } finally {
+              setBodyLoading(false);
+            }
+            return;
+          }
+          setBody(nextBody);
           return;
         }
         // Loose / staged R2 leaf → fetch via adminApi.getR2Content or the
-        // public worker URL.
+        // public worker URL. EPUB archives travel as bytes (never text).
         if (node.r2Key) {
+          if (isEpubR2Key(node.r2Key)) {
+            try {
+              const blob = node.r2Key.startsWith("content-staging/")
+                ? await adminApi.getR2Binary(node.r2Key)
+                : await fetch(r2KeyToWorkerUrl(node.r2Key) ?? "").then((r) => {
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                  return r.blob();
+                });
+              finishEpubBytes(await blob.arrayBuffer());
+            } catch (err) {
+              toast({ title: t("admin.studio.convertLoadFailed"), description: String(err), variant: "destructive" });
+              onOpenChange(false);
+            } finally {
+              setBodyLoading(false);
+            }
+            return;
+          }
           if (node.r2Key.startsWith("content-staging/")) {
             const res = await adminApi.getR2Content(node.r2Key);
             setBody(res.body);
@@ -120,17 +167,59 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
     return "library";
   }, [node]);
 
+  // EPUB archives are binary — the "source type" is a format, not a body to parse.
+  // Managed EPUB drafts surface as data-URI bodies rather than .epub keys,
+  // flagged via epubSource when the loader decoded them.
+  const isEpubSource = epubSource || (!!node?.r2Key && isEpubR2Key(node.r2Key));
+
   // ── Compute available conversion options ──────────────────────────────
   const options = React.useMemo(() => {
     if (!sourceType) return [];
+    // EPUB sources get a single extraction option — the markdown body only
+    // exists after the spine-to-markdown extractor runs.
+    if (isEpubSource) {
+      return [
+        {
+          target: "library" as ContentType,
+          label: t("admin.studio.convertEpubLabel"),
+          description: t("admin.studio.convertEpubDesc"),
+          lossless: false,
+        },
+      ];
+    }
     return convertOptionsFrom(sourceType);
-  }, [sourceType]);
+  }, [sourceType, isEpubSource, t]);
 
   // ── Run the conversion preview when an option is selected ─────────────
   React.useEffect(() => {
     if (!selected || !sourceType || bodyLoading) {
       setConverted(null);
       return;
+    }
+    // EPUB path: bytes → markdown (async, cancellable on re-select).
+    if (isEpubSource) {
+      if (!epubBytes) {
+        setConverted(null);
+        return;
+      }
+      let cancelled = false;
+      setConverted(null);
+      epubToMarkdown(epubBytes)
+        .then((r) => {
+          if (cancelled) return;
+          setConverted({
+            body: r.markdown,
+            summary: t("admin.studio.convertEpubSummary", { converted: String(r.chaptersConverted), total: String(r.chaptersTotal) }),
+            itemCount: r.chaptersConverted,
+          });
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          toast({ title: t("admin.studio.convertFailed", { error: String(err) }), variant: "destructive" });
+        });
+      return () => {
+        cancelled = true;
+      };
     }
     try {
       const result = convertContent(sourceType, selected.target, body);
@@ -142,7 +231,7 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
         variant: "destructive",
       });
     }
-  }, [selected, sourceType, body, bodyLoading, toast, t]);
+  }, [selected, sourceType, body, bodyLoading, epubBytes, isEpubSource, toast, t]);
 
   // ── Confirm: create a new managed object with the converted body ─────
   async function handleConfirm() {
@@ -195,7 +284,7 @@ export function ConvertDialog({ open, onOpenChange, node, onConverted }: Convert
               {t("admin.studio.convertFrom")}:
             </span>
             <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono text-xs">
-              {sourceType ?? "?"}
+              {isEpubSource ? t("admin.studio.convertFromEpub") : (sourceType ?? "?")}
             </span>
             <ArrowRight className="size-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
