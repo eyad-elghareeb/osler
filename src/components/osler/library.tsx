@@ -1878,13 +1878,27 @@ function ArticleHeader({
 
   return (
     <header className="shrink-0 h-12 flex items-center px-3 sm:px-4 gap-2 border-b border-border bg-card/60 backdrop-blur-md safe-pt relative z-20">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-1 min-w-0">
-        <span className="font-medium">{article.specialty}</span>
-        {article.system && (
+      <div className="flex-1 min-w-0">
+        {isBook ? (
+          // Books render no in-body h1 (the reader owns the stage), so the
+          // toolbar carries the title — same two-line pattern as the mobile
+          // reader header, with the live chapter underneath when known.
           <>
-            <ChevronRight className="size-3 opacity-50" />
-            <span className="truncate">{article.system}</span>
+            <div className="text-sm font-semibold leading-tight truncate">{article.title}</div>
+            <div className="text-[11px] leading-tight text-muted-foreground truncate">
+              {epub ? epub.state.chapterLabel : article.specialty}
+            </div>
           </>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium">{article.specialty}</span>
+            {article.system && (
+              <>
+                <ChevronRight className="size-3 opacity-50" />
+                <span className="truncate">{article.system}</span>
+              </>
+            )}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
