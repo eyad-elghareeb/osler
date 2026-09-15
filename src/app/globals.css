@@ -1226,6 +1226,32 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
  * they retain their original panel/modal sizes.
  */
 
+/* ── EPUB book rendition ──────────────────────────────────────────────────
+ * epubjs renders each spine section into its own blob: iframe inside
+ * `.epub-container`, and that container *is* the scroll viewport in scrolled
+ * flow. Two rules keep reading smooth:
+ *   · no nested scroller — the reader wrapper is overflow-hidden, so the book
+ *     container owns the scroll (a second `overflow-y-auto` ancestor kills iOS
+ *     momentum and steals the scroll gesture);
+ *   · `overscroll-behavior: contain` — reaching the start/end of a book must
+ *     not chain the scroll into the app shell behind it. */
+.osler-epub-stage {
+  position: relative;
+}
+.osler-epub-stage .epub-container {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: transparent;
+}
+.osler-epub-stage .epub-container iframe {
+  background: transparent;
+}
+/* marks-pane renders highlights as SVG rects — the eraser tool needs them to
+   read as tappable. */
+.osler-epub-stage [ref="osler-epub-hl"] {
+  cursor: pointer;
+}
+
 /* ── Mobile reader (article viewer) ───────────────────────────────────────
  * On phones the article viewer's toolbar wraps onto multiple lines; this
  * collapses the less-important buttons (Print, ID badge) below 480px and
