@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/osler/ui-primitives";
 import { LoginScreen } from "@/components/osler/login-screen";
 import { AdminProvider } from "@/components/osler/admin/admin-context";
+import { LightboxProvider } from "@/components/osler/lightbox-provider";
 import { MOTION_SPRING } from "@/lib/osler/motion";
 import {
   AdminSettingsProvider,
@@ -468,7 +469,12 @@ function AdminShellInner({ children }: AdminShellProps) {
             the identity provider stays mounted across navigations. */}
         <main className="flex-1 min-h-0 overflow-y-auto osler-scroll-y">
           <AdminProvider identity={identity}>
-            <div className="h-full">{children}</div>
+            {/* EpubReader (studio/detail + review previews) calls
+                useLightbox for its image viewer — the student app-shell owns
+                the provider there, the admin shell owns it here. */}
+            <LightboxProvider>
+              <div className="h-full">{children}</div>
+            </LightboxProvider>
           </AdminProvider>
         </main>
       </div>

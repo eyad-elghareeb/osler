@@ -101,6 +101,47 @@ export async function openEpubBook(
 
   const spineList = Array.isArray(spine) ? spine : [];
   const spineLength = spineList.length || (book.spine as unknown as { spineItems?: unknown[] })?.spineItems?.length || 0;
+
+  // Sanitize every section before it reaches an iframe: publisher `<script>`
+  // elements (the section sandbox has no script rights — each one logs a
+  // "blocked script execution" error) and publisher stylesheet `<link>`s
+  // (rewritten to blob: URLs, which the CSP intentionally doesn't
+  // allow-list). Neither can ever take effect — the Osler theme owns section
+  // styling — so removing them changes nothing visually and keeps the
+  // console clean on script/CSS-heavy books. Registered on the spine's
+  // shared content hooks (which every section runs pre-serialization), NOT
+  // on the rendition hooks (which fire after the iframe already parsed and
+  // logged). Failures must never break the open.
+  //
+  // NOTE: sections are XML documents, where type selectors only match
+  // no-namespace elements — `querySelectorAll("script")` silently matches
+  // nothing on XHTML. `getElementsByTagName` is namespace-agnostic and is
+  // what epubjs itself uses.
+  try {
+    const spineHooks = (
+      book.spine as unknown as {
+        hooks?: { content?: { register?: (...fns: Array<(doc: Document) => void>) => void } };
+      }
+    )?.hooks?.content;
+    spineHooks?.register?.((doc: Document) => {
+      try {
+        removeElementsByTag(doc, "script");
+        const links = doc?.getElementsByTagName?.("link");
+        if (links) {
+          for (let i = links.length - 1; i >= 0; i--) {
+            const rel = links[i]?.getAttribute?.("rel") ?? "";
+            if (rel.split(/\s+/).some((t) => t.toLowerCase() === "stylesheet")) {
+              links[i]?.parentNode?.removeChild(links[i]);
+            }
+          }
+        }
+      } catch {
+        // A half-parsed section document — the sandbox/CSP blocks apply anyway.
+      }
+    });
+  } catch {
+    // Hook registration failed — the reader's DOM-level strip still applies.
+  }
   if (!spineLength) {
     try {
       book.destroy();
@@ -155,6 +196,19 @@ export async function openEpubBook(
       }
     },
   };
+}
+
+/** Remove every element with the given tag name (live collection, backwards). */
+function removeElementsByTag(doc: Document, tag: string): void {
+  const els = doc?.getElementsByTagName?.(tag);
+  if (!els) return;
+  for (let i = els.length - 1; i >= 0; i--) {
+    try {
+      els[i]?.parentNode?.removeChild(els[i]);
+    } catch {
+      // Already detached — harmless.
+    }
+  }
 }
 
 /** Streaming download progress, reported while the archive arrives. */

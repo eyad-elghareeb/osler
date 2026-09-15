@@ -127,30 +127,31 @@ async function fetchSidecarMeta(filePath: string): Promise<ArticleSidecarMeta | 
   if (sidecarCache.has(sidePath)) return sidecarCache.get(sidePath)!;
   let result: ArticleSidecarMeta | null = null;
   try {
-    // Prefer the bundled (same-origin) sidecar first: it is the source of
-    // truth for open-source deployments and avoids a cross-origin Worker
-    // 404 when the sidecar simply doesn't exist. Fall back to the Worker
-    // URL only if the local file misses, so a missing sidecar costs one
-    // 404 instead of two and an existing local sidecar costs zero Worker
-    // requests.
+    // Cloud instances read the Worker copy (the admin writes sidecars there;
+    // there is no bundled content, so a local probe only produces a 404 that
+    // Chrome logs even when caught). Self-hosted instances without a Worker
+    // resolve both URLs to the same local file and skip the duplicate. Either
+    // way a missing sidecar costs at most one logged 404.
+    const remoteUrl = contentFileUrl("library", sidePath);
+    const localUrl = localContentUrl("library", sidePath);
+    const orderedUrls =
+      remoteUrl !== localUrl ? [remoteUrl, localUrl] : [localUrl];
     let res: Response | null = null;
-    try {
-      const localRes = await fetch(localContentUrl("library", sidePath));
-      if (localRes.ok) res = localRes;
-      else if (localRes.status !== 404) res = localRes;
-      else {
-        const remoteUrl = contentFileUrl("library", sidePath);
-        if (remoteUrl !== localContentUrl("library", sidePath)) {
-          const remoteRes = await fetch(remoteUrl);
-          if (remoteRes.ok) res = remoteRes;
-        }
-      }
-    } catch {
-      // local fetch throw (offline) — try remote as fallback
+    for (const url of orderedUrls) {
+      let r: Response;
       try {
-        const remoteRes = await fetch(contentFileUrl("library", sidePath));
-        if (remoteRes.ok) res = remoteRes;
-      } catch {}
+        r = await fetch(url);
+      } catch {
+        // Offline/DNS — the other source may still answer (SW cache).
+        continue;
+      }
+      // A 404 is authoritative: the source of truth has no sidecar, so don't
+      // probe the fallback just to log a second 404 for the same file.
+      if (r.ok || r.status === 404) {
+        if (r.ok) res = r;
+        break;
+      }
+      // Any other status (5xx, …) — fall through to the next source.
     }
     if (res?.ok) {
       const parsed = JSON.parse(await res.text());
