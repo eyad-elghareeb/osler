@@ -11,7 +11,8 @@ import { cloudEnabled, applyGeminiKeyInfo, GEMINI_CLOUD_SYNCED_FLAG } from "@/li
 import { ToggleSwitch } from "./backup-native-section";
 const MODELS = [
   ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
-  ["gemini-3.7-flash", "Gemini 3.7 Flash (newest, most capable Flash)"],
+  ["gemini-3.8-flash", "Gemini 3.8 Flash (newest, most capable Flash)"],
+  ["gemini-3.7-flash", "Gemini 3.7 Flash (previous-gen, capable Flash)"],
   ["gemini-3.6-flash", "Gemini 3.6 Flash (fast & efficient)"],
   ["gemini-3.5-flash", "Gemini 3.5 Flash (stable, high-throughput)"],
   ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (fast & modern)"],
@@ -30,7 +31,9 @@ const STORAGE_KEYS = {
 } as const;
 
 const OSCE_VOICE_MODELS = [
-  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (default, recommended)"],
+  ["gemini-3.8-live", "Gemini 3.8 Live (default, recommended)"],
+  ["gemini-3.8-live-extended-thinking", "Gemini 3.8 Live Extended Thinking (high-reasoning voice)"],
+  ["gemini-3.1-flash-live-preview", "Gemini 3.1 Flash Live (legacy preview)"],
   ["gemini-2.5-flash-native-audio-preview-12-2025", "Gemini 2.5 Flash Live — native audio"],
 ] as const;
 

@@ -31,7 +31,8 @@ import { MOTION_TRANSITION, MOTION_SPRING } from "@/lib/osler/motion";
 
 const MODELS = [
   ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (default, fastest & cost-efficient)"],
-  ["gemini-3.7-flash", "Gemini 3.7 Flash (newest, most capable Flash)"],
+  ["gemini-3.8-flash", "Gemini 3.8 Flash (newest, most capable Flash)"],
+  ["gemini-3.7-flash", "Gemini 3.7 Flash (previous-gen, capable Flash)"],
   ["gemini-3.6-flash", "Gemini 3.6 Flash (fast & efficient)"],
   ["gemini-3.5-flash", "Gemini 3.5 Flash (stable, high-throughput)"],
   ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (fast & modern)"],
