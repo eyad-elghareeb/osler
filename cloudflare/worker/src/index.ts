@@ -44,9 +44,6 @@ import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handl
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
 import { parseHttpRange } from "./http-range";
 import { buildAdminUsersListQuery } from "./admin-users";
-import { decodePdfInput, extractPdfPages } from "./mcp/pdf-text";
-import { copyPackAssets } from "./duplicate-content";
-import { parseMcqText, parseWrittenText } from "./mcp/pdf-structure";
 // Durable Object classes must be reachable from the entry module for the
 // wrangler migration to bind them.
 export { UserSyncHub };
@@ -4284,13 +4281,11 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
   const path = url.pathname;
 
   // Every session-authed admin route funnels through here (content CRUD,
-  // review, parse, duplicate, stats, audit, analytics, tickets, users) —
-  // including every tool the /admin/assistant harness can call. One shared
-  // `admin` bucket (600/min/IP/isolate, same as /v1/mcp) bounds a runaway
-  // client without touching legitimate use: admin UI traffic and the
-  // harness's single-digit-requests-per-turn are orders of magnitude below
-  // it, and the sequential bulk loops (backfill/GC/publish-staged) await
-  // each bounded run before re-invoking.
+  // review, stats, audit, analytics, tickets, users). One shared `admin`
+  // bucket (600/min/IP/isolate, same as /v1/mcp) bounds a runaway client
+  // without touching legitimate use: admin UI traffic and the sequential
+  // bulk loops (backfill/GC/publish-staged, each awaiting its bounded run
+  // before re-invoking) are orders of magnitude below it.
   if (!rateLimit(clientIp(request), "admin")) return json({ error: "Too many requests" }, 429, origin, log);
 
   /* ── Analytics (admin only) ── */
@@ -5246,96 +5241,6 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       try { parsed = JSON.parse(typeof body.body === "string" ? body.body : "{}"); } catch (e: any) { return json({ errors: ["Invalid JSON: " + e.message] }, 200, origin, log); }
       return json({ errors: validateContent(ct, parsed) }, 200, origin, log);
     }
-    /* ── Admin PDF parse endpoints (drives the /admin/assistant harness) ──
-     *
-     * Same extraction + structure heuristics as the MCP parse_pdf /
-     * parse_qbank_pdf / parse_written_pdf tools, but authenticated with the
-     * admin's session token instead of an MCP API token — so the admin panel
-     * can send a PDF for parsing without minting or storing a separate token.
-     * Read-only compute: no DB writes, no audit entries. PDF bytes arrive
-     * inline as base64/data-URI (URL fetching is deliberately unsupported —
-     * SSRF surface); readJsonLarge caps the body at 30 MB like the MCP
-     * transport. unpdf is lazy-imported inside extractPdfPages, so requests
-     * that never parse PDFs never pay for the engine. */
-    if (request.method === "POST" && path === "/v1/admin/content/parse-pdf") {
-      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
-      const body = await readJsonLarge(request);
-      const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
-      let bytes: Uint8Array;
-      try {
-        bytes = decodePdfInput(String(body.pdfDataUri ?? ""));
-      } catch (e: any) {
-        return json({ error: String(e?.message ?? "Invalid PDF payload") }, 400, origin, log);
-      }
-      let result: { pageCount: number; truncated: boolean; pages: string[] };
-      try {
-        result = await extractPdfPages(bytes, maxPages);
-      } catch (e: any) {
-        return json({ error: String(e?.message ?? "PDF extraction failed") }, 422, origin, log);
-      }
-      const likelyScanned = result.pages.every((p) => !p.trim());
-      return json({
-        pageCount: result.pageCount,
-        truncated: result.truncated,
-        likelyScanned,
-        ...(likelyScanned
-          ? { note: "No text layer detected — the PDF is probably scanned images. OCR is not available; transcribe the content yourself from the source." }
-          : {}),
-        pages: result.pages.map((text, i) => ({ page: i + 1, text })),
-      }, 200, origin, log);
-    }
-    if (request.method === "POST" && path === "/v1/admin/content/parse-qbank-pdf") {
-      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
-      const body = await readJsonLarge(request);
-      const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
-      let bytes: Uint8Array;
-      try {
-        bytes = decodePdfInput(String(body.pdfDataUri ?? ""));
-      } catch (e: any) {
-        return json({ error: String(e?.message ?? "Invalid PDF payload") }, 400, origin, log);
-      }
-      let result: { pageCount: number; truncated: boolean; pages: string[] };
-      try {
-        result = await extractPdfPages(bytes, maxPages);
-      } catch (e: any) {
-        return json({ error: String(e?.message ?? "PDF extraction failed") }, 422, origin, log);
-      }
-      const parsed = parseMcqText(result.pages);
-      return json({
-        pageCount: result.pageCount,
-        truncated: result.truncated,
-        detected: parsed.stats,
-        warnings: parsed.warnings,
-        draft: { questions: parsed.questions },
-        nextSteps: "Questions missing 'correct' (see warnings) must be resolved before upload. Verify stems/options against the source, add difficulty and tags, then validate and create the pack.",
-      }, 200, origin, log);
-    }
-    if (request.method === "POST" && path === "/v1/admin/content/parse-written-pdf") {
-      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
-      const body = await readJsonLarge(request);
-      const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
-      let bytes: Uint8Array;
-      try {
-        bytes = decodePdfInput(String(body.pdfDataUri ?? ""));
-      } catch (e: any) {
-        return json({ error: String(e?.message ?? "Invalid PDF payload") }, 400, origin, log);
-      }
-      let result: { pageCount: number; truncated: boolean; pages: string[] };
-      try {
-        result = await extractPdfPages(bytes, maxPages);
-      } catch (e: any) {
-        return json({ error: String(e?.message ?? "PDF extraction failed") }, 422, origin, log);
-      }
-      const parsed = parseWrittenText(result.pages);
-      return json({
-        pageCount: result.pageCount,
-        truncated: result.truncated,
-        detected: parsed.stats,
-        warnings: parsed.warnings,
-        draft: { prompts: parsed.prompts },
-        nextSteps: "Default rubrics (single criterion) should be replaced with graded marking schemes where possible. Verify prompts against the source, then validate and create the pack.",
-      }, 200, origin, log);
-    }
     if (request.method === "GET" && path === "/v1/admin/content/pending") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
       const rows = await env.DB.prepare("SELECT co.*, u.username as creator_username, u.display_name as creator_display_name FROM content_objects co JOIN users u ON u.id = co.created_by WHERE co.status = 'pending' ORDER BY co.submitted_at ASC").all();
@@ -5726,46 +5631,6 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         }
         await auditLog(env, session.user.id, "unpublish", objectId, { title: obj.title }, log);
         return json({ ok: true, status: "draft" }, 200, origin, log);
-      }
-      /* ── Duplicate (remix) any readable object into a new owned draft ──
-       *
-       * Mirrors the MCP duplicate_content_object tool for the admin-panel
-       * AI-assistant harness (which drives the session API, not MCP tokens).
-       * Copies the current readable body (pending > published > draft) plus
-       * any pack assets (images/…), skipping the workflow slot files. The
-       * clone always starts as an unsubmitted draft owned by the caller.
-       * Bounded to 10 list pages of 100 assets (~1000 files) to stay well
-       * inside the Workers subrequest budget; larger packs fall back to
-       * body-only duplication with a warning in the response.
-       */
-      if (request.method === "POST" && action === "duplicate") {
-        if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
-        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
-        let newTitle: string | null = null;
-        try { const b: any = await request.clone().json(); if (typeof b.title === "string") newTitle = b.title.trim().slice(0, 200); } catch {}
-        const bodyKey = obj.status === "published"
-          ? r2Published(obj.r2_key_base)
-          : obj.status === "pending"
-            ? r2Pending(obj.r2_key_base)
-            : r2Draft(obj.r2_key_base);
-        const srcBody = await r2Get(env, bodyKey);
-        if (srcBody == null) return json({ error: "Source has no readable body to duplicate" }, 400, origin, log);
-        const title = (newTitle && newTitle.trim()) || `Copy of ${obj.title ?? "untitled"}`.slice(0, 200);
-        const cloneId = id();
-        const cloneBase = `content/${obj.content_type}/${cloneId}`;
-        await r2Put(env, r2Draft(cloneBase), srcBody);
-        try {
-          await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)")
-            .bind(cloneId, cloneBase, obj.content_type, title, obj.language === "ar" ? "ar" : "en", obj.target_path ?? null, session.user.id, now(), now()).run();
-        } catch {
-          // Pre-migration DB without target_path column — old insert shape.
-          await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
-            .bind(cloneId, cloneBase, obj.content_type, title, obj.language === "ar" ? "ar" : "en", session.user.id, now(), now()).run();
-        }
-        // Copy pack assets (images/…), skipping the workflow slot files.
-        const copy = await copyPackAssets(env.CONTENT, obj.r2_key_base, cloneBase);
-        await auditLog(env, session.user.id, "duplicate_content", cloneId, { sourceId: obj.id, title, assetsCopied: copy.assetsCopied, failed: copy.failedAssets.length, via: "assistant" }, log);
-        return json({ ok: copy.failedAssets.length === 0, id: cloneId, title, sourceId: obj.id, status: "draft", assetsCopied: copy.assetsCopied, failedAssets: copy.failedAssets, assetsTruncated: copy.truncated }, 201, origin, log);
       }
       if (request.method === "DELETE" && !action) {
         if (!isAdmin(session) && (obj.created_by !== session.user.id || obj.status === "published")) return json({ error: "Forbidden" }, 403, origin, log);

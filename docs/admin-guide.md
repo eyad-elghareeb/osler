@@ -21,14 +21,13 @@ The admin panel is reachable at `/admin` on any Osler deployment that has the Cl
 7. [Users](#7-users)
 8. [Content](#8-content)
 9. [Review Queue](#9-review-queue)
-10. [AI Assistant](#10-ai-assistant)
-11. [Audit Log](#11-audit-log)
-12. [The content lifecycle](#12-the-content-lifecycle)
-13. [Common admin workflows](#13-common-admin-workflows)
-14. [Audit log reference](#14-audit-log-reference)
-15. [D1 SQL cheatsheet for operators](#15-d1-sql-cheatsheet-for-operators)
-16. [Troubleshooting](#16-troubleshooting)
-17. [Best practices](#17-best-practices)
+10. [Audit Log](#10-audit-log)
+11. [The content lifecycle](#11-the-content-lifecycle)
+12. [Common admin workflows](#12-common-admin-workflows)
+13. [Audit log reference](#13-audit-log-reference)
+14. [D1 SQL cheatsheet for operators](#14-d1-sql-cheatsheet-for-operators)
+15. [Troubleshooting](#15-troubleshooting)
+16. [Best practices](#16-best-practices)
 
 ---
 
@@ -745,83 +744,7 @@ The author will see the rejection reason in their Content → Rejected tab and i
 
 ---
 
-## 10. AI Assistant
-
-**Route:** `/admin/assistant`
-**Access:** `admin` and `content_admin`
-**API:** the assistant drives the same `/v1/admin/*` session endpoints as the rest of the panel — no MCP token required.
-
-The AI Assistant is a bring-your-own-key (BYOK) authoring harness: you configure a provider (OpenAI-compatible endpoint, native Gemini, or Opencode Zen), and the model works with your content through a curated tool catalog executed under **your** admin session.
-
-### Provider configuration
-
-- **OpenAI-compatible** — any endpoint that speaks the OpenAI chat API (OpenAI itself, gateways, self-hosted vLLM, …). Base URL is optional; `https://` is enforced (plain `http://` is only allowed for `localhost`/`127.0.0.1` so the key can't leak over cleartext).
-- **Gemini (native)** — the Google Generative Language API.
-- **Opencode Zen** — any OpenAI-compatible Zen deployment; requires a base URL.
-
-The API key is stored **only in your browser** and sent **directly from the browser to the provider** — it never transits Osler servers. Two storage modes:
-
-- *Remember* (default): the key persists in `localStorage` across browser restarts.
-- *Session-only*: the key lives in `sessionStorage` and vanishes when the tab closes.
-
-Signing out of the admin panel wipes the key from both stores, so a shared machine never keeps your provider key. Use **Test connection** to verify the config before a working session ("Reply with exactly: ok").
-
-### The tool catalog
-
-Content tools (both admin tiers):
-
-| Tool | What it does |
-| --- | --- |
-| `list_content` / `review_queue` / `get_content` / `get_diff` | Browse and inspect managed objects |
-| `validate_content` / `bulk_validate_drafts` | Schema validation for one object or a full draft sweep |
-| `create_draft` / `update_draft` / `duplicate_content` | Author new drafts, replace bodies, remix existing packs |
-| `submit_for_review` / `approve_content` / `reject_content` / `publish_direct` / `unpublish_content` / `delete_content` | The full review → publish workflow |
-| `parse_pdf` / `parse_qbank_pdf` / `parse_written_pdf` | PDF ingestion with the same heuristics as the MCP tools |
-
-File and observability tools are registered **only when your signed-in role has the matching capability** — a `content_admin`'s assistant never even sees them advertised:
-
-| Tool | Capability | What it does |
-| --- | --- | --- |
-| `list_content_files` / `read_content_file` / `upload_asset` / `regenerate_manifest` | `manageContent` | Raw `content-files/` keyspace access (browse, read, write, manifest rebuild) |
-| `instance_overview` / `analytics_overview` / `js_errors` | `viewStats` | Read-only instance KPIs, 7-day analytics, top client errors |
-| `recent_audit` | `viewAudit` | Read-only audit trail access |
-
-### The approval gate
-
-Publishing and destructive tools (`approve_content`, `publish_direct`, `reject_content`, `unpublish_content`, `delete_content`, `upload_asset`, `regenerate_manifest`) pause mid-turn and wait for your **Approve** click before executing. A rejected call is never retried by the model — it proposes an alternative instead. This gate is client-side by design: the model physically cannot execute the call until you release it.
-
-### Hardening notes
-
-- **Prompt-injection resistance** — parsed PDFs and stored bodies are passed to the model as *data* with explicit system-prompt rules to never follow instructions found inside them. Combined with the approval gate, a malicious document can at worst *ask* for a destructive action — it can't take it.
-- **History budgeting** — tool results older than the last two turns are compacted to stubs before each request, keeping token spend bounded on long sessions. Persisted sessions compact harder still (600-char stubs) so localStorage never overflows.
-- **Result truncation** — every tool result is capped at 12k chars before entering the model context.
-- **Turn limits** — each turn is bounded to 8 model steps.
-
-### Working with PDFs
-
-Attach a PDF with the button or by dropping it onto the transcript (mode: exam MCQs, written exam, or raw text). The parse result is injected into the conversation history (capped at ~40k chars) so follow-ups like *"create a draft pack from the PDF above"* work directly — the model reads the extracted data, resolves the parse warnings, validates, and creates the draft. Files are capped at 20 MB decoded, matching the worker limit.
-
-### Conversations, streaming, and usage
-
-- Replies stream token-by-token and render as GitHub-flavored markdown (raw HTML is never rendered).
-- Conversations persist per browser (up to 20, auto-titled from your first message) and survive reloads; switch or delete them from the transcript header, or export the whole transcript as Markdown.
-- Each assistant turn shows its token usage (input ↑ / output ↓) and duration; the footer tracks session totals.
-- Tool results that surface a content id offer an **Open in editor** deep link straight into `/admin/content?id=…`.
-- `Esc` stops a running turn; the Stop button does the same and auto-rejects any pending approval.
-
-### New worker endpoint
-
-The `duplicate_content` tool rides a dedicated session-authenticated endpoint:
-
-```
-POST /v1/admin/content/:id/duplicate   { "title": "Optional new title" }
-```
-
-It clones the source object's current readable body (pending > published > draft) plus pack assets into a new draft owned by the caller, skipping workflow slot files, bounded to ~1000 assets per call, and logs a `duplicate_content` audit entry. Mirrors the MCP `duplicate_content_object` tool for the panel and assistant.
-
----
-
-## 11. Audit Log
+## 10. Audit Log
 
 **Route:** `/admin/audit`
 **Access:** `admin` only
@@ -859,7 +782,7 @@ The Audit Log is the immutable trail of every administrative action. It's there 
 | Actor | `actor_display_name` + `actor_username` | "Unknown actor" if the actor's account was deleted. |
 | Action | `action` | Rendered as a coloured, monospace badge. |
 | Target | `target_id` | The user ID or content ID the action was performed on. `—` if not applicable. |
-| Detail | `detail` (JSON) | Free-form per-action payload; see [§13](#13-audit-log-reference). |
+| Detail | `detail` (JSON) | Free-form per-action payload; see [§12](#12-audit-log-reference). |
 
 ### Filter
 
@@ -886,7 +809,7 @@ Pages are 50 entries each. The footer shows current page / total pages and the t
 
 ### Detail payloads
 
-Each entry's `detail` is a JSON object whose shape depends on the action. The full reference is in [§13](#13-audit-log-reference). The Detail column pretty-prints the JSON inline in a scrollable monospace block.
+Each entry's `detail` is a JSON object whose shape depends on the action. The full reference is in [§12](#12-audit-log-reference). The Detail column pretty-prints the JSON inline in a scrollable monospace block.
 
 ### Retention
 
@@ -896,7 +819,7 @@ If you need longer retention for compliance, take periodic D1 exports (see [`hos
 
 ---
 
-## 12. The content lifecycle
+## 11. The content lifecycle
 
 The content workflow is a state machine with five states and six transitions. Admins have access to all transitions; `content_admin`s have access to a subset.
 
@@ -965,7 +888,7 @@ When you unpublish, students stop seeing the content within the cache TTL (usual
 
 ---
 
-## 13. Common admin workflows
+## 12. Common admin workflows
 
 Step-by-step recipes for the tasks you'll actually do.
 
@@ -1013,7 +936,7 @@ A published article has an error.
 1. Visit `/admin/content` → Published tab.
 2. Click the row to open the editor.
 3. Click "Save draft" first (so you have the current body in the editor).
-4. Click the kebab menu / unpublish action — *note: unpublish is exposed via the API, not a visible button in the editor toolbar; in the current build, unpublish is invoked via the API directly. If you need to unpublish, see [§14](#14-d1-sql-cheatsheet-for-operators) for the API call, or use the unpublish button if your build exposes it*.
+4. Click the kebab menu / unpublish action — *note: unpublish is exposed via the API, not a visible button in the editor toolbar; in the current build, unpublish is invoked via the API directly. If you need to unpublish, see [§13](#13-d1-sql-cheatsheet-for-operators) for the API call, or use the unpublish button if your build exposes it*.
 5. The status reverts to `draft`. Students no longer see the content.
 6. Edit the JSON, save, then click "Publish directly" to push the corrected version live.
 
@@ -1029,7 +952,7 @@ You got an alert that someone reset a password at 3 a.m. — and it wasn't you.
    - Go to `/admin/users`, search for the actor.
    - Click "Reset password" and set a strong new password. This revokes all their sessions.
    - Then click "Reset password" on any accounts they may have changed roles on (filter the audit log by "Role changes" with the same time window).
-4. If a non-admin somehow performed the action (shouldn't be possible — every admin endpoint checks role), the audit log will show "Unknown actor" — investigate via D1 directly (see [§14](#14-d1-sql-cheatsheet-for-operators)).
+4. If a non-admin somehow performed the action (shouldn't be possible — every admin endpoint checks role), the audit log will show "Unknown actor" — investigate via D1 directly (see [§13](#13-d1-sql-cheatsheet-for-operators)).
 5. Document the incident. The audit log is your forensic record.
 
 ### Workflow: Onboard a batch of content editors
@@ -1042,7 +965,7 @@ You're standing up the editorial team for a new semester.
 4. (Optional) Send each editor their first assignment: "Create one `library` content object about topic X and submit it for review."
 5. Watch the Review Queue as submissions come in.
 
-For large batches (10+ editors), consider scripting the role changes via D1 (see [§14](#14-d1-sql-cheatsheet-for-operators)) — but be aware that bypassing the API means no audit log entries are written.
+For large batches (10+ editors), consider scripting the role changes via D1 (see [§13](#13-d1-sql-cheatsheet-for-operators)) — but be aware that bypassing the API means no audit log entries are written.
 
 ### Workflow: Reset a locked-out user
 
@@ -1108,7 +1031,7 @@ A compliance officer wants to know "who did what, when".
 
 ---
 
-## 14. Audit log reference
+## 13. Audit log reference
 
 Every admin action that mutates state writes exactly one row to `admin_audit`. Read-only actions (listing users, viewing content, fetching stats) are **not** logged — that would be both noisy and privacy-invasive.
 
@@ -1180,7 +1103,7 @@ The audit log is append-only from the application's perspective — no admin end
 
 ---
 
-## 15. D1 SQL cheatsheet for operators
+## 14. D1 SQL cheatsheet for operators
 
 For tasks the UI doesn't expose, or for batch operations, go directly to D1. **Always run SELECT first to verify the target row before any UPDATE or DELETE.**
 
@@ -1360,7 +1283,7 @@ npx wrangler r2 object delete osler-content/content/library/abc123/draft.json
 
 ---
 
-## 16. Troubleshooting
+## 15. Troubleshooting
 
 ### "Access Denied" page at `/admin`
 
@@ -1417,7 +1340,7 @@ Once a user is deleted, the row is gone. But:
 If you need to undo a deletion, you can't — but you can:
 
 1. Create a new user with the same username (the user would need to register again, or you insert a row directly into D1 with a known password hash).
-2. Reassign the previously-reassigned content back to them via SQL (see [§14](#14-d1-sql-cheatsheet-for-operators)).
+2. Reassign the previously-reassigned content back to them via SQL (see [§13](#13-d1-sql-cheatsheet-for-operators)).
 
 ### Accidental content deletion
 
@@ -1491,7 +1414,7 @@ The admin panel uses the same Osler session as the main app, but the Worker enfo
 
 ---
 
-## 17. Best practices
+## 16. Best practices
 
 ### Least privilege
 

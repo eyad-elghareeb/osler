@@ -16,7 +16,6 @@ import {
   Moon,
   Sun,
   ShieldOff,
-  Bot,
   Settings as SettingsIcon,
   ChevronDown,
   Home,
@@ -48,10 +47,6 @@ import {
   useAdminSettings,
 } from "@/components/osler/admin/admin-settings-context";
 import { adminApi, type AdminIdentity } from "@/components/osler/admin/admin-api";
-// Import from the leaf types module (not the barrel): the barrel pulls the
-// assistant panel + markdown deps into every admin page's chunk, while
-// types.ts has zero heavy imports — bundle isolation stays intact.
-import { clearAssistantSecrets } from "@/components/osler/admin/assistant/types";
 
 interface AdminShellProps {
   children: React.ReactNode;
@@ -180,9 +175,6 @@ function AdminShellInner({ children }: AdminShellProps) {
   const signOut = React.useCallback(() => {
     haptic("light");
     clearCloudSession();
-    // The assistant's BYOK provider key must not outlive the admin's
-    // session on a shared machine — wipe both storage scopes on sign-out.
-    clearAssistantSecrets();
     setIdentity(null);
   }, []);
 
@@ -256,9 +248,6 @@ function AdminShellInner({ children }: AdminShellProps) {
       ? [{ href: "/admin/dashboard", icon: LayoutDashboard, labelKey: "admin.nav.dashboard" }]
       : []),
     { href: "/admin/content", icon: FileText, labelKey: "admin.nav.content" },
-    // Visible to both tiers: content_admins author content too. Destructive
-    // and publishing tools stay gated server-side by role/capability.
-    { href: "/admin/assistant", icon: Bot, labelKey: "admin.nav.assistant" },
     ...(isAdmin
       ? [
           {

@@ -354,13 +354,6 @@ export const adminApi = {
                                                     req<{ id: string; r2KeyBase: string; status: string }>("/v1/admin/content", "POST", payload),
   saveDraft:       (id: string, body: string)    => req<{ ok: boolean }>(`/v1/admin/content/${id}/draft`, "PUT", body),
   submitForReview: (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/submit`, "POST"),
-  /** Duplicate (remix) any readable object into a new draft owned by the
-   *  caller — copies the current body plus pack assets. Assistant + content
-   *  browser "duplicate" affordances both ride this endpoint (admin session
-   *  auth, no MCP token needed). Mirrors the MCP duplicate_content_object
-   *  tool. */
-  duplicateContent: (id: string, title?: string) =>
-                                                    req<{ ok: boolean; id: string; title: string; sourceId: string; status: string; assetsCopied: number; failedAssets: Array<{ path: string; error: string }>; assetsTruncated: boolean }>(`/v1/admin/content/${id}/duplicate`, "POST", title ? { title } : {}),
   /** Direct publish with optional hybrid push to student-facing R2 keyspace.
    *  `targetPath` lets you choose where the content lands inside the category
    *  folder (e.g. "cardiology/acute-coronary/questions.json"). Pass `hybrid:
@@ -375,17 +368,6 @@ export const adminApi = {
   /** Validate arbitrary content+body without a content_object. */
   validateStandalone: (contentType: ContentType, body: string) =>
                                                     req<{ errors: string[] }>(`/v1/admin/content/validate`, "POST", { contentType, body }),
-
-  // PDF parsing (admin + content_admin) — same heuristics as the MCP
-  // parse_pdf / parse_qbank_pdf / parse_written_pdf tools, driven by the
-  // /admin/assistant harness over the admin session. `pdfDataUri` is a
-  // data:application/pdf;base64,… URI or raw base64 (max ~20 MB decoded).
-  parsePdf:        (pdfDataUri: string, maxPages?: number) =>
-                                                    req<{ pageCount: number; truncated: boolean; likelyScanned: boolean; note?: string; pages: Array<{ page: number; text: string }> }>(`/v1/admin/content/parse-pdf`, "POST", { pdfDataUri, maxPages }),
-  parseQbankPdf:   (pdfDataUri: string, maxPages?: number) =>
-                                                    req<{ pageCount: number; truncated: boolean; detected: unknown; warnings: string[]; draft: { questions: unknown[] }; nextSteps: string }>(`/v1/admin/content/parse-qbank-pdf`, "POST", { pdfDataUri, maxPages }),
-  parseWrittenPdf: (pdfDataUri: string, maxPages?: number) =>
-                                                    req<{ pageCount: number; truncated: boolean; detected: unknown; warnings: string[]; draft: { prompts: unknown[] }; nextSteps: string }>(`/v1/admin/content/parse-written-pdf`, "POST", { pdfDataUri, maxPages }),
 
   /** Raw R2 file upload — same endpoint used by scripts/upload-content-to-r2.js.
    *  `key` is the full R2 key (e.g. "content-files/library/cardiology/asthma.md").
