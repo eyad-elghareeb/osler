@@ -1,10 +1,3 @@
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
-import remarkRehype from "remark-rehype";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import rehypeStringify from "rehype-stringify";
 import type { Plugin } from "unified";
 import { CALLOUT_DEFAULT_TITLES, parseCalloutMarker } from "./callouts";
 import { loadCategoryTree, fetchWithLocalFallback } from "./content";
@@ -362,6 +355,61 @@ const rehypeArticleImages: Plugin<[string]> = (articleDir: string) => (tree: any
 };
 
 /**
+ * Lazy markdown pipeline — unified/remark/rehype weigh ~200KB minified and
+ * are needed only when an article body actually renders to HTML. Every route
+ * imports this module transitively (via content.ts), so a static import
+ * would tax login/dashboard first paint for a feature used only when
+ * opening an article. The dynamic imports below split the pipeline into a
+ * separate chunk fetched on first render; concurrent renders share one
+ * in-flight load via the cached promise.
+ */
+interface MarkdownPipeline {
+  unified: (typeof import("unified"))["unified"];
+  remarkParse: any;
+  remarkGfm: any;
+  remarkRehype: any;
+  rehypeRaw: any;
+  rehypeSanitize: any;
+  rehypeStringify: any;
+  defaultSchema: any;
+}
+
+let pipelinePromise: Promise<MarkdownPipeline> | null = null;
+
+function loadMarkdownPipeline(): Promise<MarkdownPipeline> {
+  pipelinePromise ??= (async (): Promise<MarkdownPipeline> => {
+    const [
+      { unified },
+      { default: remarkParse },
+      { default: remarkGfm },
+      { default: remarkRehype },
+      { default: rehypeRaw },
+      sanitizeMod,
+      { default: rehypeStringify },
+    ] = await Promise.all([
+      import("unified"),
+      import("remark-parse"),
+      import("remark-gfm"),
+      import("remark-rehype"),
+      import("rehype-raw"),
+      import("rehype-sanitize"),
+      import("rehype-stringify"),
+    ]);
+    return {
+      unified,
+      remarkParse,
+      remarkGfm,
+      remarkRehype,
+      rehypeRaw,
+      rehypeSanitize: sanitizeMod.default,
+      rehypeStringify,
+      defaultSchema: sanitizeMod.defaultSchema,
+    };
+  })();
+  return pipelinePromise;
+}
+
+/**
  * Sanitizer schema: extends GitHub's default with everything the article
  * pipeline actually renders — GFM tables/strikethrough/tasklists, code
  * attributes used by syntax highlighting, and the mermaid placeholder div
@@ -369,48 +417,56 @@ const rehypeArticleImages: Plugin<[string]> = (articleDir: string) => (tree: any
  * decoded only for diagram rendering, never injected as HTML). Raw HTML in
  * authored content is parsed by rehypeRaw but every tag not listed here and
  * every on* / javascript: URL is dropped before it can reach the DOM.
+ *
+ * Built from the lazily loaded defaultSchema on first render (see above).
  */
-const ARTICLE_SANITIZE_SCHEMA = {
-  ...defaultSchema,
-  tagNames: [
-    ...(defaultSchema.tagNames ?? []),
-    "div",
-    "figure",
-    "figcaption",
-    "details",
-    "summary",
-    "video",
-    "audio",
-    "source",
-  ],
-  attributes: {
-    ...defaultSchema.attributes,
-    "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "dir", "lang"],
-    div: ["className", "data-diagram"],
-    blockquote: ["className", "data-callout"],
-    span: ["className"],
-    code: [...(defaultSchema.attributes?.code ?? []), "className"],
-    th: ["style", "align"],
-    td: ["style", "align"],
-    video: ["src", "controls", "poster", "width", "height", "preload"],
-    audio: ["src", "controls"],
-    source: ["src", "type"],
-    img: [...(defaultSchema.attributes?.img ?? []), "loading", "decoding"],
-  },
-  protocols: { ...defaultSchema.protocols, src: ["http", "https", "mailto"] },
-};
+let sanitizeSchema: any = null;
+
+function getSanitizeSchema(defaultSchema: any): any {
+  sanitizeSchema ??= {
+    ...defaultSchema,
+    tagNames: [
+      ...(defaultSchema.tagNames ?? []),
+      "div",
+      "figure",
+      "figcaption",
+      "details",
+      "summary",
+      "video",
+      "audio",
+      "source",
+    ],
+    attributes: {
+      ...defaultSchema.attributes,
+      "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "dir", "lang"],
+      div: ["className", "data-diagram"],
+      blockquote: ["className", "data-callout"],
+      span: ["className"],
+      code: [...(defaultSchema.attributes?.code ?? []), "className"],
+      th: ["style", "align"],
+      td: ["style", "align"],
+      video: ["src", "controls", "poster", "width", "height", "preload"],
+      audio: ["src", "controls"],
+      source: ["src", "type"],
+      img: [...(defaultSchema.attributes?.img ?? []), "loading", "decoding"],
+    },
+    protocols: { ...defaultSchema.protocols, src: ["http", "https", "mailto"] },
+  };
+  return sanitizeSchema;
+}
 
 async function mdToHtml(md: string, articleDir: string): Promise<string> {
-  const result = await unified()
-    .use(remarkParse)
-    .use(remarkGfm)
+  const p = await loadMarkdownPipeline();
+  const result = await p.unified()
+    .use(p.remarkParse)
+    .use(p.remarkGfm)
     .use(remarkCallouts)
-    .use(remarkRehype, { allowDangerousHtml: true })
-    .use(rehypeRaw)
-    .use(rehypeSanitize, ARTICLE_SANITIZE_SCHEMA)
+    .use(p.remarkRehype, { allowDangerousHtml: true })
+    .use(p.rehypeRaw)
+    .use(p.rehypeSanitize, getSanitizeSchema(p.defaultSchema))
     .use(rehypeMermaid)
     .use(rehypeArticleImages, articleDir)
-    .use(rehypeStringify)
+    .use(p.rehypeStringify)
     .process(md);
   return String(result);
 }
