@@ -44,6 +44,8 @@ import { handleAuthorizeGet, handleAuthorizePost, handleProtectedResource, handl
 import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_TTL_MS } from "./realtime-hub";
 import { parseHttpRange } from "./http-range";
 import { buildAdminUsersListQuery } from "./admin-users";
+import { decodePdfInput, extractPdfPages } from "./mcp/pdf-text";
+import { parseMcqText, parseWrittenText } from "./mcp/pdf-structure";
 // Durable Object classes must be reachable from the entry module for the
 // wrangler migration to bind them.
 export { UserSyncHub };
@@ -5232,6 +5234,96 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       let parsed: any;
       try { parsed = JSON.parse(typeof body.body === "string" ? body.body : "{}"); } catch (e: any) { return json({ errors: ["Invalid JSON: " + e.message] }, 200, origin, log); }
       return json({ errors: validateContent(ct, parsed) }, 200, origin, log);
+    }
+    /* ── Admin PDF parse endpoints (drives the /admin/assistant harness) ──
+     *
+     * Same extraction + structure heuristics as the MCP parse_pdf /
+     * parse_qbank_pdf / parse_written_pdf tools, but authenticated with the
+     * admin's session token instead of an MCP API token — so the admin panel
+     * can send a PDF for parsing without minting or storing a separate token.
+     * Read-only compute: no DB writes, no audit entries. PDF bytes arrive
+     * inline as base64/data-URI (URL fetching is deliberately unsupported —
+     * SSRF surface); readJsonLarge caps the body at 30 MB like the MCP
+     * transport. unpdf is lazy-imported inside extractPdfPages, so requests
+     * that never parse PDFs never pay for the engine. */
+    if (request.method === "POST" && path === "/v1/admin/content/parse-pdf") {
+      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      const body = await readJsonLarge(request);
+      const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
+      let bytes: Uint8Array;
+      try {
+        bytes = decodePdfInput(String(body.pdfDataUri ?? ""));
+      } catch (e: any) {
+        return json({ error: String(e?.message ?? "Invalid PDF payload") }, 400, origin, log);
+      }
+      let result: { pageCount: number; truncated: boolean; pages: string[] };
+      try {
+        result = await extractPdfPages(bytes, maxPages);
+      } catch (e: any) {
+        return json({ error: String(e?.message ?? "PDF extraction failed") }, 422, origin, log);
+      }
+      const likelyScanned = result.pages.every((p) => !p.trim());
+      return json({
+        pageCount: result.pageCount,
+        truncated: result.truncated,
+        likelyScanned,
+        ...(likelyScanned
+          ? { note: "No text layer detected — the PDF is probably scanned images. OCR is not available; transcribe the content yourself from the source." }
+          : {}),
+        pages: result.pages.map((text, i) => ({ page: i + 1, text })),
+      }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/parse-qbank-pdf") {
+      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      const body = await readJsonLarge(request);
+      const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
+      let bytes: Uint8Array;
+      try {
+        bytes = decodePdfInput(String(body.pdfDataUri ?? ""));
+      } catch (e: any) {
+        return json({ error: String(e?.message ?? "Invalid PDF payload") }, 400, origin, log);
+      }
+      let result: { pageCount: number; truncated: boolean; pages: string[] };
+      try {
+        result = await extractPdfPages(bytes, maxPages);
+      } catch (e: any) {
+        return json({ error: String(e?.message ?? "PDF extraction failed") }, 422, origin, log);
+      }
+      const parsed = parseMcqText(result.pages);
+      return json({
+        pageCount: result.pageCount,
+        truncated: result.truncated,
+        detected: parsed.stats,
+        warnings: parsed.warnings,
+        draft: { questions: parsed.questions },
+        nextSteps: "Questions missing 'correct' (see warnings) must be resolved before upload. Verify stems/options against the source, add difficulty and tags, then validate and create the pack.",
+      }, 200, origin, log);
+    }
+    if (request.method === "POST" && path === "/v1/admin/content/parse-written-pdf") {
+      if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      const body = await readJsonLarge(request);
+      const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
+      let bytes: Uint8Array;
+      try {
+        bytes = decodePdfInput(String(body.pdfDataUri ?? ""));
+      } catch (e: any) {
+        return json({ error: String(e?.message ?? "Invalid PDF payload") }, 400, origin, log);
+      }
+      let result: { pageCount: number; truncated: boolean; pages: string[] };
+      try {
+        result = await extractPdfPages(bytes, maxPages);
+      } catch (e: any) {
+        return json({ error: String(e?.message ?? "PDF extraction failed") }, 422, origin, log);
+      }
+      const parsed = parseWrittenText(result.pages);
+      return json({
+        pageCount: result.pageCount,
+        truncated: result.truncated,
+        detected: parsed.stats,
+        warnings: parsed.warnings,
+        draft: { prompts: parsed.prompts },
+        nextSteps: "Default rubrics (single criterion) should be replaced with graded marking schemes where possible. Verify prompts against the source, then validate and create the pack.",
+      }, 200, origin, log);
     }
     if (request.method === "GET" && path === "/v1/admin/content/pending") {
       if (!isAdmin(session)) return json({ error: "Forbidden" }, 403, origin, log);
