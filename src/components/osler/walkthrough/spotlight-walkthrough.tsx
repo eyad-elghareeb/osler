@@ -378,14 +378,17 @@ export function SpotlightWalkthrough({
         />
       )}
 
-      {/* ── Halo ring (pointer-events:none so clicks pass through to real button) ── */}
+      {/* ── Halo ring (pointer-events:none so clicks pass through to real button) ──
+          Position glides on x/y transforms (compositor-only) while width/
+          height snap in style — animating top/left/width here emitted a
+          layout-shift entry every frame (~0.03 CLS on first tour run). */}
       {spotlightRect.found && (
         <motion.div
           key={`halo-${index}`}
           initial={false}
-          animate={{ top: spotlightRect.top, left: spotlightRect.left, width: spotlightRect.width, height: spotlightRect.height }}
+          animate={{ x: spotlightRect.left, y: spotlightRect.top }}
           transition={MOTION_SPRING.snappy}
-          style={{ borderRadius: radius, position: "absolute" }}
+          style={{ borderRadius: radius, position: "absolute", top: 0, left: 0, width: spotlightRect.width, height: spotlightRect.height }}
           className="z-20 pointer-events-none border-2 border-primary/90 ring-[3px] ring-primary/20"
           aria-hidden="true"
         >
@@ -404,16 +407,20 @@ export function SpotlightWalkthrough({
 
       {/* ── Coach mark card ──
           Enter-only: mode="wait" blanked the card between tour steps while
-          the spotlight ring stayed put, reading as a flicker. */}
+          the spotlight ring stayed put, reading as a flicker.
+          Position rides on x/y transforms (compositor-only, zero CLS) with
+          width pinned in style — the old top/left/width tween shifted layout
+          every frame while the target rect settled. */}
       <motion.div
           key={index}
           ref={attachCard}
           data-walkthrough-card
           role="status"
           aria-live="polite"
-          initial={{ opacity: 0, y: 8, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1, top: cardPosition.top, left: cardPosition.left, width: cardPosition.cardWidth }}
+          initial={{ opacity: 0, scale: 0.96, x: cardPosition.left, y: cardPosition.top + 8 }}
+          animate={{ opacity: 1, scale: 1, x: cardPosition.left, y: cardPosition.top }}
           transition={MOTION_TRANSITION.normal}
+          style={{ top: 0, left: 0, width: cardPosition.cardWidth }}
           className="absolute z-30 pointer-events-auto rounded-xl border border-border/70 bg-card/95 backdrop-blur-sm shadow-e3 px-4 py-3 flex flex-col gap-2"
           onClick={(e) => e.stopPropagation()}
         >

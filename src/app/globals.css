@@ -258,6 +258,12 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    /* `manipulation` (pan + pinch, no double-tap-zoom) page-wide: keeps the
+     * native-app tap feel now that the viewport meta allows user scaling
+     * for accessibility — pinch zoom still works, accidental double-tap
+     * zoom does not. Element-level rules (pan-y swipe zones, none drag
+     * surfaces) override this where they are more specific. */
+    touch-action: manipulation;
     /* Rendering-quality baseline — applies to every glyph in the app via
      * inheritance, not just prose. `optimizeLegibility` engages proper
      * kerning/ligature shaping (matters most for Geist Sans, used for

@@ -99,7 +99,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   }, [dir, rtl]);
 
   return (
-    <div className="h-dvh relative overflow-hidden bg-background">
+    <main className="h-dvh relative overflow-hidden bg-background">
       {/* Ambient primary glow — mirrors the login screen's focal element */}
       <div
         aria-hidden
@@ -183,6 +183,6 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           </motion.div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

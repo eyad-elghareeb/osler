@@ -8,5 +8,3 @@ Allow: /videos/
 Allow: /learn/
 Disallow: /admin/
 Disallow: /v1/
-
-Sitemap: /sitemap.xml

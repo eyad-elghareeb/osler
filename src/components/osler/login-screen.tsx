@@ -478,7 +478,7 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
   };
 
   return (
-    <div className="h-dvh flex items-center justify-center p-4 bg-background safe-py relative overflow-y-auto">
+    <main className="h-dvh flex items-center justify-center p-4 bg-background safe-py relative overflow-y-auto">
       {/* Ambient primary glow — one focal element per viewport per the
        * design-library-roadmap. Sits behind the card, never competes with
        * the form's text contrast. */}
@@ -875,6 +875,6 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
           {t("login.footer")}
         </p>
       </motion.div>
-    </div>
+    </main>
   );
 }

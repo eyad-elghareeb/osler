@@ -137,11 +137,11 @@ export const viewport = {
   // Standard mobile viewport.
   width: "device-width",
   initialScale: 1,
-  // Disable user zoom — this matches native app behaviour (you can't pinch
-  // to zoom a native app's UI). Combined with `user-scalable=no` it
-  // prevents the accidental double-tap zoom that breaks the immersive feel.
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch zoom stays enabled for accessibility (low-vision users) — the
+  // `touch-action: manipulation` rule on `body` in globals.css already
+  // suppresses the accidental double-tap zoom that breaks the immersive
+  // feel, so there is no need for `maximumScale: 1, userScalable: false`
+  // (both fail the axe meta-viewport accessibility check).
   // `cover` extends the layout under the iOS notch / Dynamic Island and
   // the Android status bar / navigation bar. The .safe-pt / .safe-pb /
   // .safe-screen utilities in globals.css then add the correct env()
