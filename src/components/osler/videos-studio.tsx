@@ -35,7 +35,7 @@ import {
   formatDuration,
 } from "@/lib/osler/videos";
 import { ENGINE_META, collectPackUrls, findNodeByUid, getCachedCategoryTree } from "@/lib/osler/content";
-import { settings, videoWatch } from "@/lib/osler/storage";
+import { settings, videoWatch, videoProgress } from "@/lib/osler/storage";
 import { useVideoWatch } from "@/hooks/use-video-watch";
 import type { VideoResource, ContentTreeNode } from "@/lib/osler/types";
 import { cn } from "@/lib/utils";
@@ -82,6 +82,13 @@ const YT_MAX_RATE = 2;
 const YT_PLAYBACK_RATES = PLAYBACK_RATES.filter((r) => r <= YT_MAX_RATE);
 const SPEED_STEP = 0.1;
 
+/** Resume only when past the intro seconds… */
+const RESUME_MIN_S = 5;
+/** …and never into the last seconds (counts as finished). */
+const FINISH_MARGIN_S = 10;
+/** Position writes are throttled to this cadence; pause/unmount flush. */
+const PROGRESS_SAVE_MS = 5000;
+
 function clampRate(next: number): number {
   const rounded = Math.round(next * 100) / 100;
   return Math.min(SPEED_MAX, Math.max(SPEED_MIN, rounded));
@@ -97,6 +104,14 @@ function parseStoredRate(val: string | null | undefined): number {
 /** "1x" / "1.5x" / "2.25x" — trims float drift from repeated ±0.1 steps. */
 function fmtRate(r: number): string {
   return `${String(Number.parseFloat(r.toFixed(2)))}x`;
+}
+
+/** Saved position → resume offset, or undefined when the video is fresh,
+ *  barely started, or was left inside the finish margin (counts as done). */
+function resumeFromEntry(e: { t: number; d?: number } | null): number | undefined {
+  if (!e || !Number.isFinite(e.t) || e.t < RESUME_MIN_S) return undefined;
+  if (e.d != null && Number.isFinite(e.d) && e.d > 0 && e.t >= e.d - FINISH_MARGIN_S) return undefined;
+  return Math.floor(e.t);
 }
 
 /** Alternative YouTube frontend host (set via NEXT_PUBLIC_INVIDIOUS_HOST in .env.local). */
@@ -870,8 +885,14 @@ function VideoPlayerView({
   const autoAdvanceRef = React.useRef<() => void>(() => {});
   // Latest rate for the same reason — the YT onReady closure and the Plyr
   // init both read through this instead of a stale render capture.
+  // `rateRef` is the persisted *desired* speed (full 0.25–4× range);
+  // `effRateRef` is what the mounted backend can actually play
+  // (min(desired, backend cap)) — the cap is applied, never stored, so a
+  // 3× direct-file speed survives a YouTube detour instead of being
+  // rewritten to 2× on open.
   const rateRef = React.useRef(playbackRate);
   rateRef.current = playbackRate;
+  const effRateRef = React.useRef(playbackRate);
   autoAdvanceRef.current = () => {
     if (autoplay) onNext();
   };
@@ -958,34 +979,87 @@ function VideoPlayerView({
   // bind per video (streamUrl/videoId change per video), so the captured id
   // is always the video that just ended.
   const markFinished = React.useCallback(() => {
+    void videoProgress.clear(video.id);
     void videoWatch.mark(video.id).then((changed) => {
       if (changed) haptic("success");
     });
   }, [video.id]);
 
+  // ── Resume position (local-only videoProgress store) ──
+  // Offset to seek to on boot, or undefined for a fresh/finished video.
+  // Memoized per video so mid-playback saves never re-trigger a seek.
+  const resumeAt = React.useMemo(() => resumeFromEntry(videoProgress.get(video.id)), [video.id]);
+  // Latest known position (both backends keep it fresh); flushed on
+  // unmount / playlist hop so quitting mid-video resumes where the user
+  // left off. Reset per video (declared after the flush effect so the old
+  // video's position is written before the ref is recycled).
+  const posRef = React.useRef<{ t: number; d?: number }>({ t: 0 });
+  const lastSaveRef = React.useRef(0);
+  const writeProgress = React.useCallback((t: number, d?: number, force = false) => {
+    if (!Number.isFinite(t) || t < 0) return;
+    const dur = Number.isFinite(d) ? (d as number) : undefined;
+    posRef.current = { t, ...(dur != null && dur > 0 ? { d: dur } : {}) };
+    // Inside the finish margin counts as watched-through: drop the row so
+    // the next open starts at 0 instead of the credits.
+    if (dur != null && dur > 0 && t >= dur - FINISH_MARGIN_S) {
+      void videoProgress.clear(video.id);
+      return;
+    }
+    if (t < RESUME_MIN_S) {
+      // No rows for the first seconds — but drop a stale row when the user
+      // seeks back to the start.
+      if (videoProgress.get(video.id)) void videoProgress.clear(video.id);
+      return;
+    }
+    if (!force) {
+      const now = Date.now();
+      if (now - lastSaveRef.current < PROGRESS_SAVE_MS) return;
+      lastSaveRef.current = now;
+    }
+    void videoProgress.save(video.id, t, dur);
+  }, [video.id]);
+
+  // Flush the latest position when leaving the video (close, playlist hop,
+  // unmount) — the throttled tick alone would lose the last seconds.
+  React.useEffect(() => () => {
+    const { t, d } = posRef.current;
+    writeProgress(t, d, true);
+  }, [writeProgress]);
+  React.useEffect(() => {
+    // Seed from the resume point so a close before the first tick keeps it
+    // instead of flushing a zero over the saved row.
+    posRef.current = { t: resumeAt ?? 0 };
+    lastSaveRef.current = 0;
+  }, [video.id, resumeAt]);
+
   // ── Playback speed (shared by the YouTube + Plyr backends) ──
-  // The single setter persists the pref and pushes the rate live into
-  // whichever backend is mounted. Plyr honors the full 0.25–4× range; the
-  // YouTube backend is capped at 2× (its IFrame API can't go past that),
-  // so YouTube never offers — or holds — a rate it can't play.
+  // `playbackRate` is the persisted *desired* speed (full 0.25–4× range);
+  // `effectiveRate` is what the mounted backend can play (the YouTube
+  // backend caps at 2×). The cap is applied, never stored — opening a
+  // YouTube video must not rewrite a saved 3× down to 2×. Steps move from
+  // the effective rate so taps always do something audible; presets set
+  // the desired rate directly (each list only offers playable values).
   // The alt-host (Invidious) iframe exposes no JS API, so live stepping is
-  // disabled there — the saved rate is still passed as `&speed=` when its
-  // embed (re)loads.
+  // disabled there — the effective rate is still passed as `&speed=` when
+  // its embed (re)loads.
   const maxRate = isYouTube && !invidiousMode ? YT_MAX_RATE : SPEED_MAX;
   const maxRateRef = React.useRef(maxRate);
   maxRateRef.current = maxRate;
+  const effectiveRate = Math.min(playbackRate, maxRate);
+  effRateRef.current = effectiveRate;
   const applyRate = React.useCallback((next: number, silent = false) => {
-    const clamped = Math.min(maxRateRef.current, clampRate(next));
+    const clamped = clampRate(next);
     if (clamped === rateRef.current) return;
     if (!silent) haptic("selection");
     cachedSpeed = clamped;
     rateRef.current = clamped;
     setPlaybackRateState(clamped);
     void settings.set("video-speed", String(clamped));
+    const effective = Math.min(clamped, maxRateRef.current);
     const yt = youtubeRef.current;
     if (yt && typeof yt.setPlaybackRate === "function") {
       try {
-        yt.setPlaybackRate(clamped);
+        yt.setPlaybackRate(effective);
       } catch {
         /* player torn down mid-flight */
       }
@@ -993,7 +1067,7 @@ function VideoPlayerView({
     const plyr = plyrRef.current;
     if (plyr) {
       try {
-        plyr.speed = clamped;
+        plyr.speed = effective;
       } catch {
         /* noop */
       }
@@ -1002,7 +1076,7 @@ function VideoPlayerView({
 
   const stepRate = React.useCallback((delta: number) => {
     if (invidiousMode) return;
-    applyRate(rateRef.current + delta);
+    applyRate(effRateRef.current + delta);
   }, [applyRate, invidiousMode]);
 
   const resetRate = React.useCallback(() => {
@@ -1010,21 +1084,13 @@ function VideoPlayerView({
     applyRate(1);
   }, [applyRate, invidiousMode]);
 
-  // A rate saved from a direct-file video (up to 4×) must not linger on
-  // the badge when a YouTube video opens — snap it to the 2× cap silently
-  // (no haptic: this isn't a user gesture) so the display never promises
-  // what the player can't play.
+  // A chapter jump stamps invidiousStart — on video change re-seed it from
+  // the saved resume position (Invidious has no JS seek API, so the offset
+  // rides the embed's `&start=` param) instead of inheriting the old stamp.
   React.useEffect(() => {
-    if (isYouTube && !invidiousMode && rateRef.current > YT_MAX_RATE) {
-      applyRate(YT_MAX_RATE, true);
-    }
-  }, [isYouTube, invidiousMode, applyRate]);
-
-  // A chapter jump stamps invidiousStart — clear it when the video
-  // changes so the next embed doesn't inherit the old timestamp.
-  React.useEffect(() => {
-    setInvidiousStart(undefined);
-  }, [videoId]);
+    const saved = resumeFromEntry(videoProgress.get(video.id));
+    setInvidiousStart(saved != null ? Math.floor(saved) : undefined);
+  }, [video.id, videoId]);
 
   // ── Jump to section helper ──
   const handleJumpToSection = (time: number) => {
@@ -1072,7 +1138,7 @@ function VideoPlayerView({
           "duration", "mute", "volume", "settings", "pip", "fullscreen",
         ],
         settings: ["speed"],
-        speed: { selected: rateRef.current, options: PLAYBACK_RATES },
+        speed: { selected: effRateRef.current, options: PLAYBACK_RATES },
         keyboard: { focused: true, global: false },
         tooltips: { controls: true, seek: true },
         seekTime: 10,
@@ -1085,7 +1151,7 @@ function VideoPlayerView({
         autoAdvanceRef.current();
       });
       try {
-        p.speed = rateRef.current;
+        p.speed = effRateRef.current;
       } catch {
         /* pre-ready player */
       }
@@ -1106,6 +1172,22 @@ function VideoPlayerView({
       containerRef.current.appendChild(root);
 
       let player: any = null;
+      // Resume offset captured for this boot (resumeAt is memoized per
+      // video, so mid-playback saves can't move it under us).
+      const startAt = resumeAt;
+      // Throttled position poll — the IFrame API has no timeupdate event.
+      const progressTimer = window.setInterval(() => {
+        try {
+          if (player && typeof player.getCurrentTime === "function") {
+            writeProgress(
+              player.getCurrentTime(),
+              typeof player.getDuration === "function" ? player.getDuration() : undefined,
+            );
+          }
+        } catch {
+          /* tearing down */
+        }
+      }, PROGRESS_SAVE_MS);
 
       function boot() {
         if (destroyed) return;
@@ -1139,14 +1221,23 @@ function VideoPlayerView({
             playsinline: 1,
             rel: 0,
             origin: window.location.origin,
+            ...(startAt != null ? { start: Math.floor(startAt) } : {}),
           },
           events: {
             onReady: () => {
               if (destroyed) return;
               try {
-                player.setPlaybackRate(rateRef.current);
+                player.setPlaybackRate(effRateRef.current);
               } catch {
                 /* rate unsupported on this video */
+              }
+              // playerVars.start cues close; seekTo lands exactly.
+              if (startAt != null) {
+                try {
+                  player.seekTo(startAt, true);
+                } catch {
+                  /* seek pre-ready */
+                }
               }
               player.playVideo();
             },
@@ -1155,6 +1246,17 @@ function VideoPlayerView({
               if (event.data === 0) {
                 markFinished();
                 autoAdvanceRef.current();
+              } else if (event.data === 2) {
+                // 2 === PAUSED — flush so closing a paused video keeps it.
+                try {
+                  writeProgress(
+                    player.getCurrentTime(),
+                    typeof player.getDuration === "function" ? player.getDuration() : undefined,
+                    true,
+                  );
+                } catch {
+                  /* tearing down */
+                }
               }
             },
           },
@@ -1167,6 +1269,7 @@ function VideoPlayerView({
 
       return () => {
         destroyed = true;
+        window.clearInterval(progressTimer);
         if (player && typeof player.destroy === "function") {
           try { player.destroy(); } catch { /* noop */ }
         }
@@ -1178,6 +1281,24 @@ function VideoPlayerView({
       const videoEl = document.createElement("video");
       videoEl.src = streamUrl;
       videoEl.playsInline = true;
+      // Resume + tracking on the underlying media element (Plyr wraps it,
+      // so native timeupdate/pause still fire). Listeners attach before
+      // init so no early seconds are missed.
+      const onTimeUpdate = () => writeProgress(videoEl.currentTime, videoEl.duration);
+      const onPauseFlush = () => writeProgress(videoEl.currentTime, videoEl.duration, true);
+      videoEl.addEventListener("timeupdate", onTimeUpdate);
+      videoEl.addEventListener("pause", onPauseFlush);
+      if (resumeAt != null) {
+        const seekStart = () => {
+          try {
+            videoEl.currentTime = resumeAt;
+          } catch {
+            /* metadata not ready */
+          }
+        };
+        if (videoEl.readyState >= 1) seekStart();
+        else videoEl.addEventListener("loadedmetadata", seekStart, { once: true });
+      }
       containerRef.current.appendChild(videoEl);
       let plyrInstance: any = null;
       let cancelled = false;
@@ -1190,13 +1311,15 @@ function VideoPlayerView({
       });
       return () => {
         cancelled = true;
+        videoEl.removeEventListener("timeupdate", onTimeUpdate);
+        videoEl.removeEventListener("pause", onPauseFlush);
         if (plyrInstance) {
           try { plyrInstance.destroy(); } catch {}
         }
         plyrRef.current = null;
       };
     }
-  }, [isYouTube, videoId, streamUrl, invidiousMode, prefsReady, markFinished]);
+  }, [isYouTube, videoId, streamUrl, invidiousMode, prefsReady, markFinished, resumeAt, writeProgress]);
 
   // ── Fullscreen tracking ──
   React.useEffect(() => {
@@ -1309,7 +1432,7 @@ function VideoPlayerView({
           />
         )}
         <PlayerSpeedControl
-          rate={playbackRate}
+          rate={effectiveRate}
           presets={isYouTube ? YT_PLAYBACK_RATES : PLAYBACK_RATES}
           capNote={isYouTube ? t("videos.youtubeSpeedCap") : undefined}
           onStep={stepRate}
@@ -1345,7 +1468,7 @@ function VideoPlayerView({
           <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-e3 border border-border shrink-0">
             {!prefsReady ? null : invidiousMode && videoId ? (
               <iframe
-                src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}${playbackRate !== 1 ? `&speed=${playbackRate}` : ""}`}
+                src={`https://${INVIDIOUS_HOST}/embed/${videoId}?autoplay=1${invidiousStart != null ? `&start=${invidiousStart}` : ""}${effectiveRate !== 1 ? `&speed=${effectiveRate}` : ""}`}
                 className="absolute inset-0 w-full h-full"
                 style={{ border: "none" }}
                 allow="autoplay; encrypted-media; fullscreen"
@@ -1479,7 +1602,7 @@ function VideoPlayerView({
                 />
               )}
               <PlayerSpeedControl
-                rate={playbackRate}
+                rate={effectiveRate}
                 presets={isYouTube ? YT_PLAYBACK_RATES : PLAYBACK_RATES}
                 capNote={isYouTube ? t("videos.youtubeSpeedCap") : undefined}
                 onStep={stepRate}

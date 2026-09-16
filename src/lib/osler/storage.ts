@@ -7,7 +7,7 @@ import type { EngineType } from "./types";
 import type { AchievementRecord } from "./achievements";
 
 const DB_NAME = "osler-db-v1";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 /** Hard limits on imported sync/backup payloads. A single oversized record
  *  can OOM the tab or freeze the main thread during JSON.parse + IndexedDB
@@ -242,6 +242,61 @@ export const videoWatch = {
   },
 };
 
+/* ── Video resume positions (local-only, never synced) ─────────────── *
+ *  Stored in the `videoProgress` IndexedDB store as `{ key: videoId,
+ *  value: { t: seconds, d?: durationSeconds, updatedAt } }`. Unlike
+ *  `videoWatch` this state is device-local by design: it never enters
+ *  SYNC_KINDS, export snapshots, backups, or import merges — only
+ *  `resetAll` (full local wipe) clears it. Reads are synchronous off the
+ *  hydrated memory cache; callers throttle writes (per-5s ticks + pause /
+ *  unmount flushes). */
+
+/** Resume position for one video, in seconds. */
+export interface VideoProgressEntry {
+  /** Last watched position. */
+  t: number;
+  /** Media duration when recorded (absent for backends that hide it). */
+  d?: number;
+  updatedAt: number;
+}
+
+export const VIDEO_PROGRESS_EVENT = "osler-video-progress-changed";
+
+const VIDEO_PROGRESS_STORE = "videoProgress";
+
+export const videoProgress = {
+  /** Last saved position for a video (null when never started or finished). */
+  get(id: string): VideoProgressEntry | null {
+    return getCached<VideoProgressEntry>(VIDEO_PROGRESS_STORE, id);
+  },
+
+  /** Record a position; pass non-positive `t` to drop a stale entry. */
+  async save(id: string, t: number, d?: number): Promise<void> {
+    if (!isSafeImportKey(id) || !Number.isFinite(t) || t < 0) return;
+    if (t <= 0) {
+      await videoProgress.clear(id);
+      return;
+    }
+    const entry: VideoProgressEntry = {
+      t: Math.floor(t),
+      ...(Number.isFinite(d) && (d as number) > 0 ? { d: Math.floor(d as number) } : {}),
+      updatedAt: Date.now(),
+    };
+    setCached(VIDEO_PROGRESS_STORE, id, entry);
+    await idbPut(VIDEO_PROGRESS_STORE, id, entry).catch(console.warn);
+    dispatchChange(VIDEO_PROGRESS_EVENT);
+  },
+
+  /** Drop the saved position (video finished or restarted). */
+  async clear(id: string): Promise<void> {
+    if (!isSafeImportKey(id)) return;
+    if (!getCached<VideoProgressEntry>(VIDEO_PROGRESS_STORE, id)) return;
+    deleteCached(VIDEO_PROGRESS_STORE, id);
+    await idbDelete(VIDEO_PROGRESS_STORE, id).catch(console.warn);
+    dispatchChange(VIDEO_PROGRESS_EVENT);
+  },
+};
+
 /** Every content kind synced to the cloud, mirroring the worker's SYNC_KINDS.
  *  The GET response also carries a `quota` field, which callers must skip when
  *  iterating kinds. Qbank highlights + written drafts are session-bound — they
@@ -325,17 +380,19 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("progress")) {
         db.createObjectStore("progress", { keyPath: "key" });
       }
-      // v3: fix sessions store keyPath from "id" to "key" (generic helpers use { key, value } shape)
-      if (db.objectStoreNames.contains("sessions")) {
-        db.deleteObjectStore("sessions");
+      // v3/v4 one-off keyPath fixes (sessions "id" → "key",
+      // articleHighlights "articleId" → "key") ran long ago — every client on
+      // v7+ already carries the fixed stores, so these are create-if-missing
+      // now. Deleting + recreating here would wipe the stores on EVERY
+      // version bump (v8 did exactly that before this guard).
+      if (!db.objectStoreNames.contains("sessions")) {
+        db.createObjectStore("sessions", { keyPath: "key" });
       }
-      db.createObjectStore("sessions", { keyPath: "key" });
       // v4: fix articleHighlights store keyPath from "articleId" to "key"
       // (generic helpers store { key, value }; a missing keyPath key throws DataError).
-      if (db.objectStoreNames.contains("articleHighlights")) {
-        db.deleteObjectStore("articleHighlights");
+      if (!db.objectStoreNames.contains("articleHighlights")) {
+        db.createObjectStore("articleHighlights", { keyPath: "key" });
       }
-      db.createObjectStore("articleHighlights", { keyPath: "key" });
       if (!db.objectStoreNames.contains("stickyNotes")) {
         db.createObjectStore("stickyNotes", { keyPath: "key" });
       }
@@ -359,6 +416,13 @@ function openDB(): Promise<IDBDatabase> {
       // synced like bookmarks (records: Record<videoId, { a, d? }>).
       if (!db.objectStoreNames.contains("videoWatch")) {
         db.createObjectStore("videoWatch", { keyPath: "key" });
+      }
+      // v8: per-video resume positions — `{ key: videoId, value: { t, d?,
+      // updatedAt } }`. Deliberately LOCAL-ONLY: never added to SYNC_KINDS,
+      // export snapshots, or import merges, so watch positions stay on the
+      // device that recorded them.
+      if (!db.objectStoreNames.contains("videoProgress")) {
+        db.createObjectStore("videoProgress", { keyPath: "key" });
       }
       // v6: retire session-bound stores — written drafts and qbank highlights
       // live inside the session record (active + saved), never per-pack stores.
