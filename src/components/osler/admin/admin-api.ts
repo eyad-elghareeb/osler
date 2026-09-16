@@ -369,6 +369,17 @@ export const adminApi = {
   validateStandalone: (contentType: ContentType, body: string) =>
                                                     req<{ errors: string[] }>(`/v1/admin/content/validate`, "POST", { contentType, body }),
 
+  // PDF parsing (admin + content_admin) — same heuristics as the MCP
+  // parse_pdf / parse_qbank_pdf / parse_written_pdf tools, driven by the
+  // /admin/assistant harness over the admin session. `pdfDataUri` is a
+  // data:application/pdf;base64,… URI or raw base64 (max ~20 MB decoded).
+  parsePdf:        (pdfDataUri: string, maxPages?: number) =>
+                                                    req<{ pageCount: number; truncated: boolean; likelyScanned: boolean; note?: string; pages: Array<{ page: number; text: string }> }>(`/v1/admin/content/parse-pdf`, "POST", { pdfDataUri, maxPages }),
+  parseQbankPdf:   (pdfDataUri: string, maxPages?: number) =>
+                                                    req<{ pageCount: number; truncated: boolean; detected: unknown; warnings: string[]; draft: { questions: unknown[] }; nextSteps: string }>(`/v1/admin/content/parse-qbank-pdf`, "POST", { pdfDataUri, maxPages }),
+  parseWrittenPdf: (pdfDataUri: string, maxPages?: number) =>
+                                                    req<{ pageCount: number; truncated: boolean; detected: unknown; warnings: string[]; draft: { prompts: unknown[] }; nextSteps: string }>(`/v1/admin/content/parse-written-pdf`, "POST", { pdfDataUri, maxPages }),
+
   /** Raw R2 file upload — same endpoint used by scripts/upload-content-to-r2.js.
    *  `key` is the full R2 key (e.g. "content-files/library/cardiology/asthma.md").
    *  `body` is either text or a data URI ("data:image/png;base64,...") for

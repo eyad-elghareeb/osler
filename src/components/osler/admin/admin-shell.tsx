@@ -16,6 +16,7 @@ import {
   Moon,
   Sun,
   ShieldOff,
+  Bot,
   Settings as SettingsIcon,
   ChevronDown,
   Home,
@@ -248,6 +249,9 @@ function AdminShellInner({ children }: AdminShellProps) {
       ? [{ href: "/admin/dashboard", icon: LayoutDashboard, labelKey: "admin.nav.dashboard" }]
       : []),
     { href: "/admin/content", icon: FileText, labelKey: "admin.nav.content" },
+    // Visible to both tiers: content_admins author content too. Destructive
+    // and publishing tools stay gated server-side by role/capability.
+    { href: "/admin/assistant", icon: Bot, labelKey: "admin.nav.assistant" },
     ...(isAdmin
       ? [
           {
