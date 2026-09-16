@@ -313,7 +313,7 @@ export const StreakCard = React.memo(function StreakCard() {
             </div>
 
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="font-semibold text-primary tabular-nums">
+              <span className="font-semibold text-primary-bright tabular-nums">
                 {t("dash.goal.percentAchieved", { percent: percentAchieved })}
               </span>
               <span>·</span>

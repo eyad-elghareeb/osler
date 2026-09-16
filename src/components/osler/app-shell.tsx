@@ -364,7 +364,6 @@ export function AppShell({ children }: AppShellProps) {
               onPointerEnter={() => prefetch("dashboard")}
               onTouchStart={() => prefetch("dashboard")}
               onFocus={() => prefetch("dashboard")}
-              aria-label={t("app.name")}
               className="flex items-center gap-2.5 shrink-0"
             >
               <OslerMark variant="line" className="size-6 text-primary shrink-0" />
@@ -571,7 +570,7 @@ function NavButton({
       className={cn(
         "relative h-9 px-3 rounded-md text-sm font-medium transition-colors flex items-center gap-2 active:scale-[0.97]",
         active
-          ? "text-primary"
+          ? "text-primary-bright"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
       )}
     >
@@ -609,15 +608,18 @@ function UserMenu({
 }) {
   const { t } = useI18n();
   const { navigate } = useOslerRouter();
+  // Avatar initials are visible text — fold them into the accessible name so
+  // voice control ("click Profile P E") matches what sighted users see.
+  const initials = (cloudSession?.user.displayName || username || "U").slice(0, 2).toUpperCase();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={t("nav.profile")}
+          aria-label={`${t("nav.profile")} (${initials})`}
           className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0"
         >
-          <div className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
-            {(cloudSession?.user.displayName || username || "U").slice(0, 2).toUpperCase()}
+          <div aria-hidden="true" className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
+            {initials}
           </div>
           {!hideChevron && <ChevronDown className="size-3.5 text-muted-foreground" />}
         </button>
@@ -738,7 +740,6 @@ function MobileScrollAwayBar({
         {/* Logo + brand name (name hidden on very narrow screens) */}
         <button
           onClick={() => navigate("dashboard")}
-          aria-label={t("app.name")}
           className="flex items-center gap-2.5 shrink-0 min-w-0"
         >
           <OslerMark variant="line" className="size-6 text-primary shrink-0" />
@@ -750,10 +751,11 @@ function MobileScrollAwayBar({
           </div>
         </button>
 
-        {/* Search — opens the mobile search sheet */}
+        {/* Search — opens the mobile search sheet. No aria-label: the
+            visible placeholder text names the button (an aria-label here
+            must contain that text, ellipsis included). */}
         <button
           onClick={onSearchOpen}
-          aria-label={t("common.search")}
           className="flex items-center gap-2 h-9 px-3 flex-1 min-w-0 rounded-md border border-border bg-muted/40 hover:bg-muted/60 transition-colors text-sm text-muted-foreground"
         >
           <Search className="size-3.5 shrink-0" />

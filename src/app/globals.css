@@ -59,6 +59,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-bright: var(--primary-bright);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -144,9 +145,14 @@
   --card-foreground: oklch(0.96 0.005 240);
   --popover: oklch(0.21 0.024 260);
   --popover-foreground: oklch(0.96 0.005 240);
-  --primary: oklch(0.6 0.15 245);
+  --primary: oklch(0.54 0.15 245);
   --primary-foreground: oklch(0.99 0 0);
-  --primary-hover: oklch(0.55 0.16 245);
+  --primary-hover: oklch(0.49 0.16 245);
+  /* Lifted primary for small text on dark surfaces — the fill primary
+   * (0.54) only reaches ~2.7:1 on card backgrounds, so text usages
+   * (active nav, link buttons, stat accents) read this token instead.
+   * 7.5:1+ on every dark surface; light theme reuses --primary. */
+  --primary-bright: oklch(0.72 0.14 245);
   --secondary: oklch(0.26 0.025 260);
   --secondary-foreground: oklch(0.96 0.005 240);
   --muted: oklch(0.24 0.02 260);
@@ -158,7 +164,7 @@
   --border: oklch(1 0 0 / 8%);
   --border-strong: oklch(1 0 0 / 14%);
   --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.6 0.15 245);
+  --ring: oklch(0.54 0.15 245);
   --chart-1: oklch(0.58 0.14 245);
   --chart-2: oklch(0.65 0.18 145);
   --chart-3: oklch(0.55 0.12 260);
@@ -166,12 +172,12 @@
   --chart-5: oklch(0.7 0.2 16);
   --sidebar: oklch(0.17 0.02 260);
   --sidebar-foreground: oklch(0.96 0.005 240);
-  --sidebar-primary: oklch(0.58 0.14 245);
+  --sidebar-primary: oklch(0.54 0.15 245);
   --sidebar-primary-foreground: oklch(0.99 0 0);
   --sidebar-accent: oklch(0.26 0.025 260);
   --sidebar-accent-foreground: oklch(0.96 0.005 240);
   --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.6 0.15 245);
+  --sidebar-ring: oklch(0.54 0.15 245);
   /* Semantic status colors — used in place of `text-emerald-500` / `text-amber-500` / `text-red-500`. */
   --success: oklch(0.72 0.17 145);
   --success-foreground: oklch(0.14 0.018 260);
@@ -186,7 +192,7 @@
   --warning-soft: oklch(0.8 0.15 80 / 0.16);
   --destructive-soft: oklch(0.68 0.21 22 / 0.14);
   --info-soft: oklch(0.7 0.17 220 / 0.14);
-  --primary-soft: oklch(0.6 0.15 245 / 0.12);
+  --primary-soft: oklch(0.54 0.15 245 / 0.12);
 }
 
 /* Light theme (optional toggle) — calibrated for premium contrast on white.
@@ -202,6 +208,9 @@
   --primary: oklch(0.4 0.1 255);
   --primary-foreground: oklch(0.99 0 0);
   --primary-hover: oklch(0.34 0.11 255);
+  /* Light theme: the fill primary already clears 4.5:1 on white, so the
+   * text token aliases it (dark theme lifts it — see above). */
+  --primary-bright: oklch(0.4 0.1 255);
   --secondary: oklch(0.95 0.01 240);
   --secondary-foreground: oklch(0.2 0.02 250);
   --muted: oklch(0.95 0.01 240);

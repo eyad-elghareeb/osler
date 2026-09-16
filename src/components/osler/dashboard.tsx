@@ -562,7 +562,7 @@ export function Dashboard({
                     {a.readTimeMin} min
                   </span>
                 </div>
-                <h3 className="text-sm font-semibold mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                <h3 className="text-sm font-semibold mb-1 line-clamp-2 group-hover:text-primary-bright transition-colors">
                   {a.title}
                 </h3>
                 <p className="text-xs text-muted-foreground line-clamp-2">

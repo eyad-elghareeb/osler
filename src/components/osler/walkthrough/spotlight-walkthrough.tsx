@@ -445,7 +445,7 @@ export function SpotlightWalkthrough({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
-                <p className="text-[11px] font-semibold text-primary tracking-wide uppercase truncate">
+                <p className="text-[11px] font-semibold text-primary-bright tracking-wide uppercase truncate">
                   {t(TOUR_META[tour].badgeKey)}
                 </p>
                 <Button
