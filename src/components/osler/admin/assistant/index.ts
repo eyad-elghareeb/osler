@@ -5,4 +5,5 @@
 // inside the panel so provider packages stay inside this route's chunk.
 
 export { AssistantPanel } from "./assistant-panel";
-export type { ProviderConfig, ProviderKind, ChatMsg, ChatRole, ToolCallView } from "./types";
+export { clearAssistantSecrets } from "./types";
+export type { ProviderConfig, ProviderKind, ChatMsg, ChatRole, ToolCallView, AssistantSession, TurnUsage } from "./types";

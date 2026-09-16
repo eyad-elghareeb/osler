@@ -354,6 +354,13 @@ export const adminApi = {
                                                     req<{ id: string; r2KeyBase: string; status: string }>("/v1/admin/content", "POST", payload),
   saveDraft:       (id: string, body: string)    => req<{ ok: boolean }>(`/v1/admin/content/${id}/draft`, "PUT", body),
   submitForReview: (id: string)                  => req<{ ok: boolean; status: string }>(`/v1/admin/content/${id}/submit`, "POST"),
+  /** Duplicate (remix) any readable object into a new draft owned by the
+   *  caller — copies the current body plus pack assets. Assistant + content
+   *  browser "duplicate" affordances both ride this endpoint (admin session
+   *  auth, no MCP token needed). Mirrors the MCP duplicate_content_object
+   *  tool. */
+  duplicateContent: (id: string, title?: string) =>
+                                                    req<{ ok: boolean; id: string; title: string; sourceId: string; status: string; assetsCopied: number; failedAssets: Array<{ path: string; error: string }>; assetsTruncated: boolean }>(`/v1/admin/content/${id}/duplicate`, "POST", title ? { title } : {}),
   /** Direct publish with optional hybrid push to student-facing R2 keyspace.
    *  `targetPath` lets you choose where the content lands inside the category
    *  folder (e.g. "cardiology/acute-coronary/questions.json"). Pass `hybrid:
