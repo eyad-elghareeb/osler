@@ -118,12 +118,33 @@ export function AssistantPanel() {
     }
   };
 
+  // Unmount mid-turn: never leave the agent hanging on an approval click
+  // that can no longer arrive.
+  React.useEffect(() => {
+    const pending = approvalsRef.current;
+    const abort = abortRef.current;
+    return () => {
+      abort?.abort();
+      for (const resolve of pending.values()) resolve(false);
+      pending.clear();
+    };
+  }, []);
+
   const resolveApproval = (id: string, ok: boolean) => {
     haptic(ok ? "success" : "error");
     patchToolMsg(id, { approved: ok });
     approvalsRef.current.get(id)?.(ok);
     approvalsRef.current.delete(id);
   };
+
+  const rejectAllApprovals = React.useCallback(() => {
+    const pending = approvalsRef.current;
+    for (const [id, resolve] of pending) {
+      patchToolMsg(id, { approved: false });
+      resolve(false);
+    }
+    pending.clear();
+  }, [patchToolMsg]);
 
   const send = async (text: string) => {
     const body = text.trim();
@@ -145,17 +166,23 @@ export function AssistantPanel() {
     try {
       const agent = await import("./agent");
       const keyOf = (toolName: string, args: Record<string, unknown>) => `${toolName}:${JSON.stringify(args)}`;
-      const cardByCall = new Map<string, string>();
+      // Same tool+args can repeat in one turn — match each result to the
+      // earliest card that doesn't have one yet, so no card stays "running".
+      const cards: Array<{ key: string; id: string; filled: boolean }> = [];
       const next = await agent.runAssistantTurn(cfg, historyRef.current, {
         onStep: (stepText, toolCalls) => {
           if (stepText.trim()) pushMsg({ role: "assistant", text: stepText });
           for (const c of toolCalls) {
+            // Destructive calls get their card from requestApproval (with the
+            // Approve/Reject buttons) — creating one here too would leave a
+            // stuck duplicate that never receives its result.
+            if (c.destructive) continue;
             const id = pushMsg({
               role: "tool",
               text: c.toolName,
               tool: { toolName: c.toolName, args: c.args, needsApproval: false, approved: null, result: null, isError: false },
             });
-            cardByCall.set(keyOf(c.toolName, c.args), id);
+            cards.push({ key: keyOf(c.toolName, c.args), id, filled: false });
           }
         },
         requestApproval: (req) => new Promise<boolean>((resolve) => {
@@ -164,12 +191,18 @@ export function AssistantPanel() {
             text: req.toolName,
             tool: { toolName: req.toolName, args: req.args, needsApproval: true, approved: null, result: null, isError: false },
           });
-          cardByCall.set(keyOf(req.toolName, req.args), id);
+          cards.push({ key: keyOf(req.toolName, req.args), id, filled: false });
           approvalsRef.current.set(id, resolve);
         }),
         onToolDone: (toolName, args, result, isError) => {
-          const id = cardByCall.get(keyOf(toolName, args));
-          if (id) patchToolMsg(id, { result, isError, approved: true });
+          const key = keyOf(toolName, args);
+          const card = cards.find((c) => c.key === key && !c.filled);
+          if (card) {
+            card.filled = true;
+            // approved is owned by resolveApproval (stays false on reject) —
+            // only fill in the result here.
+            patchToolMsg(card.id, { result, isError });
+          }
         },
       }, abort.signal);
       historyRef.current.push(...next);
@@ -185,11 +218,30 @@ export function AssistantPanel() {
 
   const stop = () => {
     haptic("warning");
+    // Reject first so a turn parked on an approval click can settle instead
+    // of hanging past the abort.
+    rejectAllApprovals();
     abortRef.current?.abort();
+  };
+
+  const clearChat = () => {
+    haptic("selection");
+    rejectAllApprovals();
+    abortRef.current?.abort();
+    historyRef.current = [];
+    setMsgs([]);
   };
 
   const parsePdfFile = async (file: File) => {
     haptic("light");
+    // Fail fast client-side: the worker caps decoded PDFs at 20 MB, and
+    // base64 inflates ~4/3 — a bigger file can only ever 400 back.
+    if (file.size > 20_000_000) {
+      pushMsg({ role: "system-note", text: t("admin.assistant.pdfTooLarge", { mb: (file.size / 1_000_000).toFixed(1) }) });
+      if (fileRef.current) fileRef.current.value = "";
+      haptic("error");
+      return;
+    }
     setParsing(true);
     try {
       const dataUri = await new Promise<string>((resolve, reject) => {
@@ -317,6 +369,16 @@ export function AssistantPanel() {
 
         {/* Transcript */}
         <OslerCard padding="default" className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("admin.assistant.title")}
+            </span>
+            {(msgs.length > 0 || historyRef.current.length > 0) && (
+              <Button size="sm" variant="ghost" onClick={clearChat} disabled={running} className="h-7 text-xs text-muted-foreground">
+                {t("admin.assistant.clear")}
+              </Button>
+            )}
+          </div>
           <div ref={scrollRef} className="max-h-[50vh] min-h-48 overflow-y-auto osler-scroll-y space-y-3 pe-1">
             {msgs.length === 0 && !running && (
               <EmptyState icon={Bot} title={t("admin.assistant.empty")} description={t("admin.assistant.emptyDesc")} />
@@ -425,7 +487,7 @@ function TranscriptRow({ msg, onResolve }: { msg: ChatMsg; onResolve: (id: strin
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">{msg.text}</div>
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-xl rounded-ee-sm bg-primary px-3 py-2 text-sm text-primary-foreground">{msg.text}</div>
       </div>
     );
   }
@@ -468,7 +530,7 @@ function TranscriptRow({ msg, onResolve }: { msg: ChatMsg; onResolve: (id: strin
     );
   }
   return (
-    <div className="max-w-[95%] whitespace-pre-wrap rounded-xl rounded-bl-sm border border-border bg-card px-3 py-2 text-sm">{msg.text}</div>
+    <div className="max-w-[95%] whitespace-pre-wrap rounded-xl rounded-es-sm border border-border bg-card px-3 py-2 text-sm">{msg.text}</div>
   );
 }
 

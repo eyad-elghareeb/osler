@@ -38,9 +38,16 @@ export interface ApprovalRequest {
   args: Record<string, unknown>;
 }
 
+export interface StepToolCall {
+  toolName: string;
+  args: Record<string, unknown>;
+  /** True when the call will pause for approval (its card is created by requestApproval, not onStep). */
+  destructive: boolean;
+}
+
 export interface TurnCallbacks {
   /** Per completed step: assistant text so far + tool calls made. */
-  onStep: (text: string, toolCalls: Array<{ toolName: string; args: Record<string, unknown> }>) => void;
+  onStep: (text: string, toolCalls: StepToolCall[]) => void;
   /** Destructive tool calls wait here for an Approve/Reject click. */
   requestApproval: (req: ApprovalRequest) => Promise<boolean>;
   /** Fired when a tool execution settles (run, rejected, or errored). */
@@ -114,7 +121,11 @@ export async function runAssistantTurn(
     onStepFinish: (step) => {
       cb.onStep(
         step.text,
-        (step.toolCalls ?? []).map((c) => ({ toolName: c.toolName, args: (c.input ?? {}) as Record<string, unknown> })),
+        (step.toolCalls ?? []).map((c) => ({
+          toolName: c.toolName,
+          args: (c.input ?? {}) as Record<string, unknown>,
+          destructive: ASSISTANT_TOOLS.some((d) => d.name === c.toolName && d.destructive),
+        })),
       );
     },
   });

@@ -1880,6 +1880,7 @@ export const en = {
     "admin.assistant.testFail": "Connection failed: {err}",
     "admin.assistant.send": "Send",
     "admin.assistant.stop": "Stop",
+    "admin.assistant.clear": "Clear chat",
     "admin.assistant.placeholder": "Ask to list drafts, validate a pack, parse a PDF…",
     "admin.assistant.empty": "No messages yet",
     "admin.assistant.emptyDesc": "Configure a provider above, then ask the assistant to work with your content.",
@@ -1899,6 +1900,7 @@ export const en = {
     "admin.assistant.pdfMode.raw": "Raw text",
     "admin.assistant.pdfParse": "Parse PDF",
     "admin.assistant.pdfParsing": "Parsing…",
+    "admin.assistant.pdfTooLarge": "PDF too large ({mb} MB) — the limit is 20 MB.",
     "admin.assistant.draftFromPdf": "Create a draft pack from the parsed PDF above (file: {name}). Validate it before submitting.",
 
     "admin.dashboard.subtitle": "Overview of users, sessions, and content activity.",

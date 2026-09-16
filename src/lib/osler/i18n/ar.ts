@@ -1875,6 +1875,7 @@ export const ar = {
     "admin.assistant.testFail": "فشل الاتصال: {err}",
     "admin.assistant.send": "إرسال",
     "admin.assistant.stop": "إيقاف",
+    "admin.assistant.clear": "مسح المحادثة",
     "admin.assistant.placeholder": "اطلب سرد المسودات أو التحقق من حزمة أو تحليل PDF…",
     "admin.assistant.empty": "لا رسائل بعد",
     "admin.assistant.emptyDesc": "اضبط المزوّد أعلاه، ثم اطلب من المساعد العمل مع المحتوى.",
@@ -1894,6 +1895,7 @@ export const ar = {
     "admin.assistant.pdfMode.raw": "نص خام",
     "admin.assistant.pdfParse": "تحليل PDF",
     "admin.assistant.pdfParsing": "جارٍ التحليل…",
+    "admin.assistant.pdfTooLarge": "ملف PDF كبير جدًا ({mb} م.ب) — الحد الأقصى 20 م.ب.",
     "admin.assistant.draftFromPdf": "أنشئ حزمة مسودة من ملف PDF المحلّل أعلاه (الملف: {name}). تحقق منها قبل الإرسال.",
 
     "admin.dashboard.subtitle": "نظرة عامة على المستخدمين والجلسات ونشاط المحتوى.",

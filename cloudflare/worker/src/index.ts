@@ -5248,6 +5248,9 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
      * that never parse PDFs never pay for the engine. */
     if (request.method === "POST" && path === "/v1/admin/content/parse-pdf") {
       if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      // unpdf extraction is CPU-heavy — share the admin rate bucket with
+      // /v1/mcp so one noisy client can't monopolize isolate time.
+      if (!rateLimit(clientIp(request), "admin")) return json({ error: "Too many requests" }, 429, origin, log);
       const body = await readJsonLarge(request);
       const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
       let bytes: Uint8Array;
@@ -5275,6 +5278,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/parse-qbank-pdf") {
       if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!rateLimit(clientIp(request), "admin")) return json({ error: "Too many requests" }, 429, origin, log);
       const body = await readJsonLarge(request);
       const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
       let bytes: Uint8Array;
@@ -5301,6 +5305,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
     }
     if (request.method === "POST" && path === "/v1/admin/content/parse-written-pdf") {
       if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+      if (!rateLimit(clientIp(request), "admin")) return json({ error: "Too many requests" }, 429, origin, log);
       const body = await readJsonLarge(request);
       const maxPages = Math.min(400, Math.max(1, Number(body.maxPages) || 120));
       let bytes: Uint8Array;
