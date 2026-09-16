@@ -9,7 +9,8 @@ import { CloudSyncStatusCard } from "@/components/osler/sync/cloud-sync-status";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/osler/native";
-import { readCloudSession, getCloudAccount, updateCloudAccount, changeCloudPassword, exportCloudAccount, deleteCloudAccount, logoutCloudAccount, cloudEnabled, CloudApiError, type CloudSession, type CloudAccount } from "@/lib/osler/cloud";
+import { readCloudSession, getCloudAccount, updateCloudAccount, changeCloudPassword, requestAccountPasswordReset, exportCloudAccount, deleteCloudAccount, logoutCloudAccount, cloudEnabled, CloudApiError, type CloudSession, type CloudAccount } from "@/lib/osler/cloud";
+import { getConfig } from "@/lib/osler/config";
 import { dailyGoal } from "@/lib/osler/storage";
 
 export function AccountSettingsSection() {
@@ -41,6 +42,11 @@ export function AccountSettingsSection() {
   const [newPassword, setNewPassword] = React.useState("");
   const [passwordSaving, setPasswordSaving] = React.useState(false);
   const [passwordMsg, setPasswordMsg] = React.useState<{ text: string; error?: boolean } | null>(null);
+
+  // Reset-by-email state
+  const [resetSending, setResetSending] = React.useState(false);
+  const [resetMsg, setResetMsg] = React.useState<{ text: string; error?: boolean } | null>(null);
+  const emailEnabled = getConfig().email?.enabled !== false;
 
   // Delete Account Modal state
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -125,6 +131,23 @@ export function AccountSettingsSection() {
       haptic("error");
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  const handleSendResetLink = async () => {
+    if (!session || resetSending) return;
+    setResetSending(true);
+    setResetMsg(null);
+    haptic("light");
+    try {
+      await requestAccountPasswordReset(session);
+      setResetMsg({ text: t("settings.account.resetLinkSent") });
+      haptic("success");
+    } catch (err) {
+      setResetMsg({ text: err instanceof CloudApiError ? err.message : t("login.cloud.error"), error: true });
+      haptic("error");
+    } finally {
+      setResetSending(false);
     }
   };
 
@@ -432,6 +455,34 @@ export function AccountSettingsSection() {
               {account.user.hasPassword ? t("settings.account.changePassword") : t("settings.account.setPassword")}
             </Button>
           </form>
+
+          {emailEnabled && (
+            <div className="pt-2 mt-2 border-t border-border">
+              <div className="text-xs font-semibold text-foreground mb-1 pt-2">
+                {t("settings.account.resetViaEmail")}
+              </div>
+              {account.user.email ? (
+                <>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {t("settings.account.resetViaEmailDesc", { email: account.user.email })}
+                  </p>
+                  {resetMsg && (
+                    <p className={cn("text-xs mb-2", resetMsg.error ? "text-destructive" : "text-success")}>
+                      {resetMsg.text}
+                    </p>
+                  )}
+                  <Button type="button" size="sm" variant="outline" disabled={resetSending} onClick={handleSendResetLink} className="gap-1.5">
+                    {resetSending ? <Loader2 className="size-3.5 animate-spin" /> : <KeyRound className="size-3.5" />}
+                    {t("settings.account.sendResetLink")}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground pt-1">
+                  {t("settings.account.resetNoEmail")}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 

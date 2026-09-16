@@ -698,6 +698,10 @@ export async function deleteCloudAccount(session: CloudSession, input: { passwor
   clearCloudSession();
 }
 
+export async function requestAccountPasswordReset(session: CloudSession): Promise<void> {
+  await request("/v1/account/reset/request", { method: "POST", body: "{}" }, session.token);
+}
+
 export async function requestPasswordReset(email: string, turnstileToken?: string): Promise<void> {
   await request("/v1/auth/reset/request", { method: "POST", body: JSON.stringify({ email, turnstileToken }) });
 }

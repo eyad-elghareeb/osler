@@ -6634,6 +6634,29 @@ export default {
         if (emailChanged && email) await issueVerifyEmail(env, session.user.id, email);
         return json(await accountPayload(env, await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>()), 200, origin, log);
       }
+      if (request.method === "POST" && url.pathname === "/v1/account/reset/request") {
+        if (!rateLimit(ip, "auth:reset")) return json({ error: "Too many reset attempts" }, 429, origin, log);
+        if (!(await emailEnabled(env))) return json({ error: "Email is disabled" }, 400, origin, log);
+        const address = String(session.user.email || "").trim().toLowerCase();
+        if (!validEmail(address)) return json({ error: "No email address on this account" }, 400, origin, log);
+        if (emailProviderReady(env) && env.APP_ORIGIN) {
+          const token = `${id()}${id()}`; const expiresAt = now() + RESET_TTL_MS;
+          // Same single-active-link invariant as the unauthenticated request:
+          // a fresh link revokes earlier outstanding ones.
+          await env.DB.batch([
+            env.DB.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL").bind(now(), session.user.id),
+            env.DB.prepare("INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)").bind(id(), session.user.id, await sha256(token), expiresAt, now()),
+          ]);
+          const link = `${env.APP_ORIGIN.replace(/\/$/, "")}/?reset=${encodeURIComponent(token)}`;
+          try {
+            const { html, text } = passwordResetEmail(link);
+            await sendEmail(env, env.DB, { to: address, subject: "Reset your Osler password", text, html });
+          } catch (error) {
+            console.error("account password-reset email send failed:", error);
+          }
+        }
+        return json({ ok: true }, 200, origin, log);
+      }
       if (request.method === "POST" && url.pathname === "/v1/account/password") {
         const body = await readJson(request);
         if (!validPassword(body.password)) return json({ error: "Password must be at least 8 characters with 2 character classes" }, 400, origin, log);
