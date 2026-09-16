@@ -484,11 +484,13 @@ export const TOOLS: ToolDef[] = [
   {
     name: "list_content_objects",
     description:
-      "List managed content objects with id, type, title, status, and dates. Both admin tiers can inspect all users' objects; mineOnly narrows the result to your own.",
+      "List managed content objects with id, type, title, status, and dates. Both admin tiers can inspect all users' objects; mineOnly narrows the result to your own. Filter by status, engine type, and/or language to triage without fetching bodies.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["draft", "pending", "rejected", "published", "all"], description: "Filter by workflow status (default all)" },
+        contentType: { type: "string", enum: [...CONTENT_TYPES], description: "Filter by engine type" },
+        language: { type: "string", enum: ["en", "ar"], description: "Filter by content language" },
         q: str("Title substring search"),
         mineOnly: { type: "boolean", description: "If true, only return objects created by your user" },
         page: { type: "number", description: "1-based page number" },
@@ -510,6 +512,14 @@ export const TOOLS: ToolDef[] = [
       if (status) {
         where.push("co.status = ?");
         params.push(status);
+      }
+      if (typeof args?.contentType === "string" && (CONTENT_TYPES as readonly string[]).includes(args.contentType)) {
+        where.push("co.content_type = ?");
+        params.push(args.contentType);
+      }
+      if (args?.language === "en" || args?.language === "ar") {
+        where.push("co.language = ?");
+        params.push(args.language);
       }
 
       if (like) {
@@ -693,7 +703,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "validate_content",
-    description: "Run schema validation over a JSON body. Supports all 7 engine types.",
+    description: "Run schema validation over a JSON body. Supports all 8 engine types (quiz, bank, written, mixed, flashcard, osce, library, video).",
     inputSchema: {
       type: "object",
       properties: {
@@ -938,19 +948,20 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "list_content_files",
-    description: "List student-facing content keys under content-files/ (optionally filtered by category prefix).",
+    description: "List student-facing content keys under content-files/ (optionally filtered by category prefix), or manifests by prefixing with content-manifests/.",
     inputSchema: {
       type: "object",
       properties: {
-        prefix: str('Category prefix after "content-files/", e.g. "qbank/" or "library/cardiology"'),
+        prefix: str('Key prefix, e.g. "qbank/" or "library/cardiology" (content-files/), or "content-manifests/" for manifests'),
         cursor: str("Pagination cursor"),
       },
     },
     async run(ctx, args) {
       const bucket = requireEnv(ctx);
-      const prefix = typeof args?.prefix === "string" ? args.prefix.replace(/^\/+/, "") : "";
-      if (prefix.includes("..") || prefix.includes("\\")) throw new ToolError("Invalid prefix");
-      const listed = await bucket.list({ prefix: `content-files/${prefix}`, limit: 1000, cursor: typeof args?.cursor === "string" && args.cursor ? args.cursor : undefined });
+      const raw = typeof args?.prefix === "string" ? args.prefix.replace(/^\/+/, "") : "";
+      if (raw.includes("..") || raw.includes("\\")) throw new ToolError("Invalid prefix");
+      const fullPrefix = raw === "content-manifests" || raw.startsWith("content-manifests/") ? raw : `content-files/${raw}`;
+      const listed = await bucket.list({ prefix: fullPrefix, limit: 1000, cursor: typeof args?.cursor === "string" && args.cursor ? args.cursor : undefined });
       return {
         items: (listed.objects ?? []).map((o) => ({ key: o.key, size: o.size })),
         cursor: listed.truncated ? listed.cursor : null,
@@ -1196,16 +1207,43 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "get_object_diff",
-    description: "Show the draft, pending, and published bodies of one object side by side, so reviewers can see what changed since the live copy before approving. Slots without a stored copy return null. (Owner or admin).",
-    inputSchema: { type: "object", properties: { id: str("Content object id") }, required: ["id"] },
+    description: "Show the draft, pending, and published bodies of one object side by side, so reviewers can see what changed since the live copy before approving. Slots without a stored copy return null. Bodies are capped at maxChars each (default 20000, 0 = full) with lengths/truncated flags — pass 0 only when you need the complete text. (Owner or admin).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: str("Content object id"),
+        maxChars: { type: "number", description: "Per-slot character cap, 1-200000 (default 20000). Pass 0 for full uncapped bodies." },
+      },
+      required: ["id"],
+    },
     async run(ctx, args) {
       const obj = await loadOwnedObject(ctx, args?.id, true);
-      const [draft, pending, published] = await Promise.all([
+      const maxChars = args?.maxChars === 0 ? 0 : Math.min(200_000, Math.max(1, Number(args?.maxChars) || 20_000));
+      const clip = (body: string | null) => {
+        if (body == null) return { text: null as string | null, length: 0, truncated: false };
+        if (!maxChars || body.length <= maxChars) return { text: body, length: body.length, truncated: false };
+        return { text: body.slice(0, maxChars), length: body.length, truncated: true };
+      };
+      const [draftRaw, pendingRaw, publishedRaw] = await Promise.all([
         ctx.r2Get(ctx.draftKey(obj.r2_key_base)),
         ctx.r2Get(ctx.pendingKey(obj.r2_key_base)),
         ctx.r2Get(ctx.publishedKey(obj.r2_key_base)),
       ]);
-      return { id: obj.id, title: obj.title, contentType: obj.content_type, status: obj.status, draft: draft ?? null, pending: pending ?? null, published: published ?? null };
+      const draft = clip(draftRaw);
+      const pending = clip(pendingRaw);
+      const published = clip(publishedRaw);
+      return {
+        id: obj.id,
+        title: obj.title,
+        contentType: obj.content_type,
+        status: obj.status,
+        draft: draft.text,
+        pending: pending.text,
+        published: published.text,
+        lengths: { draft: draft.length, pending: pending.length, published: published.length },
+        truncated: { draft: draft.truncated, pending: pending.truncated, published: published.truncated },
+        maxChars: maxChars || null,
+      };
     },
   },
   {
@@ -1515,7 +1553,9 @@ export const TOOLS: ToolDef[] = [
       properties: {
         query: str("Search term"),
         contentType: { type: "string", enum: [...CONTENT_TYPES] },
-        status: { type: "string", enum: ["draft", "pending", "published", "all"] },
+        status: { type: "string", enum: ["draft", "pending", "rejected", "published", "all"] },
+        language: { type: "string", enum: ["en", "ar"], description: "Filter by content language" },
+        limit: { type: "number", description: "Max results, 1-100 (default 50)" },
       },
       required: ["query"],
     },
@@ -1533,7 +1573,13 @@ export const TOOLS: ToolDef[] = [
         sql += " AND status = ?";
         params.push(args.status);
       }
-      sql += " ORDER BY updated_at DESC LIMIT 50";
+      if (args.language === "en" || args.language === "ar") {
+        sql += " AND language = ?";
+        params.push(args.language);
+      }
+      const limit = Math.min(100, Math.max(1, Number(args?.limit) || 50));
+      sql += " ORDER BY updated_at DESC LIMIT ?";
+      params.push(limit);
       const rows = await ctx.env.DB.prepare(sql).bind(...params).all();
       return { query: q, count: rows.results?.length ?? 0, items: rows.results ?? [] };
     },
@@ -1582,20 +1628,25 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_instance_overview",
     description:
-      "Instance snapshot for orienting an agent session: token scope + username, content object counts by status, user/session totals (admin scope), and the current student-facing content version stamp. Call this first when unsure what the instance holds. (User counts admin-only.)",
+      "Instance snapshot for orienting an agent session: token scope + username, content object counts by status and by engine type, pending-review count, user/session totals (admin scope), and the current student-facing content version stamp. Call this first when unsure what the instance holds. (User counts admin-only.)",
     inputSchema: { type: "object", properties: {} },
     async run(ctx) {
-      const [byStatus, users] = await Promise.all([
+      const [byStatus, byType, users] = await Promise.all([
         ctx.env.DB.prepare("SELECT status, COUNT(*) AS n FROM content_objects GROUP BY status").all(),
+        ctx.env.DB.prepare("SELECT content_type, COUNT(*) AS n FROM content_objects GROUP BY content_type").all(),
         ctx.scope === "admin"
           ? ctx.env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<{ n: number }>()
           : Promise.resolve(null),
       ]);
       const counts: Record<string, number> = {};
       for (const row of (byStatus.results ?? []) as any[]) counts[row.status] = row.n;
+      const types: Record<string, number> = {};
+      for (const row of (byType.results ?? []) as any[]) types[row.content_type] = row.n;
       return {
         you: { username: ctx.username, scope: ctx.scope },
         contentObjects: counts,
+        contentByType: types,
+        pendingReview: counts.pending ?? 0,
         ...(users ? { users: users?.n ?? 0 } : {}),
         contentVersion: ctx.readContentVersion ? await ctx.readContentVersion() : null,
         versioning: "Manifests are stamped with a version; students receive new content within ~90s or on their next hub visit — no republish needed for them to see changes.",

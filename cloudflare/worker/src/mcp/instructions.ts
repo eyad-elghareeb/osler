@@ -7,7 +7,7 @@
  */
 
 export const SERVER_NAME = "osler-admin";
-export const SERVER_VERSION = "2.3.0";
+export const SERVER_VERSION = "2.4.0";
 export const PROTOCOL_VERSION = "2025-06-18";
 
 export const SERVER_INSTRUCTIONS = `# Osler Medical Study Platform — Content Authoring & Admin MCP Server
@@ -21,16 +21,17 @@ Your API token has one of two privilege levels:
 1. **content_admin** (Authoring & Review Queue):
    - Create and edit drafts (\`create_content_draft\`, \`update_draft_body\`, \`create_content_pack\`).
    - Bulk authoring: \`bulk_create_content_packs\` (up to 10 packs), \`bulk_update_draft_bodies\` and \`bulk_submit_for_review\` (up to 20 items each), \`bulk_get_content_objects\` (up to 50 ids) — same ownership rules per item; one bad item fails inline without aborting the batch.
-   - Bulk QA sweep: \`bulk_validate\` (up to 20 stored drafts) returns per-pack validity plus content counts (questions/cards/stations/…) so an upload batch can be verified without fetching full bodies.
+   - Bulk QA sweep: \`bulk_validate\` (up to 20 stored drafts) returns per-pack validity plus content counts (questions/cards/stations/…) so an upload batch can be verified without fetching full bodies. Sweep recipe: \`list_content_objects\` with status/contentType/language filters to collect ids, then \`bulk_validate\` them.
    - Remix any readable pack into your own draft with \`duplicate_content_object\` (body + assets copied; always starts unsubmitted).
    - Bulk delete with \`bulk_delete_content_objects\` (up to 20): same two-step confirm as single delete, but the token binds the exact id set — published items are skipped inline for non-admin scopes.
    - Organize owned packs in bulk: \`bulk_set_titles\` (metadata rename, any status) and \`bulk_set_target_paths\` (re-path non-published drafts; published packs must be unpublished first, then moved).
-   - Review support: \`get_object_diff\` shows draft/pending/published side by side (owner or admin).
+   - Review support: \`get_object_diff\` shows draft/pending/published side by side (owner or admin) — bodies are capped at 20000 chars per slot by default with lengths/truncated flags, pass maxChars 0 only for full text.
+   - Find packs with \`search_content\` (title query plus contentType/status/language/limit filters) or filtered \`list_content_objects\`.
    - Upload and delete pack assets (\`upload_asset\`, \`delete_asset\`).
    - Validate JSON payloads against engine schemas (\`validate_content\`).
    - Submit drafts for human admin review (\`submit_for_review\`).
-   - Read published student files and manifests (\`read_content_file\`, \`list_content_files\`, \`get_content_manifest\`).
-   - View own drafts, review queue, and instance overview.
+   - Read published student files and manifests (\`read_content_file\`, \`list_content_files\`, \`get_content_manifest\`), including library article bodies plus sidecars via \`get_article_details\`.
+   - View own drafts, review queue (\`list_review_queue\`), instance overview (\`get_instance_overview\`: status plus per-engine counts, pending total, content version stamp), and \`get_content_version\`.
 
 2. **admin** (Full Unrestricted Access):
    - **WARNING**: Admin tokens have direct, irreversible write access to production database records, live student files, and platform configuration.

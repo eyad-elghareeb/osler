@@ -497,8 +497,120 @@ describe("MCP organize tools", () => {
     expect(r.result.structuredContent.results[1].error).toMatch(/unpublish to draft/);
   });
 });
-describe("MCP batch handling", () => {
-  it("rejects a batch over the size cap without executing any of it", async () => {
+describe("MCP listing/search filters", () => {
+  function capturingDb(first: unknown, all: unknown, seen: { sql: string; args: unknown[] }[]) {
+    // D1 statements expose first/all/run both directly and under bind() —
+    // the overview/count queries bind no params, so the stub needs both.
+    return {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => first,
+          all: async () => all,
+          run: async () => {},
+        };
+        return {
+          ...stmt,
+          bind: (...args: unknown[]) => {
+            seen.push({ sql, args });
+            return stmt;
+          },
+        };
+      },
+    } as unknown as McpCtx["env"]["DB"];
+  }
+
+  it("list_content_objects filters by engine type and language", async () => {
+    const seen: { sql: string; args: unknown[] }[] = [];
+    const ctx = makeCtx({ env: { ...makeCtx().env, DB: capturingDb(null, { results: [] }, seen) } as any });
+    const r = await call(ctx, "tools/call", { name: "list_content_objects", arguments: { contentType: "quiz", language: "ar" } });
+    expect(r.result.structuredContent.total).toBe(0);
+    expect(seen[0].sql).toMatch(/co\.content_type = \?/);
+    expect(seen[0].sql).toMatch(/co\.language = \?/);
+    expect(seen[0].args).toContain("quiz");
+    expect(seen[0].args).toContain("ar");
+  });
+
+  it("search_content accepts rejected status, language, and limit", async () => {
+    const seen: { sql: string; args: unknown[] }[] = [];
+    const ctx = makeCtx({ env: { ...makeCtx().env, DB: capturingDb(null, { results: [] }, seen) } as any });
+    const r = await call(ctx, "tools/call", {
+      name: "search_content",
+      arguments: { query: "cardio", status: "rejected", language: "en", limit: 10 },
+    });
+    expect(r.result.structuredContent.count).toBe(0);
+    expect(seen[0].sql).toMatch(/status = \?/);
+    expect(seen[0].args).toEqual(expect.arrayContaining(["%cardio%", "rejected", "en", 10]));
+  });
+
+  it("get_instance_overview reports per-engine counts and the pending total", async () => {
+    const db = {
+      prepare: (sql: string) => {
+        const stmt = {
+          first: async () => ({ n: 7 }),
+          all: async () => (sql.includes("content_type")
+            ? { results: [{ content_type: "quiz", n: 3 }] }
+            : { results: [{ status: "pending", n: 2 }, { status: "draft", n: 5 }] }),
+          run: async () => {},
+        };
+        return { ...stmt, bind: (..._args: unknown[]) => stmt };
+      },
+    } as unknown as McpCtx["env"]["DB"];
+    const ctx = makeCtx({ scope: "admin", env: { ...makeCtx().env, DB: db } as any, readContentVersion: async () => "v42" });
+    const r = await call(ctx, "tools/call", { name: "get_instance_overview", arguments: {} });
+    const sc = r.result.structuredContent;
+    expect(sc.contentByType).toEqual({ quiz: 3 });
+    expect(sc.pendingReview).toBe(2);
+    expect(sc.users).toBe(7);
+    expect(sc.contentVersion).toBe("v42");
+  });
+
+  it("list_content_files can browse manifests with the content-manifests/ prefix", async () => {
+    let prefix = "";
+    const base = makeCtx();
+    const ctx = makeCtx({
+      env: {
+        ...base.env,
+        CONTENT: {
+          ...(base.env.CONTENT as any),
+          list: async (opts: any) => {
+            prefix = opts.prefix;
+            return { objects: [], truncated: false };
+          },
+        },
+      } as any,
+    });
+    await call(ctx, "tools/call", { name: "list_content_files", arguments: { prefix: "content-manifests/qbank" } });
+    expect(prefix).toBe("content-manifests/qbank");
+  });
+});
+
+describe("MCP get_object_diff truncation", () => {
+  const ID_A = "11111111-1111-4111-8111-111111111111";
+
+  it("caps long bodies by default with lengths/truncated flags", async () => {
+    const ctx = makeCtx();
+    await ctx.r2Put("content/quiz/obj1/draft.json", "x".repeat(25_000));
+    const r = await call(ctx, "tools/call", { name: "get_object_diff", arguments: { id: ID_A } });
+    const sc = r.result.structuredContent;
+    expect(sc.draft).toHaveLength(20_000);
+    expect(sc.lengths.draft).toBe(25_000);
+    expect(sc.truncated.draft).toBe(true);
+    expect(sc.pending).toBeNull();
+    expect(sc.lengths.pending).toBe(0);
+  });
+
+  it("returns full bodies with maxChars 0", async () => {
+    const ctx = makeCtx();
+    await ctx.r2Put("content/quiz/obj1/draft.json", "y".repeat(25_000));
+    const r = await call(ctx, "tools/call", { name: "get_object_diff", arguments: { id: ID_A, maxChars: 0 } });
+    const sc = r.result.structuredContent;
+    expect(sc.draft).toHaveLength(25_000);
+    expect(sc.truncated.draft).toBe(false);
+    expect(sc.maxChars).toBeNull();
+  });
+});
+
+describe("MCP batch handling", () => {  it("rejects a batch over the size cap without executing any of it", async () => {
     const writes: string[] = [];
     const ctx = makeCtx({ r2Put: async (key) => void writes.push(key) });
     const entries = Array.from({ length: 30 }, (_, i) => ({

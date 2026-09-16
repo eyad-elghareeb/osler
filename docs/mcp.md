@@ -146,21 +146,38 @@ bearer_token_env_var = "OSLER_MCP_TOKEN"
 
 ## Tools
 
+Authoring surface (default `content_admin` scope):
+
 | Tool | Purpose |
 |---|---|
-| `list_content_objects` | List your managed objects by status/title |
+| `get_instance_overview` | Orient a session: scope, content counts by status + engine, pending total, content version |
+| `list_content_objects` | List objects, filterable by status / engine type / language / title, paginated |
+| `search_content` | Title search with engine / status (incl. rejected) / language / limit filters |
 | `get_content_object` | Fetch one object with its body |
-| `create_content_draft` | Create an empty draft (prefer the batch tool) |
-| `update_draft_body` | Replace a draft's body (≤1 MB) |
-| `upload_asset` | Upload one asset (data URI or text) into a pack |
-| `validate_content` | Run the server-side schema validator |
-| `parse_pdf` | Extract page-by-page text from a PDF supplied inline (base64, ≤20 MB) |
-| `parse_qbank_pdf` | Parse an exam PDF into a draft `{ questions }` — options, inline/tabular answer keys, explanations |
-| `parse_written_pdf` | Parse a written-exam PDF into a draft `{ prompts }` — marks, model answers, marking schemes |
-| `submit_for_review` | Draft → pending approval queue |
-| `create_content_pack` | **Batch:** draft + body + up to 30 assets + optional validation + optional submit, one call |
-| `read_content_file` | Read a student-facing pack/manifest file |
-| `list_content_files` | Browse `content-files/` keys |
+| `bulk_get_content_objects` | Fetch up to 50 objects by id, one bad id fails inline |
+| `create_content_draft` | Create an empty draft (prefer the batch tool for new packs) |
+| `create_content_pack` | **Batch:** draft + body (≤2 MB) + up to 50 assets + optional validation + optional submit/publish |
+| `bulk_create_content_packs` | Up to 10 packs per call, one bad pack fails inline |
+| `update_draft_body` | Replace a draft's body (≤2 MB) |
+| `bulk_update_draft_bodies` | Up to 20 bodies per call, one bad item fails inline |
+| `bulk_set_titles` / `bulk_set_target_paths` | Rename / re-path up to 20 packs per call |
+| `upload_asset` / `delete_asset` | Manage one pack asset each (data URI or text) |
+| `validate_content` | Server-side schema validation (all 8 engine types), inline or stored |
+| `bulk_validate` | Validate up to 20 stored drafts with per-pack content counts |
+| `duplicate_content_object` | Remix any readable pack into your own new draft (body + assets) |
+| `submit_for_review` / `bulk_submit_for_review` | Draft(s) → pending approval queue (up to 20 in bulk) |
+| `get_object_diff` | Draft vs pending vs published side by side (capped per slot, `maxChars: 0` for full text) |
+| `list_review_queue` | Pending (or rejected) items awaiting triage |
+| `parse_pdf` | Extract page-by-page text from an inline PDF (base64, ≤20 MB) |
+| `parse_qbank_pdf` | Parse an exam PDF into a draft `{ questions }` + warnings |
+| `parse_written_pdf` | Parse a written-exam PDF into a draft `{ prompts }` + warnings |
+| `read_content_file` | Read a student-facing file or manifest (+ `bodySha1` for the hotfix guard) |
+| `list_content_files` | Browse `content-files/` keys (or `content-manifests/` with that prefix) |
+| `get_content_manifest` | Fetch a category manifest tree |
+| `get_article_details` | Library article body + sidecar metadata |
+| `get_content_version` | Current cache-buster stamp |
+
+Admin-only tools (`admin` scope): `publish_content`, `approve_content` / `bulk_approve_content`, `reject_content` / `bulk_reject_content` (per-item reasons), `unpublish_content`, `delete_content_object` / `bulk_delete_content_objects` (two-step confirm), `update_published_content` (with `bodySha1` concurrency guard), `update_article_metadata`, `smart_update_manifest`, `read_config` / `update_config` (≤1 MB), `get_audit_trail`, `get_analytics_overview`, `get_js_errors`.
 
 The server also exposes **prompts** — these surface in the client's slash
 (`/`) menu (Claude, Cursor, Codex, …) as ready-made workflows:
