@@ -45,6 +45,7 @@ import { UserSyncHub, mintRealtimeTicket, verifyRealtimeTicket, REALTIME_TICKET_
 import { parseHttpRange } from "./http-range";
 import { buildAdminUsersListQuery } from "./admin-users";
 import { decodePdfInput, extractPdfPages } from "./mcp/pdf-text";
+import { copyPackAssets } from "./duplicate-content";
 import { parseMcqText, parseWrittenText } from "./mcp/pdf-structure";
 // Durable Object classes must be reachable from the entry module for the
 // wrangler migration to bind them.
@@ -5720,6 +5721,46 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
         }
         await auditLog(env, session.user.id, "unpublish", objectId, { title: obj.title }, log);
         return json({ ok: true, status: "draft" }, 200, origin, log);
+      }
+      /* ── Duplicate (remix) any readable object into a new owned draft ──
+       *
+       * Mirrors the MCP duplicate_content_object tool for the admin-panel
+       * AI-assistant harness (which drives the session API, not MCP tokens).
+       * Copies the current readable body (pending > published > draft) plus
+       * any pack assets (images/…), skipping the workflow slot files. The
+       * clone always starts as an unsubmitted draft owned by the caller.
+       * Bounded to 10 list pages of 100 assets (~1000 files) to stay well
+       * inside the Workers subrequest budget; larger packs fall back to
+       * body-only duplication with a warning in the response.
+       */
+      if (request.method === "POST" && action === "duplicate") {
+        if (!isAdminOrContent(session)) return json({ error: "Forbidden" }, 403, origin, log);
+        if (!env.CONTENT) return json({ error: "Content storage not configured" }, 503, origin, log);
+        let newTitle: string | null = null;
+        try { const b: any = await request.clone().json(); if (typeof b.title === "string") newTitle = b.title.trim().slice(0, 200); } catch {}
+        const bodyKey = obj.status === "published"
+          ? r2Published(obj.r2_key_base)
+          : obj.status === "pending"
+            ? r2Pending(obj.r2_key_base)
+            : r2Draft(obj.r2_key_base);
+        const srcBody = await r2Get(env, bodyKey);
+        if (srcBody == null) return json({ error: "Source has no readable body to duplicate" }, 400, origin, log);
+        const title = (newTitle && newTitle.trim()) || `Copy of ${obj.title ?? "untitled"}`.slice(0, 200);
+        const cloneId = id();
+        const cloneBase = `content/${obj.content_type}/${cloneId}`;
+        await r2Put(env, r2Draft(cloneBase), srcBody);
+        try {
+          await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, target_path, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)")
+            .bind(cloneId, cloneBase, obj.content_type, title, obj.language === "ar" ? "ar" : "en", obj.target_path ?? null, session.user.id, now(), now()).run();
+        } catch {
+          // Pre-migration DB without target_path column — old insert shape.
+          await env.DB.prepare("INSERT INTO content_objects (id, r2_key_base, content_type, title, language, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)")
+            .bind(cloneId, cloneBase, obj.content_type, title, obj.language === "ar" ? "ar" : "en", session.user.id, now(), now()).run();
+        }
+        // Copy pack assets (images/…), skipping the workflow slot files.
+        const copy = await copyPackAssets(env.CONTENT, obj.r2_key_base, cloneBase);
+        await auditLog(env, session.user.id, "duplicate_content", cloneId, { sourceId: obj.id, title, assetsCopied: copy.assetsCopied, failed: copy.failedAssets.length, via: "assistant" }, log);
+        return json({ ok: copy.failedAssets.length === 0, id: cloneId, title, sourceId: obj.id, status: "draft", assetsCopied: copy.assetsCopied, failedAssets: copy.failedAssets, assetsTruncated: copy.truncated }, 201, origin, log);
       }
       if (request.method === "DELETE" && !action) {
         if (!isAdmin(session) && (obj.created_by !== session.user.id || obj.status === "published")) return json({ error: "Forbidden" }, 403, origin, log);
