@@ -1387,7 +1387,10 @@ interface PackSheetHeaderProps {
 
 export function PackSheetHeader({ icon: Icon, iconColor, title, meta, badges, className }: PackSheetHeaderProps) {
   return (
-    <header className={cn("safe-pt flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 pe-12 backdrop-blur-md", className)}>
+    <header className={cn("safe-pt flex h-[calc(3rem+env(safe-area-inset-top,0px))] shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 pe-12 backdrop-blur-md", className)}>
+      {/* Height grows with the notch (content row stays 48px): side sheets
+          reach the viewport top on phones, and h-12 + safe-pt alone would
+          crush the header on notched iPhones. */}
       {Icon && (
         <span
           className="flex size-7 shrink-0 items-center justify-center rounded-lg"

@@ -84,11 +84,14 @@ export function MermaidModal({ svg, title, onClose }: MermaidModalProps) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={MOTION_TRANSITION.quick}
-      className="fixed inset-0 z-[80] flex flex-col bg-background/95 backdrop-blur-xl safe-screen"
+      className="fixed inset-0 z-[80] flex flex-col bg-background/95 backdrop-blur-xl safe-px"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {/* Header */}
-      <header className="shrink-0 flex items-center gap-3 px-4 h-14 border-b border-border bg-card/60 backdrop-blur-sm safe-pt">
+      {/* Outer owns side insets only: header/footer grow their own height
+          by the top/bottom insets, so safe-screen here would double-count
+          both and crush the chrome on notched iPhones. */}
+      {/* Header (height grows with the notch; content row stays 56px) */}
+      <header className="shrink-0 flex items-center gap-3 px-4 h-[calc(3.5rem+env(safe-area-inset-top,0px))] border-b border-border bg-card/60 backdrop-blur-sm safe-pt">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Maximize2 className="size-4 text-primary shrink-0" />
           {title && (
@@ -179,8 +182,8 @@ export function MermaidModal({ svg, title, onClose }: MermaidModalProps) {
         </div>
       </div>
 
-      {/* Footer hint */}
-      <div className="shrink-0 h-9 flex items-center justify-center safe-pb">
+      {/* Footer hint (height grows with the home indicator; row stays 36px) */}
+      <div className="shrink-0 h-[calc(2.25rem+env(safe-area-inset-bottom,0px))] flex items-center justify-center safe-pb">
         <p className="text-[11px] text-muted-foreground/50">
           Scroll to zoom · Drag to pan · Press Esc to close
         </p>

@@ -1294,15 +1294,22 @@ export function QuizView({
     : 0;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-px">
+      {/* Outer owns only the landscape insets: the header grows its own
+          height by the top inset and the bottom action bar pads its own
+          bottom inset, so a full safe-screen here would double-count both
+          (on a notched iPhone h-12 + safe-pt alone leaves ~4px of content). */}
       {/* ── Top bar (exam-mode navy) ────────────────────────────────────────
           All icon buttons in this bar use size-7 (matching the graduation cap
           button) for visual consistency. The mobile-only navigator button uses
           size-8 to give a slightly larger touch target on phones (it's the
-          only way to access the navigator on mobile). */}
+          only way to access the navigator on mobile).
+          Height grows with the notch inset (border-box keeps the 48px content
+          row intact) so the bar bleeds under the status bar instead of
+          crushing its controls. */}
       <header
         data-walkthrough="qbank-session-bar"
-        className="h-12 flex items-center pl-3 sm:pl-4 pr-1 sm:pr-2 gap-1.5 sm:gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
+        className="h-[calc(3rem+env(safe-area-inset-top,0px))] flex items-center pl-3 sm:pl-4 pr-1 sm:pr-2 gap-1.5 sm:gap-2 shrink-0 border-b border-primary-foreground/10 safe-pt"
         style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
       >
         <button onClick={onExitRequest} className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0" title={t("qbank.session.backToHub")}>

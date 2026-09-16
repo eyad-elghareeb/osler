@@ -125,7 +125,9 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
 
   const content = (
     <div className="h-full flex flex-col">
-      <div className="h-12 px-4 flex items-center justify-between border-b border-border bg-card/60 backdrop-blur-md shrink-0 safe-pt">
+      {/* Height grows with the notch (content row stays 48px) so the bar
+          is not crushed on notched iPhones. */}
+      <div className="h-[calc(3rem+env(safe-area-inset-top,0px))] px-4 flex items-center justify-between border-b border-border bg-card/60 backdrop-blur-md shrink-0 safe-pt">
         <div className="flex items-center gap-2">
           <FlaskConical className="size-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">Lab Values</h3>
@@ -191,7 +193,9 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
             transition={isPhone ? MOTION_SPRING.snappy : MOTION_SPRING.soft}
             {...dismissProps}
             className={isPhone
-              ? "fixed inset-0 z-50 bg-card flex flex-col"
+              // Phone overlay owns side + bottom insets (the header above
+              // owns the top inset itself).
+              ? "fixed inset-0 z-50 bg-card flex flex-col safe-pb safe-px"
               : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col"
             }
             style={

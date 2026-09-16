@@ -1371,9 +1371,12 @@ function VideoPlayerView({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-screen overflow-hidden">
-      {/* Top bar */}
-      <header className="h-12 flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-pb safe-px overflow-hidden">
+      {/* Outer owns side + bottom insets only: the header grows its own
+          height by the top inset, so safe-screen here would double-count
+          the top and crush the bar on notched iPhones. */}
+      {/* Top bar (height grows with the notch; content row stays 48px) */}
+      <header className="h-[calc(3rem+env(safe-area-inset-top,0px))] flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
         <button
           onClick={() => { haptic('light'); onExit(); }}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors osler-touch-target"

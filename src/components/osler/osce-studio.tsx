@@ -1870,7 +1870,9 @@ function OsceStudioInner({
         {/* ── Header ────────────────────────────────────────────
             Slimmer, cleaner header. The mic / end-call buttons live here so
             they're always reachable even when the voice overlay is minimised. */}
-        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/60 backdrop-blur-md border-b border-border shrink-0">
+        {/* safe-pt keeps the bar below the notch in standalone PWA (no
+            fixed height here, so the padding just grows the bar). */}
+        <header className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-card/60 backdrop-blur-md border-b border-border shrink-0 safe-pt">
           <button
             onClick={() => { stopTimer(); setPhase("lobby"); }}
             className="size-8 rounded-lg hover:bg-muted/60 flex items-center justify-center shrink-0 transition-colors"
@@ -2264,8 +2266,9 @@ function OsceStudioInner({
               )}
             </AnimatePresence>
 
-            {/* Input area */}
-            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3 md:px-6">
+            {/* Input area (bottom padding clears the home indicator;
+                identical to p-3 on devices without a bottom inset). */}
+            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3 md:px-6 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)]">
               {/* Voice status pill (only when voice on AND overlay minimised) */}
               <AnimatePresence>
                 {voiceOn && !voiceOverlayOpen && (
