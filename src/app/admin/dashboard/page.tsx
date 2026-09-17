@@ -6,6 +6,7 @@ import { useI18n } from "@/components/osler/i18n-provider";
 import { AdminPageFrame } from "@/components/osler/admin/admin-page-frame";
 import { AdminRouteGuard } from "@/components/osler/admin/admin-route-guard";
 import { StatsOverview } from "@/components/osler/admin/stats-overview";
+import { ContentInventory } from "@/components/osler/admin/content-inventory";
 import { AdminQuickActions } from "@/components/osler/admin/admin-quick-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -53,6 +54,7 @@ export default function AdminDashboardPage() {
            * fetch is in flight, so the dashboard never shows a bare
            * spinner — the layout is stable from the first paint. */}
           <StatsOverview />
+          <ContentInventory />
           <DashboardAnalyticsPreview />
           <AdminQuickActions />
         </div>

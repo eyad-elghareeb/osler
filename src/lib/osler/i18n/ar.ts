@@ -1875,6 +1875,18 @@ export const ar = {
     "admin.stats.loadFailed": "بيانات لوحة التحكم غير متاحة",
     "admin.stats.loadFailedDesc": "تعذر تحميل أحدث إحصاءات الإدارة. حاول مرة أخرى بعد قليل.",
 
+    "admin.inventory.title": "جرد المحتوى",
+    "admin.inventory.subtitle": "أعداد الأسئلة والعناصر المباشرة المستمدة من بيانات المحتوى.",
+    "admin.inventory.mcq": "اختيار من متعدد",
+    "admin.inventory.written": "مقالي",
+    "admin.inventory.articles": "مقالات",
+    "admin.inventory.videos": "فيديوهات",
+    "admin.inventory.packs": "{n} حزم",
+    "admin.inventory.site": "الموقع",
+    "admin.inventory.total": "الإجمالي",
+    "admin.inventory.empty": "لا توجد بيانات",
+    "admin.inventory.emptyDesc": "تعذّر تحميل بيانات المحتوى. تحقق من الاتصال وحاول مجددًا.",
+
     "admin.users.title": "المستخدمون",
     "admin.users.subtitle": "إدارة جميع الحسابات المسجلة.",
     "admin.users.search": "ابحث عن مستخدم…",

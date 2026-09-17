@@ -1880,6 +1880,18 @@ export const en = {
     "admin.stats.loadFailed": "Dashboard data unavailable",
     "admin.stats.loadFailedDesc": "We could not load the latest admin statistics. Try again shortly.",
 
+    "admin.inventory.title": "Content inventory",
+    "admin.inventory.subtitle": "Live question and item counts derived from the content manifests.",
+    "admin.inventory.mcq": "MCQs",
+    "admin.inventory.written": "Written",
+    "admin.inventory.articles": "Articles",
+    "admin.inventory.videos": "Videos",
+    "admin.inventory.packs": "{n} packs",
+    "admin.inventory.site": "Site",
+    "admin.inventory.total": "Total",
+    "admin.inventory.empty": "No inventory data",
+    "admin.inventory.emptyDesc": "The content manifests could not be loaded. Check the connection and try again.",
+
     "admin.users.title": "Users",
     "admin.users.subtitle": "Manage all registered accounts.",
     "admin.users.search": "Search users…",
