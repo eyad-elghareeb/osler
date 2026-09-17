@@ -39,7 +39,10 @@ function ChaptersHeader({ data, fallbackTitle }: { data: EpubChaptersData; fallb
   const percent = data.spineLength > 0 ? Math.min(100, Math.round(((data.index + 1) / data.spineLength) * 100)) : 0;
   const label = data.spineLength > 0 ? t("library.epub.chapter", { n: data.index + 1, total: data.spineLength }) : "";
   return (
-    <div className="flex items-start gap-3 px-3.5 py-3 border-b border-border">
+    // Padding-grown, so safe-pt only extends it below the notch when this
+    // header sits in a full-height side sheet (the popover usage is a
+    // no-op: env() is 0 away from the viewport edge).
+    <div className="flex items-start gap-3 px-3.5 py-3 border-b border-border safe-pt">
       {data.coverUrl ? (
         <img
           src={data.coverUrl}
@@ -187,7 +190,7 @@ export function EpubChaptersPopover({
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={6} className="w-[min(24rem,calc(100vw-1.5rem))] p-0 overflow-hidden">
         <ChaptersHeader data={data} fallbackTitle={fallbackTitle} />
-        <EpubChapterList data={data} onSelect={onSelect} className="max-h-[60vh]" />
+        <EpubChapterList data={data} onSelect={onSelect} className="max-h-[60dvh]" />
       </PopoverContent>
     </Popover>
   );
@@ -215,7 +218,8 @@ export function EpubChaptersSheet({
           <SheetTitle>{t("library.epub.chapters")}</SheetTitle>
         </SheetHeader>
         <ChaptersHeader data={data} fallbackTitle={fallbackTitle} />
-        <EpubChapterList data={data} onSelect={onSelect} className="flex-1 min-h-0" />
+        {/* Bottom clearance so the last chapter clears the home indicator. */}
+        <EpubChapterList data={data} onSelect={onSelect} className="flex-1 min-h-0 pb-[min(env(safe-area-inset-bottom,0px),2.5rem)]" />
       </SheetContent>
     </Sheet>
   );
@@ -237,7 +241,9 @@ export function EpubChapterFooter({
 }) {
   const { t, rtl } = useI18n();
   return (
-    <div className="flex items-center gap-2 px-3 sm:px-4 h-12 shrink-0 border-t border-border bg-card/60 backdrop-blur-md">
+    // Fixed-height footer strip: the height grows with the home indicator
+    // (content row stays 48px) so the buttons never sit underneath it.
+    <div className="flex items-center gap-2 px-3 sm:px-4 h-[calc(3rem+env(safe-area-inset-bottom,0px))] shrink-0 border-t border-border bg-card/60 backdrop-blur-md safe-pb">
       <Button
         variant="outline"
         size="sm"

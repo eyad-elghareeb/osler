@@ -1817,7 +1817,7 @@ html[data-vt="off"] .osler-view-enter {
   max-width: 520px;
   width: 100%;
   box-shadow: var(--shadow-e4);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow-y: auto;
   overscroll-behavior: contain;
 }

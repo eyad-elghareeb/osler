@@ -1555,7 +1555,7 @@ function OsceStudioInner({
 
      return (
       <motion.div
-        className="fixed inset-0 z-50 bg-background overflow-y-auto osler-scroll"
+        className="fixed inset-0 z-50 bg-background overflow-y-auto osler-scroll safe-pt safe-pb"
         {...lobbyDismiss}
       >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
@@ -1866,7 +1866,7 @@ function OsceStudioInner({
     }
 
     return (
-      <motion.div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden" {...conversationDismiss}>
+      <motion.div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden safe-px" {...conversationDismiss}>
         {/* ── Header ────────────────────────────────────────────
             Slimmer, cleaner header. The mic / end-call buttons live here so
             they're always reachable even when the voice overlay is minimised. */}
@@ -2530,7 +2530,7 @@ function OsceStudioInner({
 
     return (
       <motion.div
-        className="fixed inset-0 z-50 bg-background overflow-y-auto osler-scroll"
+        className="fixed inset-0 z-50 bg-background overflow-y-auto osler-scroll safe-pt safe-pb"
         {...debriefDismiss}
       >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">

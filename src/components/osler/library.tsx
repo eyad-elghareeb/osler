@@ -1257,8 +1257,12 @@ function MobileReader({
 
   return (
     <div className="absolute inset-0 bg-background flex flex-col">
-      {/* Top bar — title only; every action moved to the floating toolbar */}
-      <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm safe-pt relative z-20">
+      {/* Top bar — title only; every action moved to the floating toolbar.
+          No safe-pt here: this page is absolute inside main (which already
+          owns the top inset via its own safe-pt), so a second inset would
+          double-count and leave a dead gap above the title on notched
+          iPhones in standalone PWA. */}
+      <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm relative z-20">
         <div className="flex items-center gap-2 px-3 h-12">
           <button
             onClick={onBack}
@@ -1422,7 +1426,7 @@ function MobileReader({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 64, opacity: 0 }}
             transition={MOTION_TRANSITION.quick}
-            className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+0.625rem)] z-30 flex justify-center pointer-events-none"
+            className="fixed inset-x-0 bottom-[calc(min(env(safe-area-inset-bottom,0px),2.5rem)+0.625rem)] z-30 flex justify-center pointer-events-none"
           >
             <nav
               aria-label={t("library.readerToolbar")}
@@ -1877,7 +1881,9 @@ function ArticleHeader({
   const canHighlight = article.contentType === "md" || isBook;
 
   return (
-    <header className="shrink-0 h-12 flex items-center px-3 sm:px-4 gap-2 border-b border-border bg-card/60 backdrop-blur-md safe-pt relative z-20">
+    <header className="shrink-0 h-[calc(3rem+env(safe-area-inset-top,0px))] flex items-center px-3 sm:px-4 gap-2 border-b border-border bg-card/60 backdrop-blur-md safe-pt relative z-20">
+      {/* Height grows with the notch (content row stays 48px): h-12 +
+          safe-pt alone would crush the bar on inset devices. */}
       <div className="flex-1 min-w-0">
         {isBook ? (
           // Books render no in-body h1 (the reader owns the stage), so the

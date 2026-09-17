@@ -403,8 +403,9 @@ export function LiveVoiceOverlay({
       role="dialog"
       aria-label={t("osce.session.voiceOverlay.title")}
     >
-      {/* Top bar — speaker name + actions */}
-      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+      {/* Top bar — speaker name + actions (padding-grown, so safe-pt only
+          extends it below the notch in standalone PWA). */}
+      <div className="flex items-center justify-between px-4 py-3 shrink-0 safe-pt">
         <div className="min-w-0 flex items-center gap-2.5">
           <div className="size-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center text-primary font-semibold text-xs shrink-0">
             {speakerName?.[0] || "P"}
@@ -583,8 +584,10 @@ export function LiveVoiceOverlay({
         </div>
       </div>
 
-      {/* Footer — subtitle hint + secondary action */}
-      <div className="px-4 pb-5 pt-2 shrink-0 flex flex-col items-center gap-2">
+      {/* Footer — subtitle hint + secondary action (bottom padding clears
+          the home indicator; identical to pb-5 on devices without one,
+          capped like every other composer surface). */}
+      <div className="px-4 pb-[min(max(env(safe-area-inset-bottom,0px),1.25rem),2.5rem)] pt-2 shrink-0 flex flex-col items-center gap-2">
         <p className="text-[11px] text-muted-foreground/70 text-center max-w-md leading-relaxed">
           {isSpeaking
             ? t("osce.session.voiceOverlay.tapToInterrupt")
