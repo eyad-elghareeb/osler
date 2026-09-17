@@ -18,7 +18,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Eye, FileText, FolderOpen } from "lucide-react";
+import { Eye, FileText, FolderOpen, Loader2 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
 import { adminApi, type ContentObject } from "@/components/osler/admin/admin-api";
@@ -69,12 +69,14 @@ export function ReviewPreview({
   const { t } = useI18n();
 
   // Stable keys that drive the fetch effect (primitive deps only, so the
-  // panel doesn't refetch on every parent re-render).
+  // panel doesn't refetch on every parent re-render — `target` is a fresh
+  // object identity on several queue updates and would flash the spinner).
   const kind = target?.kind ?? null;
   const item = target?.kind === "pending" ? target.item : null;
   const group = target?.kind === "stagedGroup" ? target.group : null;
   const fileKey = target?.kind === "stagedGroup" ? target.fileKey : null;
-  const fetchKey = item?.id ?? fileKey ?? null;
+  const pendingId = target?.kind === "pending" ? target.item.id : null;
+  const fetchKey = pendingId ?? fileKey ?? null;
 
   const r2Key = fileKey ?? item?.published_r2_key ?? item?.r2_key_base ?? null;
   const isImage = !!r2Key && isImageR2Key(r2Key);
@@ -92,12 +94,16 @@ export function ReviewPreview({
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    setBody(null);
+    // Stale-while-revalidate for text: the previous body stays mounted
+    // behind a slim loading strip while the new target loads, instead of
+    // flashing a blank spinner on every file hop. Binary states reset
+    // (their object URLs are revoked below) and `truncated` resets so a
+    // previous "too large" never shadows the incoming body.
     setImageUrl(null);
     setEpubUrl(null);
     setPdfArtifact(false);
     setTruncated(false);
-    if (!target) { setLoading(false); return; }
+    if (!target) { setBody(null); setLoading(false); return; }
 
     let alive = true;
     let objUrl: string | null = null;
@@ -105,8 +111,12 @@ export function ReviewPreview({
 
     const finish = (text: string) => {
       if (!alive) return;
-      if (text.length > MAX_PREVIEW_CHARS) setTruncated(true);
-      else setBody(text);
+      if (text.length > MAX_PREVIEW_CHARS) {
+        // Oversized bodies clear any stale text — it must never linger
+        // behind the "too large" hint.
+        setBody(null);
+        setTruncated(true);
+      } else setBody(text);
     };
 
     /** Route a staged data-URI body to the binary preview when it is one. */
@@ -158,7 +168,7 @@ export function ReviewPreview({
     load();
 
     return () => { alive = false; if (objUrl) URL.revokeObjectURL(objUrl); };
-  }, [kind, fetchKey, target]);
+  }, [kind, fetchKey, pendingId]);
 
   const parsed = body == null ? null : (() => {
     if (isMarkdown) return null;
@@ -179,7 +189,7 @@ export function ReviewPreview({
   } : null;
 
   return (
-    <div className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-xl border border-border bg-card">
+    <div className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-xl border border-border bg-card lg:max-h-[calc(100dvh-8rem)]">
       {/* Staged group file selector */}
       {group && (
         <div className="shrink-0 border-b border-border p-3">
@@ -237,9 +247,20 @@ export function ReviewPreview({
             <p className="osler-empty__title text-sm">{t("admin.studio.noSelection")}</p>
             <p className="osler-empty__body text-xs">{t("admin.studio.noSelectionDesc")}</p>
           </div>
-        ) : loading ? (
+        ) : loading && body == null && !truncated ? (
           <LoadingState size="sm" />
-        ) : epubUrl ? (
+        ) : (
+          <>
+            {/* Stale-while-revalidate veil — the previous body stays mounted
+                with a slim loading strip while the new target loads. */}
+            {loading && (
+              <div className="sticky top-0 z-10 flex justify-center pb-1" aria-hidden>
+                <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5">
+                  <Loader2 className="size-3.5 animate-spin text-primary" />
+                </span>
+              </div>
+            )}
+            {epubUrl ? (
           <EpubReader
             fileUrl={epubUrl}
             fileKey={`admin-review:${fetchKey}`}
@@ -285,6 +306,8 @@ export function ReviewPreview({
           <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-foreground/90">
             {body}
           </pre>
+        )}
+          </>
         )}
       </div>
 

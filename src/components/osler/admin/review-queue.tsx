@@ -311,11 +311,14 @@ export function ReviewQueue() {
     setPreview({ kind: "stagedGroup", group, fileKey: group.keys[0]?.key ?? "" });
   }
 
-  // Stale-while-revalidate: the full spinner shows only before the first
-  // payload lands. Reloads (staged publish/discard refresh the staged list,
-  // actions patch items locally) keep the committed rows mounted instead of
-  // blanking the whole queue on every fetch.
-  if (loading && items.length === 0 && stagedGroups.length === 0) {
+  // Stale-while-revalidate: the full spinner shows until BOTH first
+  // payloads land. Gating on the pending list alone flashes the half-built
+  // queue (staged section spinner) for one frame before the empty state
+  // when both lists come back empty. Reloads (staged publish/discard
+  // refresh the staged list, actions patch items locally) keep the
+  // committed rows mounted instead of blanking the whole queue on every
+  // fetch — the gate only bites while both lists are still empty.
+  if ((loading || stagedLoading) && items.length === 0 && stagedGroups.length === 0) {
     return <LoadingState label={t("common.loading")} />;
   }
 

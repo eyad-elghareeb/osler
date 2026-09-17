@@ -727,13 +727,15 @@ button.osler-stat-tile--compact:hover {
 }
 
 /* Metric bar — compact labelled progress for stat cards / dashboards.
- * Premium recipe: 4px tall track with a 1px inner highlight on the fill. */
+ * Premium recipe: 4px tall track with a 1px inner highlight on the fill.
+ * No width here: block parents fill automatically while flex rows size the
+ * bar through the className width (e.g. w-24). No background here either —
+ * the fill color always comes from the component's color prop class. */
 .osler-metric-bar {
-  @apply h-1 w-full rounded-full bg-muted overflow-hidden;
+  @apply h-1 rounded-full bg-muted overflow-hidden;
 }
 .osler-metric-bar__fill {
   @apply h-full rounded-full transition-all duration-300 ease-out;
-  background-color: var(--primary);
 }
 
 /* Premium surface — slightly elevated card with a subtle gradient sheen.

@@ -1882,6 +1882,7 @@ export const en = {
 
     "admin.inventory.title": "Content inventory",
     "admin.inventory.subtitle": "Live question and item counts derived from the content manifests.",
+    "admin.inventory.breakdown": "Per-site breakdown",
     "admin.inventory.mcq": "MCQs",
     "admin.inventory.written": "Written",
     "admin.inventory.articles": "Articles",

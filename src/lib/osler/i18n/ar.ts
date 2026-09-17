@@ -1877,6 +1877,7 @@ export const ar = {
 
     "admin.inventory.title": "جرد المحتوى",
     "admin.inventory.subtitle": "أعداد الأسئلة والعناصر المباشرة المستمدة من بيانات المحتوى.",
+    "admin.inventory.breakdown": "التفصيل حسب الموقع",
     "admin.inventory.mcq": "اختيار من متعدد",
     "admin.inventory.written": "مقالي",
     "admin.inventory.articles": "مقالات",

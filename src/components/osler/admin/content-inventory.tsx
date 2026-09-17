@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
-import { EmptyState, SectionHeading, StatTile } from "@/components/osler/ui-primitives";
+import { AnimatedDisclosure, EmptyState, SectionHeading, StatTile } from "@/components/osler/ui-primitives";
 import { Skeleton } from "@/components/ui/skeleton";
 import { flattenTree, loadCategoryTree } from "@/lib/osler/content";
 import type { ContentTreeNode } from "@/lib/osler/types";
@@ -233,6 +233,8 @@ export function ContentInventory() {
           />
         ))}
       </div>
+      {/* Per-site breakdown — collapsed by default; tiles above carry the totals */}
+      <AnimatedDisclosure label={t("admin.inventory.breakdown")} icon={BarChart3}>
       <div className="rounded-xl border border-border bg-card p-4 mt-3 overflow-x-auto">
         <table className="osler-table">
           <thead>
@@ -264,6 +266,7 @@ export function ContentInventory() {
           </tbody>
         </table>
       </div>
+      </AnimatedDisclosure>
     </section>
   );
 }

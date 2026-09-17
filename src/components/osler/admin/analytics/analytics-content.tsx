@@ -344,11 +344,10 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
           </AnimatedDisclosure>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            {/* Top content */}
+            {/* Top content — collapsed by default (longest list on the page) */}
             <AnimatedDisclosure
               label={t("admin.analytics.content.topContent")}
               icon={Target}
-              defaultOpen
             >
               <ul className="divide-y divide-border">
                 {data.packs.map((p, i) => {
@@ -416,11 +415,10 @@ export function AnalyticsContentPanel({ data, loading }: AnalyticsContentPanelPr
               </ul>
             </AnimatedDisclosure>
 
-            {/* Top learners */}
+            {/* Top learners — collapsed by default (longest list on the page) */}
             <AnimatedDisclosure
               label={t("admin.analytics.content.topUsers")}
               icon={Users}
-              defaultOpen
             >
               <ul className="divide-y divide-border">
                 {data.topUsers.map((u, i) => {
