@@ -260,6 +260,7 @@ export function SessionStartDialog({
                         <input
                           id="session-timer-minutes"
                           type="number"
+                          inputMode="numeric"
                           min={1}
                           max={720}
                           value={timerMinutes}
@@ -397,6 +398,7 @@ export function SessionStartDialog({
                         <input
                           id="session-question-count"
                           type="number"
+                          inputMode="numeric"
                           min={1}
                           max={maxCount}
                           value={countInput}

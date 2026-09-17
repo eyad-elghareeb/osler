@@ -805,6 +805,7 @@ export function CreateTestTab({
               </button>
               <input
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={totalAvailable > 0 ? totalAvailable : 1}
                 value={countInput}
@@ -871,6 +872,7 @@ export function CreateTestTab({
                 <input
                   id="create-timer-minutes"
                   type="number"
+                  inputMode="numeric"
                   min={1}
                   max={720}
                   value={timerMinutes}

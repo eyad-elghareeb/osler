@@ -587,6 +587,11 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
               onBlur={checkUsername}
               placeholder={cloudActive && cloudMode !== "register" ? t("login.identifierPlaceholder") : t("login.usernamePlaceholder")}
               autoComplete="username"
+              // Usernames are single lowercase tokens: stop iOS from
+              // capitalizing / autocorrecting them.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoFocus
               className="w-full h-10 px-3 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
@@ -637,6 +642,11 @@ export function LoginScreen({ onLogin, cloudAuthError, hideGuest, googleReturnTo
                   autoComplete={cloudMode === "login" ? "current-password" : "new-password"}
                   minLength={cloudActive ? 8 : undefined}
                   required={cloudActive}
+                  // The show-password toggle flips this to type=text, where
+                  // iOS would otherwise autocorrect the visible password.
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="w-full h-10 ps-3 pe-10 bg-background border border-border-strong rounded-md text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <button
