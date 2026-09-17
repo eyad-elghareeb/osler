@@ -396,7 +396,7 @@ export function LiveVoiceOverlay({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={MOTION_TRANSITION.normal}
-      className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-background via-background to-card/40 backdrop-blur-xl"
+      className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-background via-background to-card/40 backdrop-blur-xl safe-px"
       // The backdrop is a translucent overlay above the conversation UI.
       // Tap-to-dismiss is intentionally NOT enabled on the backdrop —
       // users finish a voice call via the explicit End button.

@@ -987,10 +987,20 @@ function OsceStudioInner({
   /* TTS fallback */
   const voiceOnRef = React.useRef(false);
   React.useEffect(() => { voiceOnRef.current = voiceOn; }, [voiceOn]);
+  // iOS Safari pauses long speechSynthesis utterances (~15s) and never
+  // resumes them; a periodic resume() is a no-op everywhere else.
+  const ttsResumeTimerRef = React.useRef<number | null>(null);
+  function clearTtsResume() {
+    if (ttsResumeTimerRef.current != null) {
+      window.clearInterval(ttsResumeTimerRef.current);
+      ttsResumeTimerRef.current = null;
+    }
+  }
 
   function speakText(text: string) {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
+    clearTtsResume();
     setVoicePhase("speaking");
     const utt = new SpeechSynthesisUtterance(text);
     const savedVoice = localStorage.getItem(STORAGE.ttsVoice);
@@ -1006,18 +1016,24 @@ function OsceStudioInner({
     }
     utt.rate = parseFloat(localStorage.getItem(STORAGE.ttsRate) || "0.95");
     utt.pitch = 1;
-    utt.onend = () => { setVoicePhase(voiceOnRef.current ? "listening" : "idle"); };
-    utt.onerror = () => { setVoicePhase(voiceOnRef.current ? "listening" : "idle"); };
+    utt.onend = () => { clearTtsResume(); setVoicePhase(voiceOnRef.current ? "listening" : "idle"); };
+    utt.onerror = () => { clearTtsResume(); setVoicePhase(voiceOnRef.current ? "listening" : "idle"); };
     window.speechSynthesis.speak(utt);
+    ttsResumeTimerRef.current = window.setInterval(() => {
+      try { window.speechSynthesis.resume(); } catch {}
+    }, 10000);
   }
 
   /* Init voice when entering conversation */
   React.useEffect(() => {
     if (phase !== "conversation") return;
+    // Warm the voice list: iOS populates getVoices() asynchronously, so
+    // prime the load here and the preferred voice exists by first speak.
+    try { window.speechSynthesis?.getVoices(); } catch {}
     const on = localStorage.getItem(STORAGE.voiceOn) === "true";
     setVoiceOn(on);
     if (on) setTimeout(startGeminiLive, 500);
-    return () => { stopGeminiLive(); };
+    return () => { clearTtsResume(); try { window.speechSynthesis?.cancel(); } catch {} stopGeminiLive(); };
   }, [phase]);
 
   /* ── Timer — auto-starts when entering conversation ── */

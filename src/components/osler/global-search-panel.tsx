@@ -194,6 +194,12 @@ export function GlobalSearchPanel({
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             aria-label={placeholder}
+            // iOS keyboard: Search return key, and no autocorrect /
+            // autocapitalization fighting the query.
+            enterKeyHint="search"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             className={cn(
               "flex-1 bg-transparent outline-none placeholder:text-muted-foreground min-w-0",
               isSheet ? "text-base" : "text-sm",

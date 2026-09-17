@@ -263,7 +263,7 @@ export function FloatingArticleModal({
             className={isPhone
               // Phone panel is fullscreen fixed: it owns the top + bottom
               // insets itself (the header below must NOT re-add safe-pt).
-              ? "bg-card flex flex-col overflow-hidden h-full w-full safe-pt safe-pb"
+              ? "bg-card flex flex-col overflow-hidden h-full w-full safe-pt safe-pb safe-px"
               : "bg-card border border-border rounded-xl shadow-e4 w-full max-w-5xl h-[85dvh] flex flex-col overflow-hidden"
             }
           >

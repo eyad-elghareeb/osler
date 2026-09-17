@@ -147,6 +147,12 @@ export const viewport = {
   // .safe-screen utilities in globals.css then add the correct env()
   // padding so content never sits underneath the system chrome.
   viewportFit: "cover",
+  // When the virtual keyboard opens, resize the layout viewport instead of
+  // overlaying it: dvh-based fullscreen shells shrink and flex composers
+  // (AI / OSCE chat bars, reader toolbar) re-flow above the keyboard rather
+  // than being covered by it. Honored by Chrome 108+ / Safari 26+, ignored
+  // (harmless no-op) everywhere else.
+  interactiveWidget: "resizes-content",
   // Tell iOS Safari this is a standalone-capable PWA — the OS will hide
   // the URL bar and add the native app-switcher snapshot when launched
   // from the home screen.

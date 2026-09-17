@@ -902,6 +902,12 @@ function EditorView({
               }
             }}
             placeholder={t("qbank.notes.editor.tagPlaceholder")}
+            // Single-word tags: autocorrect / autocapitalization mangles
+            // them, and Enter commits the tag.
+            enterKeyHint="done"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             className="flex-1 min-w-[80px] bg-transparent outline-none text-[11px] placeholder:text-muted-foreground"
           />
         </div>
