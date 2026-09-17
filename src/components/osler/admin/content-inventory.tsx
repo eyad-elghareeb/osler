@@ -234,8 +234,8 @@ export function ContentInventory() {
         ))}
       </div>
       {/* Per-site breakdown — collapsed by default; tiles above carry the totals */}
-      <AnimatedDisclosure label={t("admin.inventory.breakdown")} icon={BarChart3}>
-      <div className="rounded-xl border border-border bg-card p-4 mt-3 overflow-x-auto">
+      <AnimatedDisclosure label={t("admin.inventory.breakdown")} icon={BarChart3} className="mt-3">
+      <div className="rounded-xl border border-border bg-card p-4 overflow-x-auto">
         <table className="osler-table">
           <thead>
             <tr>
