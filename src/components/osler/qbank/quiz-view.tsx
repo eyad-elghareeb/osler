@@ -1875,7 +1875,7 @@ export function QuizView({
                   </SheetTrigger>
                   <SwipeableSheetContent
                     onClose={() => setToolsOpen(false)}
-                    className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] data-[state=open]:duration-200 data-[state=closed]:duration-150"
+                    className="px-0 pt-0 pb-[min(max(env(safe-area-inset-bottom,0px),0.75rem),2.5rem)] data-[state=open]:duration-200 data-[state=closed]:duration-150"
                   >
                     <SheetHeader className="flex-row items-center justify-between gap-2 px-4 pt-2.5 pb-1">
                       <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -2006,7 +2006,7 @@ export function QuizView({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border border-border rounded-xl shadow-e4 max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto"
+              className="bg-card border border-border rounded-xl shadow-e4 max-w-lg w-full p-5 max-h-[80dvh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">

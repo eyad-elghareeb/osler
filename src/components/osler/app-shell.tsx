@@ -481,7 +481,7 @@ export function AppShell({ children }: AppShellProps) {
           so the keyboard has room and the result list is comfortably
           reachable with one thumb. */}
       <Sheet open={searchOpen && isMobile} onOpenChange={setSearchOpen}>
-        <SwipeableSheetContent onClose={() => setSearchOpen(false)} className="h-[85vh] p-0">
+        <SwipeableSheetContent onClose={() => setSearchOpen(false)} className="h-[85dvh] p-0">
           <SheetHeader className="sr-only">
             <SheetTitle>{t("common.search")}</SheetTitle>
             <SheetDescription>{t("search.globalPlaceholder")}</SheetDescription>

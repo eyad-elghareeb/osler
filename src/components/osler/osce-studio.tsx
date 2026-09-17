@@ -2327,6 +2327,7 @@ function OsceStudioInner({
                   }}
                   placeholder={isDataInterp ? "Answer the examiner's question…" : "Ask the patient a question…"}
                   rows={1}
+                  enterKeyHint="send"
                   className="flex-1 resize-none min-h-[40px] max-h-[120px] px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
                   style={{ height: "auto", minHeight: "40px" }}
                   onInput={(e) => {

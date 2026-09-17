@@ -66,7 +66,7 @@ export function AccountConflictDialog() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-card border border-border rounded-xl p-6 max-w-lg w-full shadow-e4 space-y-4 max-h-[90vh] overflow-y-auto osler-scroll"
+            className="bg-card border border-border rounded-xl p-6 max-w-lg w-full shadow-e4 space-y-4 max-h-[90dvh] overflow-y-auto osler-scroll"
             role="dialog"
             aria-labelledby="account-conflict-title"
           >

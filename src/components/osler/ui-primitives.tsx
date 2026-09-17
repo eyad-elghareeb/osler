@@ -1418,7 +1418,7 @@ interface PackSheetFooterProps {
 
 export function PackSheetFooter({ children, className }: PackSheetFooterProps) {
   return (
-    <footer className={cn("shrink-0 border-t border-border bg-card/60 p-4 pb-[max(env(safe-area-inset-bottom),1rem)] backdrop-blur-md", className)}>
+    <footer className={cn("shrink-0 border-t border-border bg-card/60 p-4 pb-[min(max(env(safe-area-inset-bottom),1rem),2.5rem)] backdrop-blur-md", className)}>
       {children}
     </footer>
   );

@@ -1141,6 +1141,22 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
   }
 }
 
+/* iOS Safari auto-zooms on field focus whenever the field's font is below
+ * 16px — the jarring zoom-and-pan on every chat/search/login focus. The
+ * shadcn input/textarea primitives already dodge this with text-base
+ * md:text-sm; raw fields bypass them, so enforce the same 16px floor for
+ * every text field on touch devices. Desktop keeps designed sizes. */
+@media (pointer: coarse) {
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    /* !important: element selectors lose to Tailwind text-* utilities, and
+       every raw field in the app carries one — without this the floor is
+       dead code exactly where it matters. */
+    font-size: 16px !important;
+  }
+}
+
 /* ── Mobile bottom tab bar ────────────────────────────────────────────────
  * Renders below the home indicator on phones. The bar is fully opaque so
  * scrolled content never shows through it; the hairline top border separates

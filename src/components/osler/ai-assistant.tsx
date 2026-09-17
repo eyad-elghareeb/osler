@@ -605,6 +605,7 @@ export function AiAssistant({
             }}
             placeholder={t("ai.inputPlaceholder")}
             rows={1}
+            enterKeyHint="send"
             className="flex-1 resize-none max-h-32 bg-card border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
             style={{ minHeight: "40px" }}
           />

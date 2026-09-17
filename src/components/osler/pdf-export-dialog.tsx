@@ -196,7 +196,7 @@ export function PdfExportDialog({
     <Dialog open={open} onOpenChange={(o) => !exporting && onOpenChange(o)}>
       {/* Compact two-column layout: the whole form (advanced section open)
           fits inside the viewport without an internal scrollbar. */}
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[85dvh] overflow-y-auto">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="size-5 text-primary" />

@@ -111,7 +111,7 @@ export function QuestionNavigatorSheet(p: QuestionNavigatorSheetProps) {
     <Sheet open={p.open} onOpenChange={p.onOpenChange}>
       <SwipeableSheetContent
         onClose={() => p.onOpenChange(false)}
-        className="px-0 pt-0 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] max-h-[85vh] data-[state=open]:duration-200 data-[state=closed]:duration-150"
+        className="px-0 pt-0 pb-[min(max(env(safe-area-inset-bottom,0px),0.75rem),2.5rem)] max-h-[85dvh] data-[state=open]:duration-200 data-[state=closed]:duration-150"
       >
         {/* Header */}
         <SheetHeader className="px-4 pe-10 pt-2.5 pb-3 border-b border-border text-start">

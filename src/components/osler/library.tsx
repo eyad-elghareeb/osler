@@ -1336,7 +1336,7 @@ function MobileReader({
           touchAction: "pan-y",
           ...(article.contentType === "epub"
             ? null
-            : { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 5.25rem)" }),
+            : { paddingBottom: "calc(min(env(safe-area-inset-bottom, 0px), 2.5rem) + 5.25rem)" }),
         }}
       >
         {loading ? (

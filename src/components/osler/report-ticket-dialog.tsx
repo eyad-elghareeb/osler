@@ -102,7 +102,7 @@ export function ReportTicketDialog({
       {/* Compact rhythm: subject sits beside the category and the context
           box stays tight so the whole dialog fits without an inner
           scrollbar. `overflow-y-auto` remains a small-viewport fallback. */}
-      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-md max-h-[85dvh] overflow-y-auto">
         <DialogHeader className="space-y-1">
           <DialogTitle className="flex items-center gap-2">
             <LifeBuoy className="size-4 text-primary" />

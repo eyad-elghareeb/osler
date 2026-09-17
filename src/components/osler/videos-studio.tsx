@@ -1625,7 +1625,7 @@ function VideoPlayerView({
             </div>
           </div>
 
-          <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[max(env(safe-area-inset-bottom,0px),1rem)] lg:pb-2">
+          <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[min(max(env(safe-area-inset-bottom,0px),1rem),2.5rem)] lg:pb-2">
             {playlist.map((v) => {
               const isActive = v.id === video.id;
               return (

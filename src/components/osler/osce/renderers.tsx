@@ -218,7 +218,7 @@ export function PrintedMaterialsModal({
   const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 max-h-[85dvh] flex flex-col">
         <DialogHeader className="px-4 pt-4 pb-2 text-start shrink-0">
           <DialogTitle className="text-sm font-semibold flex items-center gap-1.5">
             <BarChart3 className="size-4 text-primary" />
@@ -265,7 +265,7 @@ export function OsceImageViewer({
   const goTo = (i: number) => onIndexChange((i + total) % total);
   return (
     <Dialog open={index !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-3xl p-0 gap-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 max-h-[90dvh] flex flex-col">
         <DialogHeader className="px-4 pt-4 pb-0 text-start">
           <DialogTitle className="text-sm font-semibold">
             {t("osce.dataPresented.viewerTitle", {

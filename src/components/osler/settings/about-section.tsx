@@ -167,7 +167,7 @@ export function AboutSettingsSection() {
 
       {/* Legal document viewer dialog */}
       <Dialog open={openDoc !== null} onOpenChange={(open) => !open && setOpenDoc(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[80dvh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {openDoc === "tos" ? t("legal.tos") : t("legal.privacy")}
