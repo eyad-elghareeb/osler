@@ -1823,7 +1823,7 @@ export function QuizView({
               via the tools sheet).
               Extra bottom padding (pb-[env+0.5rem]) ensures the action buttons
               clear the iOS home indicator with breathing room. */}
-          <footer className="lg:hidden border-t border-border bg-card px-3 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center gap-1.5 shrink-0 osler-tap-none">
+          <footer className="lg:hidden border-t border-border bg-card px-3 pt-2 pb-[min(max(env(safe-area-inset-bottom,0px),0.75rem),2.5rem)] flex items-center gap-1.5 shrink-0 osler-tap-none">
             <Button
               variant="outline" size="icon"
               onClick={goPrev} disabled={session.current === 0}

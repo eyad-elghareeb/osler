@@ -196,7 +196,9 @@ export function LabValuesSidebar({ open, onClose }: { open?: boolean; onClose: (
               // Phone overlay owns side + bottom insets (the header above
               // owns the top inset itself).
               ? "fixed inset-0 z-50 bg-card flex flex-col safe-pb safe-px"
-              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col"
+              // Docked root starts below the grown session header (which is
+              // 3rem + top inset) so the two never overlap on inset devices.
+              : "fixed right-0 top-[calc(3rem+env(safe-area-inset-top,0px))] bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col safe-pb"
             }
             style={
               isPhone

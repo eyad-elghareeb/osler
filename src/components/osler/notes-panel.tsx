@@ -494,7 +494,9 @@ export function NotesPanel({
             useFullscreen
               ? "fixed inset-0 z-[60] bg-card flex flex-col safe-screen"
               : cn(
-                  "fixed top-12 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col",
+                  // Docked root starts below the grown session header (3rem +
+                  // top inset) so the two never overlap on inset devices.
+                  "fixed top-[calc(3rem+env(safe-area-inset-top,0px))] bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col safe-pb",
                   rtl ? "left-0 border-r border-l-0" : "right-0",
                 )
           }

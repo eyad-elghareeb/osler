@@ -348,7 +348,9 @@ export function AppShell({ children }: AppShellProps) {
       <header className={cn(
         // In-flow bar — nothing scrolls behind it; opaque background avoids
         // a pointless backdrop-filter pass every frame.
-        "osler-vt-header z-40 shrink-0 h-14 border-b border-border bg-background safe-pt",
+        // Height grows with the top inset (content row stays 56px) so the
+        // bar is not crushed on inset tablets; identical to h-14 on desktop.
+        "osler-vt-header z-40 shrink-0 h-[calc(3.5rem+env(safe-area-inset-top,0px))] border-b border-border bg-background safe-pt",
         // Immersive sessions (quiz, video player, …) hide this bar on ALL
         // form factors. Note the `md:flex` is dropped — not overridden with
         // `hidden` — because the responsive variant wins over `hidden` in

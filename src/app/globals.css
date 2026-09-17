@@ -500,7 +500,8 @@
 }
 @media (max-width: 767px) {
   .osler-page {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.25rem);
+    /* Inset contribution capped like .osler-tabbar above. */
+    padding-bottom: calc(min(env(safe-area-inset-bottom, 0px), 2.5rem) + 4.25rem);
   }
 }
 .osler-page.osler-tabbar-pad::after,
@@ -1150,8 +1151,12 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
 .osler-tabbar {
   background: var(--background);
   border-top: 1px solid var(--border);
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
-  min-height: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
+  /* Bottom clearance is capped at 2.5rem: real Apple hardware reports at
+     most 34px, so the cap is a no-op there — it only bounds abnormal
+     webviews (e.g. third-party in-app browsers) reporting huge insets
+     that would otherwise push the bar off into a void. */
+  padding-bottom: min(max(env(safe-area-inset-bottom, 0px), 0.5rem), 2.5rem);
+  min-height: calc(3rem + min(max(env(safe-area-inset-bottom, 0px), 0.5rem), 2.5rem));
 }
 
 /* Bottom spacer for scrollable content so the fixed mobile tab bar never
@@ -1160,12 +1165,12 @@ input, textarea, [contenteditable="true"], .osler-prose, .ai-chat-msg {
  * (content scrolls right to the edge). The ::after spacer is real content
  * so it always participates in the scroll area. */
 .osler-tabbar-pad {
-  scroll-padding-bottom: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
+  scroll-padding-bottom: calc(3rem + min(max(env(safe-area-inset-bottom, 0px), 0.5rem), 2.5rem));
 }
 .osler-tabbar-pad::after {
   content: "";
   display: block;
-  height: calc(3rem + max(env(safe-area-inset-bottom, 0px), 0.5rem));
+  height: calc(3rem + min(max(env(safe-area-inset-bottom, 0px), 0.5rem), 2.5rem));
   pointer-events: none;
 }
 @media (min-width: 768px) {

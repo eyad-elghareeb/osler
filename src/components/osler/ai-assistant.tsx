@@ -402,8 +402,8 @@ export function AiAssistant({
 
   const content = (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card shrink-0">
+      {/* Header (padding-grown, so safe-pt only extends it below the notch) */}
+      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-border bg-card shrink-0 safe-pt">
         <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center">
           <Bot className="size-5" />
         </div>
@@ -590,7 +590,7 @@ export function AiAssistant({
           e.preventDefault();
           send(input);
         }}
-        className="border-t border-border bg-card p-3 md:p-4 shrink-0"
+        className="border-t border-border bg-card p-3 md:p-4 shrink-0 pb-[min(max(env(safe-area-inset-bottom,0px),0.75rem),2.5rem)] md:pb-[min(max(env(safe-area-inset-bottom,0px),1rem),2.5rem)]"
       >
         <div className="flex items-end gap-2">
           <textarea
@@ -644,8 +644,12 @@ export function AiAssistant({
             transition={isPhone ? MOTION_SPRING.snappy : MOTION_SPRING.soft}
             {...dismissProps}
             className={isPhone
-              ? "fixed inset-0 z-50 bg-card flex flex-col"
-              : "fixed right-0 top-12 bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col"
+              // Phone overlay owns side insets (header owns the top inset,
+              // composer owns the bottom one).
+              ? "fixed inset-0 z-50 bg-card flex flex-col safe-px"
+              // Docked root starts below the grown session header (3rem +
+              // top inset); no bottom inset here, the composer owns it.
+              : "fixed right-0 top-[calc(3rem+env(safe-area-inset-top,0px))] bottom-0 z-50 border-l border-border bg-card shadow-e4 flex flex-col"
             }
             style={
               isPhone

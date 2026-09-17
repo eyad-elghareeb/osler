@@ -2268,7 +2268,7 @@ function OsceStudioInner({
 
             {/* Input area (bottom padding clears the home indicator;
                 identical to p-3 on devices without a bottom inset). */}
-            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3 md:px-6 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)]">
+            <div className="border-t border-border bg-card/60 backdrop-blur-md shrink-0 p-3 md:px-6 pb-[min(max(env(safe-area-inset-bottom,0px),0.75rem),2.5rem)]">
               {/* Voice status pill (only when voice on AND overlay minimised) */}
               <AnimatePresence>
                 {voiceOn && !voiceOverlayOpen && (
