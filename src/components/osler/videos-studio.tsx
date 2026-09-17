@@ -1056,6 +1056,9 @@ function VideoPlayerView({
     setPlaybackRateState(clamped);
     void settings.set("video-speed", String(clamped));
     const effective = Math.min(clamped, maxRateRef.current);
+    // Eager update so the boot pin-retry loop (below) converges to the
+    // newest choice instead of a stale render capture.
+    effRateRef.current = effective;
     const yt = youtubeRef.current;
     if (yt && typeof yt.setPlaybackRate === "function") {
       try {
@@ -1172,9 +1175,40 @@ function VideoPlayerView({
       containerRef.current.appendChild(root);
 
       let player: any = null;
-      // Pinned once per boot (see onStateChange) — a fresh closure per
-      // video, so opening a video or hopping to the next one re-pins.
-      let ratePinned = false;
+      // Pin the persisted speed with read-back verification. A single
+      // onReady-time setPlaybackRate races the embed (rates unavailable
+      // or reset to 1× while cueing), so a preset 2× silently drops on
+      // fresh boots while mid-playback changes work fine. pinRate
+      // re-asserts until getPlaybackRate() reads back the desired value
+      // (bounded attempts), then never touches the player again — so a
+      // manual change via YouTube's own menu afterwards is not stomped.
+      // Fresh closure per effect run, so every open / next-video hop
+      // starts unverified and re-pins.
+      let rateVerified = false;
+      let pinTimer = 0;
+      const PIN_ATTEMPTS = 10;
+      function pinRate(attempt = 0) {
+        if (destroyed || rateVerified) return;
+        const want = effRateRef.current;
+        try {
+          const have =
+            player && typeof player.getPlaybackRate === "function"
+              ? player.getPlaybackRate()
+              : undefined;
+          if (have === want) {
+            rateVerified = true;
+            return;
+          }
+          if (player && typeof player.setPlaybackRate === "function") {
+            player.setPlaybackRate(want);
+          }
+        } catch {
+          /* pre-ready player */
+        }
+        if (attempt >= PIN_ATTEMPTS) return;
+        window.clearTimeout(pinTimer);
+        pinTimer = window.setTimeout(() => pinRate(attempt + 1), 600);
+      }
       // Resume offset captured for this boot (resumeAt is memoized per
       // video, so mid-playback saves can't move it under us).
       const startAt = resumeAt;
@@ -1229,11 +1263,7 @@ function VideoPlayerView({
           events: {
             onReady: () => {
               if (destroyed) return;
-              try {
-                player.setPlaybackRate(effRateRef.current);
-              } catch {
-                /* rate unsupported on this video */
-              }
+              pinRate();
               // playerVars.start cues close; seekTo lands exactly.
               if (startAt != null) {
                 try {
@@ -1250,21 +1280,10 @@ function VideoPlayerView({
                 markFinished();
                 autoAdvanceRef.current();
               } else if (event.data === 1) {
-                // 1 === PLAYING — pin the persisted speed on the first
-                // playback start of every boot. setPlaybackRate in onReady
-                // races the cue→play transition (the embed resets to 1×),
-                // so a preset 2× silently drops on fresh opens and
-                // next-video hops while mid-playback changes work fine.
-                // Pinned once per boot so a manual change via YouTube's
-                // own menu mid-video is never stomped.
-                if (!ratePinned) {
-                  ratePinned = true;
-                  try {
-                    player.setPlaybackRate(effRateRef.current);
-                  } catch {
-                    /* rate unsupported on this video */
-                  }
-                }
+                // 1 === PLAYING — (re)pin the persisted speed. Covers the
+                // onReady race and any silent drop on fresh opens and
+                // next-video hops; pinRate stops once verified.
+                pinRate();
               } else if (event.data === 2) {
                 // 2 === PAUSED — flush so closing a paused video keeps it.
                 try {
@@ -1289,6 +1308,7 @@ function VideoPlayerView({
       return () => {
         destroyed = true;
         window.clearInterval(progressTimer);
+        window.clearTimeout(pinTimer);
         if (player && typeof player.destroy === "function") {
           try { player.destroy(); } catch { /* noop */ }
         }
