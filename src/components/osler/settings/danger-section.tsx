@@ -147,7 +147,7 @@ export function DangerZoneSection() {
       {/* Hard reset — wipes every local store and bookmark. Distinct from
           "clear all progress" which only tombstones question records so
           the deletion propagates to other devices. */}
-      <div className="mt-6 pt-4 border-t border-border/60">
+      <div className="mt-6 pt-4 border-t border-border">
         <div className="bg-destructive/5 border border-destructive/30 rounded-lg p-4 mb-3">
           <div className="flex items-start gap-3">
             <Eraser className="size-5 text-destructive shrink-0 mt-0.5" />

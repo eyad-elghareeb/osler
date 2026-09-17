@@ -167,7 +167,7 @@ export function ContentImageFigure({
       {loadError ? (
         <div className="flex flex-col items-center justify-center p-4 rounded-lg border border-border bg-muted/30 text-xs text-muted-foreground my-2">
           <span className="font-mono text-[11px] truncate max-w-xs">{img.src}</span>
-          <span className="text-[10px] opacity-70 mt-0.5">{img.alt || "Image could not be loaded"}</span>
+          <span className="text-[11px] opacity-70 mt-0.5">{img.alt || "Image could not be loaded"}</span>
         </div>
       ) : (
         <img

@@ -682,7 +682,7 @@ function EmptyState({ onSuggestion }: { onSuggestion: (s: string) => void }) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center h-full text-center py-12"
+      className="flex flex-col items-center justify-center h-full text-center py-16"
     >
       <div className="w-14 h-14 rounded-full bg-primary/15 text-primary flex items-center justify-center mb-3">
         <Sparkles className="size-7" />

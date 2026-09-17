@@ -298,7 +298,7 @@ export const StreakCard = React.memo(function StreakCard() {
                 {t("dash.goal.title")}
               </span>
               {isAchieved && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success/15 px-1.5 py-0.5 rounded-full border border-success/30">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-success bg-success/15 px-1.5 py-0.5 rounded-full border border-success/30">
                   <CheckCircle2 className="size-3" />
                   {t("dash.goal.achieved")}
                 </span>

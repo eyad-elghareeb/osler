@@ -2145,7 +2145,7 @@ function OsceStudioInner({
             {/* Transcript */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-4 osler-scroll flex flex-col">
               {transcript.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full text-center gap-3 py-12 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-full text-center gap-3 py-16 text-muted-foreground">
                   <div className="size-14 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
                     <Stethoscope className="size-6 text-primary/50" />
                   </div>

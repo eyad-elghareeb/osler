@@ -321,7 +321,7 @@ export function AccountSettingsSection() {
                   <span className="text-base font-bold tabular-nums">{presetVal}</span>
                   {isSelected && <CheckCircle2 className="size-3 text-primary shrink-0" />}
                 </div>
-                <span className="text-[10px] font-medium text-muted-foreground">
+                <span className="text-[11px] font-medium text-muted-foreground">
                   {t("dash.streak.questions", { n: presetVal })}
                 </span>
               </button>

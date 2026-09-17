@@ -1704,7 +1704,7 @@ export function QuizView({
                 </motion.div>
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center py-20">
+              <div className="flex-1 flex items-center justify-center py-16">
                 <div className="text-center">
                   <div className="size-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
                   <p className="text-sm text-muted-foreground mt-3">{t("qbank.session.loading")}</p>

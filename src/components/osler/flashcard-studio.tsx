@@ -1062,7 +1062,7 @@ function FlashcardStudioInner({
   if (mode === "complete" && currentDeck) {
     return (
       <div className="h-full overflow-y-auto osler-scroll">
-        <div className="max-w-lg mx-auto px-4 py-12 text-center">
+        <div className="max-w-lg mx-auto px-4 py-16 text-center">
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

@@ -689,7 +689,7 @@ function EmptyNotesState({
 }) {
   const { t } = useI18n();
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center py-12">
+    <div className="flex flex-col items-center justify-center h-full text-center py-16">
       <div className="size-14 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-3">
         <Notebook className="size-7" />
       </div>

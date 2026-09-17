@@ -276,7 +276,7 @@ export function TrackerTree({ nodes, label, defaultExpanded, selectedUid, onOpen
               <Folder className="size-3.5 shrink-0 text-muted-foreground/70" />
               <span className="min-w-0 flex-1 truncate">{node.title}</span>
               {!isOpen && (
-                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
+                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/60">
                   {node.children.length > 0 ? `+${node.children.length}` : ""}
                 </span>
               )}

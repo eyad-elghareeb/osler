@@ -19,7 +19,7 @@ export function PdfViewer({ url, title }: { url: string; title: string }) {
 
   if (isMobile) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 gap-6 bg-muted/20">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 gap-6 bg-muted/20">
         <div className="w-20 h-20 rounded-2xl bg-warning-soft text-warning flex items-center justify-center">
           <FileText className="size-10" />
         </div>
