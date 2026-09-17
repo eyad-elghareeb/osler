@@ -1172,6 +1172,9 @@ function VideoPlayerView({
       containerRef.current.appendChild(root);
 
       let player: any = null;
+      // Pinned once per boot (see onStateChange) — a fresh closure per
+      // video, so opening a video or hopping to the next one re-pins.
+      let ratePinned = false;
       // Resume offset captured for this boot (resumeAt is memoized per
       // video, so mid-playback saves can't move it under us).
       const startAt = resumeAt;
@@ -1246,6 +1249,22 @@ function VideoPlayerView({
               if (event.data === 0) {
                 markFinished();
                 autoAdvanceRef.current();
+              } else if (event.data === 1) {
+                // 1 === PLAYING — pin the persisted speed on the first
+                // playback start of every boot. setPlaybackRate in onReady
+                // races the cue→play transition (the embed resets to 1×),
+                // so a preset 2× silently drops on fresh opens and
+                // next-video hops while mid-playback changes work fine.
+                // Pinned once per boot so a manual change via YouTube's
+                // own menu mid-video is never stomped.
+                if (!ratePinned) {
+                  ratePinned = true;
+                  try {
+                    player.setPlaybackRate(effRateRef.current);
+                  } catch {
+                    /* rate unsupported on this video */
+                  }
+                }
               } else if (event.data === 2) {
                 // 2 === PAUSED — flush so closing a paused video keeps it.
                 try {
