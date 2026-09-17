@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   PlayCircle,
   Play,
@@ -880,6 +880,19 @@ function VideoPlayerView({
   // stage is a black box meanwhile, indistinguishable from player load).
   const [prefsReady, setPrefsReady] = React.useState<boolean>(() => cachedAltHost !== null && cachedAutoplay !== null && cachedSpeed !== null);
 
+  // ── Speed flash: every open / hop visibly re-asserts the speed so
+  // the user always knows what rate the fresh embed actually plays at.
+  // The badge shows the read-back value (or the embed's actual rate if
+  // it refused the preset) — never an optimistic guess.
+  const [pinnedFlash, setPinnedFlash] = React.useState<{ rate: number; key: number } | null>(null);
+  const onPinnedRef = React.useRef((r: number) => {});
+  onPinnedRef.current = (r: number) => setPinnedFlash({ rate: r, key: Date.now() });
+  React.useEffect(() => {
+    if (!pinnedFlash) return;
+    const t = window.setTimeout(() => setPinnedFlash(null), 1500);
+    return () => window.clearTimeout(t);
+  }, [pinnedFlash]);
+
   // Latest auto-advance behavior for the player event callbacks (which are
   // bound once at player init and would otherwise capture stale props).
   const autoAdvanceRef = React.useRef<() => void>(() => {});
@@ -1182,6 +1195,8 @@ function VideoPlayerView({
       // re-asserts until getPlaybackRate() reads back the desired value
       // (bounded attempts), then never touches the player again — so a
       // manual change via YouTube's own menu afterwards is not stomped.
+      // Every pin reports the verified (or actual, on refusal) rate
+      // through onPinnedRef so the badge tells the user the truth.
       // Fresh closure per effect run, so every open / next-video hop
       // starts unverified and re-pins.
       let rateVerified = false;
@@ -1190,22 +1205,43 @@ function VideoPlayerView({
       function pinRate(attempt = 0) {
         if (destroyed || rateVerified) return;
         const want = effRateRef.current;
+        let have: number | undefined;
         try {
-          const have =
+          have =
             player && typeof player.getPlaybackRate === "function"
-              ? player.getPlaybackRate()
+              ? (player.getPlaybackRate() as number)
               : undefined;
-          if (have === want) {
-            rateVerified = true;
-            return;
+        } catch {
+          have = undefined;
+        }
+        if (typeof have === "number" && Math.abs(have - want) < 0.01) {
+          rateVerified = true;
+          try {
+            onPinnedRef.current(want);
+          } catch {
+            /* unmounted */
           }
+          return;
+        }
+        try {
           if (player && typeof player.setPlaybackRate === "function") {
             player.setPlaybackRate(want);
           }
         } catch {
           /* pre-ready player */
         }
-        if (attempt >= PIN_ATTEMPTS) return;
+        if (attempt >= PIN_ATTEMPTS) {
+          // The embed refused the preset — flash its actual rate so the
+          // user sees what is really playing instead of a stale badge.
+          if (typeof have === "number") {
+            try {
+              onPinnedRef.current(have);
+            } catch {
+              /* unmounted */
+            }
+          }
+          return;
+        }
         window.clearTimeout(pinTimer);
         pinTimer = window.setTimeout(() => pinRate(attempt + 1), 600);
       }
@@ -1519,6 +1555,26 @@ function VideoPlayerView({
             ) : (
               <div ref={containerRef} className="absolute inset-0 w-full h-full" />
             )}
+            {/* Speed badge — flashes the verified playback rate on every
+                open / hop (numerals only, no i18n needed). Doubles as proof
+                of which rate the fresh embed actually plays at. */}
+            <AnimatePresence>
+              {pinnedFlash && (
+                <motion.div
+                  key={pinnedFlash.key}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.22 }}
+                  className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+                  aria-hidden
+                >
+                  <span className="rounded-full bg-black/70 px-4 py-2 text-2xl font-bold tabular-nums text-white">
+                    {pinnedFlash.rate}×
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           </div>
 
