@@ -1093,11 +1093,14 @@ async function issueSessionWithRefresh(user: UserRow, env: Env, userAgent?: stri
  */
 async function rotateViaRefreshToken(refreshToken: string, env: Env, userAgent?: string | null): Promise<Record<string, unknown> | null> {
   if (typeof refreshToken !== "string" || refreshToken.length < 32 || refreshToken.length > 512) return null;
+  // NOTE: rt columns are aliased — a bare `rt.id, u.*` collides on `id`
+  // (the driver's object keeps only one), which would revoke nothing and
+  // 401 every rotation. Caught by the local lifecycle test.
   const row = await env.DB.prepare(
-    "SELECT rt.id, rt.user_id, u.* FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id WHERE rt.token_hash = ? AND rt.revoked_at IS NULL AND rt.expires_at > ?"
-  ).bind(await sha256(refreshToken), now()).first<Record<string, unknown> & { id: string; user_id: string }>();
+    "SELECT rt.id AS token_id, u.* FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id WHERE rt.token_hash = ? AND rt.revoked_at IS NULL AND rt.expires_at > ?"
+  ).bind(await sha256(refreshToken), now()).first<Record<string, unknown> & { token_id: string }>();
   if (!row) return null;
-  const { id: tokenId, user_id, ...userFields } = row;
+  const { token_id: tokenId, ...userFields } = row;
   // Conditional revoke (compare-and-swap): two tabs racing the same token
   // must not BOTH mint sessions — the loser sees zero changed rows and 401s,
   // and its client retries with the winner's rotated token from storage.
