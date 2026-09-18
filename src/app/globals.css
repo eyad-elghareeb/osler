@@ -288,7 +288,13 @@
   }
   html, body {
     overflow: hidden;
-    height: 100%;
+    /* 100vh, NOT 100%: percentage heights silently collapse
+     * viewport-fit=cover + translucent status bar (Safari falls back to
+     * non-cover layout and env() insets misreport — fullscreen-PWA game
+     * community finding, matches our iPadOS 26 zero-inset readings).
+     * Standalone has no collapsing chrome so vh is window-exact; browser
+     * tabs keep sizing from the dvh shell rule instead. */
+    height: 100vh;
   }
 
   /* Heading wrap quality, app-wide. `text-wrap: balance` only changes how
@@ -1096,7 +1102,9 @@ button.osler-stat-tile--compact:hover {
  * quiz session bar. TEMPORARY probe — refine or remove with the verdict. */
 @media (display-mode: standalone) {
   .osler-pwa-top-bleed {
-    height: max(0px, 3.5rem - env(safe-area-inset-top, 0px));
+    /* Live-tunable via --osler-pwa-bleed (debug panel stepper); default is
+     * the smart formula (self-retracts on working insets). */
+    height: var(--osler-pwa-bleed, max(0px, 3.5rem - env(safe-area-inset-top, 0px)));
     flex-shrink: 0;
     background: var(--background);
   }

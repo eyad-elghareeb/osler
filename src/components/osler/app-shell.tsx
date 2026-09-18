@@ -290,6 +290,34 @@ export function AppShell({ children }: AppShellProps) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // Standalone PWA: force WebKit to (re)compute safe-area insets on launch.
+  // iOS initializes env() lazily and cold start frequently resolves every
+  // inset to 0 (our iPadOS 26 readings); briefly flipping viewport-fit to
+  // auto and back to cover around two frames forces a recalculation without
+  // requiring device rotation (fullscreen-PWA community pattern for the
+  // WebKit delayed-env-init bug class). No-op everywhere else.
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    if (!standalone) return;
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+    const original = meta.getAttribute("content") ?? "";
+    if (!original.includes("viewport-fit=cover")) return;
+    meta.setAttribute("content", original.replace("viewport-fit=cover", "viewport-fit=auto"));
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => meta.setAttribute("content", original));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      if (meta.getAttribute("content") !== original) meta.setAttribute("content", original);
+    };
+  }, []);
+
   const handleSearchSelect = React.useCallback(async (r: SearchResult) => {
     setSearchOpen(false);
     // The panel owns its query and unmounts on close, so it resets itself.

@@ -97,11 +97,10 @@ export const metadata: Metadata = {
   applicationName: siteName,
   appleWebApp: {
     capable: true,
-    // Opaque status bar (iPadOS 26 experiment): black-translucent lets the
-    // system glass status zone overlap the webview top edge, smearing every
-    // fixed top bar in the fullscreen PWA. An opaque bar keeps web content
-    // out from under the glass entirely.
-    statusBarStyle: "black",
+    // Edge-to-edge status bar (works once cover properly engages — see the
+    // html/body 100vh rule; iOS 26.1+ ignores this meta, the bleed spacer
+    // covers the glass zone meanwhile).
+    statusBarStyle: "black-translucent",
     title: siteShortName,
   },
   formatDetection: {
@@ -191,7 +190,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content={siteShortName} />
         <meta name="mobile-web-app-title" content={siteShortName} />
         <meta name="format-detection" content="telephone=no" />
