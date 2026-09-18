@@ -880,6 +880,32 @@ function PwaDebugOverlay() {
     };
   }, []);
 
+  // Live bleed-height bisector: −/+ write --osler-pwa-bleed (px override),
+  // tapping the value clears back to the smart default. Survives in-app
+  // navigation (AppShell persists); a full reload resets to default unless
+  // a value was stored this session.
+  const [bleed, setBleed] = React.useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const stored = window.sessionStorage.getItem("osler-pwa-bleed");
+    const n = stored == null ? NaN : Number.parseInt(stored, 10);
+    return Number.isFinite(n) ? Math.min(120, Math.max(0, n)) : null;
+  });
+  React.useEffect(() => {
+    if (!armed || typeof document === "undefined") return;
+    if (bleed == null) {
+      document.documentElement.style.removeProperty("--osler-pwa-bleed");
+      window.sessionStorage.removeItem("osler-pwa-bleed");
+    } else {
+      document.documentElement.style.setProperty("--osler-pwa-bleed", `${bleed}px`);
+      window.sessionStorage.setItem("osler-pwa-bleed", String(bleed));
+    }
+  }, [armed, bleed]);
+  const stepBleed = (delta: number) =>
+    setBleed((prev) => {
+      const base = prev ?? 56;
+      return Math.min(120, Math.max(0, base + delta));
+    });
+
   const rows = React.useMemo(() => {
     if (!armed || typeof window === "undefined") return [] as [string, string][];
     const vv = window.visualViewport;
@@ -935,6 +961,23 @@ function PwaDebugOverlay() {
           <strong>pwa-debug</strong>
           <button type="button" onClick={() => setDismissed(true)} style={{ padding: "4px 10px", borderRadius: 8, background: "#333", color: "#fff" }}>
             Hide
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ color: "#8ab4ff" }}>bleed: </span>
+          <button type="button" onClick={() => stepBleed(-4)} style={{ padding: "4px 12px", borderRadius: 8, background: "#333", color: "#fff" }}>
+            −
+          </button>
+          <button
+            type="button"
+            title="Tap to reset to auto"
+            onClick={() => setBleed(null)}
+            style={{ minWidth: 64, textAlign: "center", padding: "4px 8px", borderRadius: 8, background: "#1c2b1c", color: "#fff" }}
+          >
+            {bleed == null ? "auto" : `${bleed}px`}
+          </button>
+          <button type="button" onClick={() => stepBleed(4)} style={{ padding: "4px 12px", borderRadius: 8, background: "#333", color: "#fff" }}>
+            +
           </button>
         </div>
         {rows.map(([k, v]) => (
