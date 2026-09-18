@@ -546,10 +546,13 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     // Never strand a bearer link: a forced sign-out while sitting on /login
     // with ?reset= / ?verify= must keep the query, or the password-reset /
     // email-verify flow it authorizes is destroyed along with the session.
+    // Otherwise land back where the user was kicked from: /login?next=<page>
+    // so RouteGuard returns them after re-signing-in instead of dumping them
+    // on the dashboard mid-study.
     const here = typeof window !== "undefined"
       ? `${window.location.pathname}${window.location.search}`
       : "/login";
-    router.push(here.startsWith("/login") ? here : "/login");
+    router.push(here.startsWith("/login") ? here : `/login?next=${encodeURIComponent(here)}`);
   }, [router, persistLocalUsername]);
 
   // Cloud session expiration listener (fired by sync on 401, after it already
