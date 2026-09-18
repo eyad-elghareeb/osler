@@ -1125,6 +1125,9 @@ function FlashcardStudioInner({
         {/* Outer owns side + bottom insets only: the header grows its own
             height by the top inset, so safe-screen here would double-count
             the top and crush the bar on notched iPhones. */}
+        {/* Standalone PWA top-bleed probe (see globals.css): solid strip that
+            keeps the header below the iPadOS 26 glass smear zone. */}
+        <div aria-hidden className="osler-pwa-top-bleed" />
         {/* Top bar (height grows with the notch; content row stays 48px) */}
         <header className="h-[calc(3rem+env(safe-area-inset-top,0px))] flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
           <button

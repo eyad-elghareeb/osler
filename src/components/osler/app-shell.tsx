@@ -340,6 +340,9 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="osler-shell-height h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden">
+      {/* Standalone PWA top-bleed probe (see globals.css): solid strip that
+          keeps the header below the iPadOS 26 glass smear zone. */}
+      <div aria-hidden className="osler-pwa-top-bleed" />
       {/* Top bar — desktop only on mobile. The mobile layout uses the
           scroll-away top bar (logo + search + user menu) plus the 4-tab
           bottom bar, so this header is hidden to reclaim screen space.

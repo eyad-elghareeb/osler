@@ -1447,11 +1447,11 @@ function VideoPlayerView({
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col safe-px overflow-hidden">
-      {/* Outer owns the side insets only (quiz / OSCE-conversation precedent):
-          the header grows its own height by the top inset and the Up Next
-          list pads its own bottom inset, so a bottom pad here would
-          double-count on phones and leave a dead strip under the columns on
-          inset tablets (iPad PWA home-indicator gap). */}
+      {/* Standalone PWA top-bleed probe (see globals.css): solid strip that
+          keeps the header below the iPadOS 26 glass smear zone. The header
+          grows its own height by the top inset, so safe-screen here would
+          double-count the top and crush the bar on notched iPhones. */}
+      <div aria-hidden className="osler-pwa-top-bleed" />
       {/* Top bar (height grows with the notch; content row stays 48px).
           Solid card surface, not the translucent blur recipe: the bar sits
           over this overlay's own opaque root, so there is nothing behind it
