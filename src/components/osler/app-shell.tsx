@@ -366,6 +366,7 @@ export function AppShell({ children }: AppShellProps) {
               onPointerEnter={() => prefetch("dashboard")}
               onTouchStart={() => prefetch("dashboard")}
               onFocus={() => prefetch("dashboard")}
+              data-pwa-debug-tap
               className="flex items-center gap-2.5 shrink-0"
             >
               <OslerMark variant="line" className="size-6 text-primary shrink-0" />
@@ -748,6 +749,7 @@ function MobileScrollAwayBar({
         {/* Logo + brand name (name hidden on very narrow screens) */}
         <button
           onClick={() => navigate("dashboard")}
+          data-pwa-debug-tap
           className="flex items-center gap-2.5 shrink-0 min-w-0"
         >
           <OslerMark variant="line" className="size-6 text-primary shrink-0" />
@@ -822,11 +824,15 @@ function MobileScrollAwayBar({
  * user-facing UI). REMOVE once the PWA blur/band investigation closes.
  */
 function PwaDebugOverlay() {
-  const [armed] = React.useState(
+  const [queryArmed] = React.useState(
     () =>
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).has("pwa-debug"),
   );
+  // No-URL fallback: triple-tap either brand logo (both carry
+  // data-pwa-debug-tap) toggles the panel — installed PWAs can't open links.
+  const [tapArmed, setTapArmed] = React.useState(false);
+  const armed = queryArmed || tapArmed;
   const [dismissed, setDismissed] = React.useState(false);
   const [tick, setTick] = React.useState(0);
   const topProbe = React.useRef<HTMLDivElement>(null);
@@ -846,6 +852,30 @@ function PwaDebugOverlay() {
       window.clearInterval(timer);
     };
   }, [armed]);
+
+  // Triple-tap detector for the brand logos (PWA entry point).
+  React.useEffect(() => {
+    let taps = 0;
+    let timer = 0;
+    const onClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el?.closest?.("[data-pwa-debug-tap]")) return;
+      taps += 1;
+      window.clearTimeout(timer);
+      if (taps >= 3) {
+        taps = 0;
+        setTapArmed((v) => !v);
+        setDismissed(false);
+        return;
+      }
+      timer = window.setTimeout(() => { taps = 0; }, 700);
+    };
+    document.addEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("click", onClick);
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   const rows = React.useMemo(() => {
     if (!armed || typeof window === "undefined") return [] as [string, string][];
