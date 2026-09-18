@@ -1048,9 +1048,25 @@ async function issueRefreshToken(env: Env, userId: string, sessionId: string | n
   const refreshToken = `${id()}${id()}`.replace(/-/g, "");
   const refreshExpiresAt = now() + REFRESH_TOKEN_TTL_MS;
   const ua = typeof userAgent === "string" && userAgent.trim() ? userAgent.trim().slice(0, 300) : null;
-  await env.DB.prepare(
-    "INSERT INTO refresh_tokens (id, user_id, token_hash, session_id, expires_at, created_at, revoked_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)"
-  ).bind(id(), userId, await sha256(refreshToken), sessionId, refreshExpiresAt, now(), ua).run();
+  // Same LRU cap as sessions: a user with more live devices than
+  // MAX_SESSIONS_PER_USER loses the OLDEST device's refresh path first, so
+  // the table can't grow unboundedly and evicted devices stay evicted
+  // instead of silently re-authenticating behind the cap.
+  const active = await env.DB.prepare(
+    "SELECT id FROM refresh_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at ASC"
+  ).bind(userId, now()).all<{ id: string }>();
+  const rows = active.results || [];
+  const overflow = rows.length - (MAX_SESSIONS_PER_USER - 1);
+  const batch = [];
+  for (let i = 0; i < overflow; i++) {
+    batch.push(env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?").bind(now(), rows[i].id));
+  }
+  batch.push(
+    env.DB.prepare(
+      "INSERT INTO refresh_tokens (id, user_id, token_hash, session_id, expires_at, created_at, revoked_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)"
+    ).bind(id(), userId, await sha256(refreshToken), sessionId, refreshExpiresAt, now(), ua)
+  );
+  await env.DB.batch(batch);
   return { refreshToken, refreshExpiresAt };
 }
 
@@ -1082,7 +1098,12 @@ async function rotateViaRefreshToken(refreshToken: string, env: Env, userAgent?:
   ).bind(await sha256(refreshToken), now()).first<Record<string, unknown> & { id: string; user_id: string }>();
   if (!row) return null;
   const { id: tokenId, user_id, ...userFields } = row;
-  await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?").bind(now(), tokenId).run();
+  // Conditional revoke (compare-and-swap): two tabs racing the same token
+  // must not BOTH mint sessions — the loser sees zero changed rows and 401s,
+  // and its client retries with the winner's rotated token from storage.
+  const spent = await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
+    .bind(now(), tokenId).run();
+  if ((spent.meta?.changes ?? 0) === 0) return null;
   return issueSessionWithRefresh(userFields as unknown as UserRow, env, userAgent);
 }
 

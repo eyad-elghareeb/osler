@@ -420,10 +420,25 @@ export async function refreshCloudSession(session: CloudSession): Promise<CloudS
   }
 }
 
-/** Throwing core of the refresh-token rotation (see `refreshViaToken`). */
-async function rotateViaRefreshTokenOrThrow(refreshToken: string): Promise<CloudSession | null> {
-  const next = await request<AuthResponse>("/v1/auth/refresh-token", { method: "POST", body: JSON.stringify({ refreshToken }) });
-  return persistRotatedSession(next);
+/**
+ * Throwing core of the refresh-token rotation (see `refreshViaToken`).
+ * Rotation-race tolerant: refresh tokens are single-use server-side, so when
+ * two tabs spend the same token at once the loser gets a 401 even though a
+ * valid rotated token now sits in shared localStorage (written by the
+ * winner). On a 401 it re-reads storage once and retries with the fresh
+ * token instead of wrongly declaring the device dead.
+ */
+async function rotateViaRefreshTokenOrThrow(refreshToken: string, retried = false): Promise<CloudSession | null> {
+  try {
+    const next = await request<AuthResponse>("/v1/auth/refresh-token", { method: "POST", body: JSON.stringify({ refreshToken }) });
+    return persistRotatedSession(next);
+  } catch (error) {
+    if (!retried && error instanceof CloudApiError && error.status === 401) {
+      const current = readRefreshToken();
+      if (current && current !== refreshToken) return rotateViaRefreshTokenOrThrow(current, true);
+    }
+    throw error;
+  }
 }
 
 /**
