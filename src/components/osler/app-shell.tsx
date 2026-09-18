@@ -339,7 +339,7 @@ export function AppShell({ children }: AppShellProps) {
   // so keystrokes never re-render the nav bars or the mounted view.
 
   return (
-    <div className="h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden">
+    <div className="h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden">
       {/* Top bar — desktop only on mobile. The mobile layout uses the
           scroll-away top bar (logo + search + user menu) plus the 4-tab
           bottom bar, so this header is hidden to reclaim screen space.
@@ -507,7 +507,12 @@ export function AppShell({ children }: AppShellProps) {
           instant, which reads as faster than a fade-from-blank.
           Non-VT browsers instead get `.osler-view-enter` restarted on the
           inner wrapper (see the view effect above) — no remount, no blank. */}
-      <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col safe-pt">
+      {/* Top-inset ownership: on phones the desktop header above is hidden,
+          so main pads the notch for the scroll-away bar / MobileReader. On
+          md+ the desktop header owns the inset itself — a second pad here
+          left a dead notch-sized strip under the header on every view on
+          inset tablets (iPad PWA). */}
+      <main className="flex-1 min-h-0 relative overflow-hidden flex flex-col pt-[env(safe-area-inset-top,0px)] md:pt-0">
         {/* Mobile scroll-away top bar — a slim bar with the centered site name
             + search icon that hides when the user scrolls down and reappears
             on scroll up. Instagram-style collapse. Desktop uses the full top

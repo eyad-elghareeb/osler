@@ -1258,10 +1258,11 @@ function MobileReader({
   return (
     <div className="absolute inset-0 bg-background flex flex-col">
       {/* Top bar — title only; every action moved to the floating toolbar.
-          No safe-pt here: this page is absolute inside main (which already
-          owns the top inset via its own safe-pt), so a second inset would
-          double-count and leave a dead gap above the title on notched
-          iPhones in standalone PWA. */}
+          No safe-pt here: on phones this page is absolute inside main (which
+          pads the top inset for it), and on md+ it sits below the desktop
+          header (which owns the inset itself) — either way a second inset
+          would double-count and leave a dead gap above the title on
+          inset tablets/phones. */}
       <header className="shrink-0 border-b border-border bg-card backdrop-blur-sm relative z-20">
         <div className="flex items-center gap-2 px-3 h-12">
           <button

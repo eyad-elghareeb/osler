@@ -1446,12 +1446,20 @@ function VideoPlayerView({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-pb safe-px overflow-hidden">
-      {/* Outer owns side + bottom insets only: the header grows its own
-          height by the top inset, so safe-screen here would double-count
-          the top and crush the bar on notched iPhones. */}
-      {/* Top bar (height grows with the notch; content row stays 48px) */}
-      <header className="h-[calc(3rem+env(safe-area-inset-top,0px))] flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card/60 backdrop-blur-md safe-pt">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col safe-px overflow-hidden">
+      {/* Outer owns the side insets only (quiz / OSCE-conversation precedent):
+          the header grows its own height by the top inset and the Up Next
+          list pads its own bottom inset, so a bottom pad here would
+          double-count on phones and leave a dead strip under the columns on
+          inset tablets (iPad PWA home-indicator gap). */}
+      {/* Top bar (height grows with the notch; content row stays 48px).
+          Solid card surface, not the translucent blur recipe: the bar sits
+          over this overlay's own opaque root, so there is nothing behind it
+          to frost — the blur pass is pure GPU cost and a live iOS
+          compositing hazard next to the cross-origin YouTube iframe (the
+          iPad-only blurred-bar artifact). Matches what data-blur="off"
+          already resolves to on desktop, so default rendering is unchanged. */}
+      <header className="h-[calc(3rem+env(safe-area-inset-top,0px))] flex items-center px-2 sm:px-4 gap-2 shrink-0 border-b border-border bg-card safe-pt">
         <button
           onClick={() => { haptic('light'); onExit(); }}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors osler-touch-target"
@@ -1720,7 +1728,11 @@ function VideoPlayerView({
             </div>
           </div>
 
-          <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[min(max(env(safe-area-inset-bottom,0px),1rem),2.5rem)] lg:pb-2">
+          {/* Each scroller owns its own bottom clearance (the root no longer
+              pads it): phones get the capped inset inside the scroll area,
+              desktop keeps its tight 0.5rem but still clears the iPad PWA
+              home indicator. */}
+          <div className="p-2 space-y-2 lg:flex-1 lg:overflow-y-auto pb-[min(max(env(safe-area-inset-bottom,0px),1rem),2.5rem)] lg:pb-[min(max(env(safe-area-inset-bottom,0px),0.5rem),2.5rem)]">
             {playlist.map((v) => {
               const isActive = v.id === video.id;
               return (

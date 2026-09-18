@@ -284,7 +284,7 @@ function AdminShellInner({ children }: AdminShellProps) {
   return (
     <div
       className={cn(
-        "h-screen md:h-screen h-[100dvh] flex flex-col bg-background overflow-hidden",
+        "h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden",
         rtl && "rtl",
       )}
     >
@@ -292,7 +292,7 @@ function AdminShellInner({ children }: AdminShellProps) {
           translucent + backdrop-blur recipe forced a full-screen blur pass
           on every scroll frame (the dominant GPU cost on budget hardware),
           which read as scroll jank across admin pages. */}
-      <header className="z-40 shrink-0 h-14 border-b border-border bg-background safe-pt">
+      <header className="z-40 shrink-0 h-[calc(3.5rem+env(safe-area-inset-top,0px))] border-b border-border bg-background safe-pt">
         <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Logo doubles as the sidebar toggle — desktop: collapse/expand;
               mobile: open slide-in sheet. The Dashboard nav item remains the
