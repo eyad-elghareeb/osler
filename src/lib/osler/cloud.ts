@@ -208,7 +208,7 @@ export function readCloudSession(): CloudSession | null {
  * route — the static export has no server. Route gating is enforced purely
  * client-side by `RouteGuard` (see `src/components/osler/route-guard.tsx`).
  */
-export function saveCloudSession(session: CloudSession | AuthResponse): void {
+export function saveCloudSession(session: CloudSession | AuthResponse, opts?: { silent?: boolean }): void {
   if (typeof window === "undefined") return;
   const { refreshToken, refreshExpiresAt, ...pure } = session as AuthResponse;
   try { sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(pure)); } catch {}
@@ -221,6 +221,12 @@ export function saveCloudSession(session: CloudSession | AuthResponse): void {
       localStorage.setItem(REFRESH_TOKEN_KEY, JSON.stringify({ token: refreshToken, expiresAt: refreshExpiresAt ?? 0 }));
     } catch {}
   }
+  // Silent saves (background token rotation) must not broadcast "login" to
+  // sibling tabs every 15 minutes — the `osler-cloud-session-refreshed`
+  // event already carries the fresh session to this tab's provider, and a
+  // stray "login" could make a signed-out guest tab adopt another tab's
+  // identity before it reads the shared mirror.
+  if (opts?.silent) return;
   // Notify other tabs on the same origin that the session changed.
   // The storage event fires automatically for localStorage writes, but
   // sessionStorage writes don't fire it — so we dispatch a custom event
@@ -396,7 +402,7 @@ export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> 
  */
 function persistRotatedSession(next: CloudSession | AuthResponse): CloudSession | null {
   if (!next?.token || typeof next.expiresAt !== "number" || !next?.user) return null;
-  saveCloudSession(next);
+  saveCloudSession(next, { silent: true });
   const pure: CloudSession = { token: next.token, expiresAt: next.expiresAt, user: next.user };
   try {
     window.dispatchEvent(new CustomEvent("osler-cloud-session-refreshed", { detail: { session: pure } }));

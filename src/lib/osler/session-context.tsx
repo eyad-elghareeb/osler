@@ -543,7 +543,13 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     setPendingConflict(null);
     setConflictResolving(false);
     persistLocalUsername(null);
-    router.push("/login");
+    // Never strand a bearer link: a forced sign-out while sitting on /login
+    // with ?reset= / ?verify= must keep the query, or the password-reset /
+    // email-verify flow it authorizes is destroyed along with the session.
+    const here = typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/login";
+    router.push(here.startsWith("/login") ? here : "/login");
   }, [router, persistLocalUsername]);
 
   // Cloud session expiration listener (fired by sync on 401, after it already
