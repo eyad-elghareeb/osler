@@ -549,6 +549,7 @@ export function AppShell({ children }: AppShellProps) {
           (library, flashcards, osce, videos, profile, settings, learn) the
           auto-pop fires so the user is reminded of their unfinished session. */}
       {!isDashboard && !isQbank && <AutoResumeSessionDialog />}
+      <PwaDebugOverlay />
     </div>
   );
 }
@@ -811,5 +812,105 @@ function MobileScrollAwayBar({
         />
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * TEMPORARY iPadOS 26 PWA diagnostic, armed via `?pwa-debug=1`. Overlays live
+ * viewport + safe-area metrics so standalone presentation bugs can be read off
+ * the device without a tethered Mac. English-only by design (dev tool, never
+ * user-facing UI). REMOVE once the PWA blur/band investigation closes.
+ */
+function PwaDebugOverlay() {
+  const [armed] = React.useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("pwa-debug"),
+  );
+  const [dismissed, setDismissed] = React.useState(false);
+  const [tick, setTick] = React.useState(0);
+  const topProbe = React.useRef<HTMLDivElement>(null);
+  const bottomProbe = React.useRef<HTMLDivElement>(null);
+  const leftProbe = React.useRef<HTMLDivElement>(null);
+  const rightProbe = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!armed) return;
+    const refresh = () => setTick((n) => n + 1);
+    window.addEventListener("resize", refresh);
+    window.visualViewport?.addEventListener("resize", refresh);
+    const timer = window.setInterval(refresh, 1500);
+    return () => {
+      window.removeEventListener("resize", refresh);
+      window.visualViewport?.removeEventListener("resize", refresh);
+      window.clearInterval(timer);
+    };
+  }, [armed]);
+
+  const rows = React.useMemo(() => {
+    if (!armed || typeof window === "undefined") return [] as [string, string][];
+    const vv = window.visualViewport;
+    return [
+      ["host", window.location.host],
+      [
+        "display-mode",
+        window.matchMedia("(display-mode: standalone)").matches ? "standalone" : "browser",
+      ],
+      [
+        "navigator.standalone",
+        String(
+          (window.navigator as unknown as { standalone?: boolean }).standalone ?? "n/a",
+        ),
+      ],
+      ["inner", `${window.innerWidth}x${window.innerHeight}`],
+      [
+        "visualViewport",
+        vv
+          ? `${Math.round(vv.width)}x${Math.round(vv.height)} @${Math.round(vv.offsetTop)},${Math.round(vv.offsetLeft)} scale ${vv.scale}`
+          : "n/a",
+      ],
+      ["doc-client", `${document.documentElement.clientWidth}x${document.documentElement.clientHeight}`],
+      ["dpr", String(window.devicePixelRatio)],
+      ["env-top", `${topProbe.current?.offsetHeight ?? -1}px`],
+      ["env-bottom", `${bottomProbe.current?.offsetHeight ?? -1}px`],
+      ["env-left", `${leftProbe.current?.offsetWidth ?? -1}px`],
+      ["env-right", `${rightProbe.current?.offsetWidth ?? -1}px`],
+      ["data-blur", document.documentElement.dataset.blur ?? "?"],
+      ["ua-tail", window.navigator.userAgent.slice(-72)],
+    ] as [string, string][];
+    // Probes measure the previous commit's DOM; the interval refresh covers it.
+  }, [armed, tick, dismissed]);
+
+  if (!armed || dismissed) return null;
+  return (
+    <>
+      {/* Safe-area probes — zero-size fixed divs sized purely by env(). */}
+      <div ref={topProbe} aria-hidden style={{ position: "fixed", top: 0, left: 0, width: 0, height: "env(safe-area-inset-top, 0px)", pointerEvents: "none" }} />
+      <div ref={bottomProbe} aria-hidden style={{ position: "fixed", bottom: 0, left: 0, width: 0, height: "env(safe-area-inset-bottom, 0px)", pointerEvents: "none" }} />
+      <div ref={leftProbe} aria-hidden style={{ position: "fixed", top: 0, left: 0, height: 0, width: "env(safe-area-inset-left, 0px)", pointerEvents: "none" }} />
+      <div ref={rightProbe} aria-hidden style={{ position: "fixed", top: 0, right: 0, height: 0, width: "env(safe-area-inset-right, 0px)", pointerEvents: "none" }} />
+      <div
+        role="status"
+        style={{
+          position: "fixed", left: 8, right: 8, bottom: 8, zIndex: 100,
+          maxHeight: "46dvh", overflowY: "auto", background: "rgba(0,0,0,0.92)",
+          color: "#fff", borderRadius: 12, padding: "10px 12px",
+          fontFamily: "ui-monospace, monospace", fontSize: 11, lineHeight: 1.7,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <strong>pwa-debug</strong>
+          <button type="button" onClick={() => setDismissed(true)} style={{ padding: "4px 10px", borderRadius: 8, background: "#333", color: "#fff" }}>
+            Hide
+          </button>
+        </div>
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <span style={{ color: "#8ab4ff" }}>{k}: </span>
+            <span style={{ overflowWrap: "anywhere" }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
