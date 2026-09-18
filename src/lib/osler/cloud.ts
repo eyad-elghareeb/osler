@@ -31,7 +31,14 @@ const FOREGROUND_PULL_MIN_MS = 60_000;
 const POKE_PULL_DEBOUNCE_MS = 1_500;
 // Rotate the token through /v1/auth/refresh once it's within this window of
 // its expiry, so an active session never dies mid-use.
-const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
+export const REFRESH_AHEAD_MS = 6 * 60 * 60 * 1000;
+
+/** True when the session is expired or close enough to expiry that a refresh
+ *  should be attempted now (sliding rotation keeps active users signed in). */
+export function sessionNeedsRefresh(session: CloudSession | null): boolean {
+  if (!session) return false;
+  return session.expiresAt - Date.now() < REFRESH_AHEAD_MS;
+}
 // Exponential backoff for failed syncs (conflicts, transient 5xx, offline).
 const RETRY_BASE_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
@@ -52,6 +59,21 @@ export interface CloudSession {
   expiresAt: number;
   user: CloudUser;
 }
+
+/** What the sign-in endpoints return: a short-lived session plus the
+ *  device's long-lived opaque refresh token (see `issueSessionWithRefresh`
+ *  server-side). The refresh token lives in localStorage only and lets the
+ *  client silently mint fresh sessions for up to a year without bothering
+ *  the user — the "never log in again" behavior. */
+export interface AuthResponse extends CloudSession {
+  refreshToken?: string;
+  refreshExpiresAt?: number;
+}
+
+/** localStorage-only: the refresh token must survive tab closes and browser
+ *  restarts (a sessionStorage copy would defeat the whole "remember me"
+ *  purpose). Same-origin JS-readable like the session itself. */
+const REFRESH_TOKEN_KEY = "osler-cloud-refresh-v1";
 
 export class CloudApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string) {
@@ -186,10 +208,19 @@ export function readCloudSession(): CloudSession | null {
  * route — the static export has no server. Route gating is enforced purely
  * client-side by `RouteGuard` (see `src/components/osler/route-guard.tsx`).
  */
-export function saveCloudSession(session: CloudSession): void {
+export function saveCloudSession(session: CloudSession | AuthResponse): void {
   if (typeof window === "undefined") return;
-  try { sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session)); } catch {}
-  try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session)); } catch {}
+  const { refreshToken, refreshExpiresAt, ...pure } = session as AuthResponse;
+  try { sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(pure)); } catch {}
+  try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(pure)); } catch {}
+  // A fresh refresh token supersedes the stored one (rotation). When the
+  // response carries none (plain access-token rotation), the stored token
+  // stays untouched — it is still the device's valid re-auth path.
+  if (typeof refreshToken === "string" && refreshToken.length >= 32) {
+    try {
+      localStorage.setItem(REFRESH_TOKEN_KEY, JSON.stringify({ token: refreshToken, expiresAt: refreshExpiresAt ?? 0 }));
+    } catch {}
+  }
   // Notify other tabs on the same origin that the session changed.
   // The storage event fires automatically for localStorage writes, but
   // sessionStorage writes don't fire it — so we dispatch a custom event
@@ -201,12 +232,30 @@ export function saveCloudSession(session: CloudSession): void {
   }
 }
 
-export function clearCloudSession(): void {
+/** The device's long-lived refresh token, if one was ever minted here. */
+export function readRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (typeof value?.token !== "string" || value.token.length < 32) return null;
+    if (typeof value.expiresAt === "number" && value.expiresAt <= Date.now()) return null;
+    return value.token;
+  } catch {
+    return null;
+  }
+}
+
+export function clearCloudSession(opts?: { notify?: "logout" | "expired" | "none" }): void {
   if (typeof window === "undefined") return;
   try { sessionStorage.removeItem(SESSION_STORAGE_KEY); } catch {}
   try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch {}
+  try { localStorage.removeItem(REFRESH_TOKEN_KEY); } catch {}
+  const kind = opts?.notify ?? "logout";
+  if (kind === "none") return;
   try {
-    notifySessionChange("logout", null);
+    notifySessionChange(kind, null);
   } catch {
     // ignore
   }
@@ -230,18 +279,20 @@ function getChannel(): BroadcastChannel | null {
   }
 }
 
-function notifySessionChange(kind: "login" | "logout", username: string | null): void {
+type SessionChangeKind = "login" | "logout" | "expired";
+
+function notifySessionChange(kind: SessionChangeKind, username: string | null): void {
   const ch = getChannel();
   if (!ch) return;
   ch.postMessage({ kind, username, at: Date.now() });
 }
 
-export function subscribeSessionChanges(cb: (kind: "login" | "logout", username: string | null) => void): () => void {
+export function subscribeSessionChanges(cb: (kind: SessionChangeKind, username: string | null) => void): () => void {
   const ch = getChannel();
   if (!ch) return () => {};
   const handler = (e: MessageEvent) => {
     if (!e.data || typeof e.data !== "object") return;
-    if (e.data.kind !== "login" && e.data.kind !== "logout") return;
+    if (e.data.kind !== "login" && e.data.kind !== "logout" && e.data.kind !== "expired") return;
     cb(e.data.kind, e.data.username ?? null);
   };
   ch.addEventListener("message", handler);
@@ -256,11 +307,11 @@ export async function registerCloudAccount(input: {
   password: string;
   turnstileToken?: string;
 }): Promise<CloudSession | { ok: boolean; verifySent: boolean }> {
-  const res = await request<CloudSession & { ok?: boolean; verifySent?: boolean }>("/v1/auth/register", { method: "POST", body: JSON.stringify(input) });
+  const res = await request<AuthResponse & { ok?: boolean; verifySent?: boolean }>("/v1/auth/register", { method: "POST", body: JSON.stringify(input) });
   // Email signups get no session until they verify — only persist when the
   // server actually issued one.
   if (!res.token) return { ok: true, verifySent: res.verifySent === true };
-  const session = res as CloudSession;
+  const session = res as AuthResponse;
   saveCloudSession(session);
   // New account has no server settings yet — the first device's local
   // settings will be pushed on the first sync; no pull needed here.
@@ -288,7 +339,7 @@ export async function loginCloudAccount(input: {
   password: string;
   turnstileToken?: string;
 }): Promise<CloudSession> {
-  const session = await request<CloudSession>("/v1/auth/login", { method: "POST", body: JSON.stringify(input) });
+  const session = await request<AuthResponse>("/v1/auth/login", { method: "POST", body: JSON.stringify(input) });
   saveCloudSession(session);
   // Best-effort: pull the user's saved Gemini API key and account-level
   // settings so they don't have to re-enter them on this device. Settings
@@ -321,7 +372,7 @@ export function startGoogleLogin(returnTo?: string): void {
 }
 
 export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> {
-  const session = await request<CloudSession>("/v1/auth/google/consume", { method: "POST", body: JSON.stringify({ ticket }) });
+  const session = await request<AuthResponse>("/v1/auth/google/consume", { method: "POST", body: JSON.stringify({ ticket }) });
   saveCloudSession(session);
   void syncGeminiKeyFromCloud();
   void pullSettingsFromCloud(session);
@@ -331,30 +382,86 @@ export async function consumeGoogleLogin(ticket: string): Promise<CloudSession> 
 /**
  * Rotate the current session through the Worker's /v1/auth/refresh endpoint.
  * The Worker accepts a still-signed token even after its `exp` claim passes
- * (within a 30-day grace) and returns a brand-new session; the old one is
- * revoked server-side. Used on restore when the persisted token is expired
- * and by the sync loop on 401 — this is what stops a 7-day-old session from
- * silently degrading the user to a local-only account.
+ * (within a 48-hour grace) and returns a brand-new session; the old one is
+ * revoked server-side.
+ *
+ * Prefer `restoreCloudSession()` (short-lived rotation, then the year-long
+ * refresh token) over calling this directly — it alone cannot re-auth a
+ * device whose session lapsed beyond the grace window.
  *
  * Returns null on any failure (revoked session, network error, cloud
  * disabled). The refreshed session is persisted via `saveCloudSession` and
  * broadcast to other tabs / the session provider via
  * `osler-cloud-session-refreshed`.
  */
+function persistRotatedSession(next: CloudSession | AuthResponse): CloudSession | null {
+  if (!next?.token || typeof next.expiresAt !== "number" || !next?.user) return null;
+  saveCloudSession(next);
+  const pure: CloudSession = { token: next.token, expiresAt: next.expiresAt, user: next.user };
+  try {
+    window.dispatchEvent(new CustomEvent("osler-cloud-session-refreshed", { detail: { session: pure } }));
+  } catch {
+    // ignore
+  }
+  return pure;
+}
+
+/** Throwing core of the access-token rotation (see `refreshCloudSession`). */
+async function rotateSessionOrThrow(session: CloudSession): Promise<CloudSession | null> {
+  const next = await request<AuthResponse>("/v1/auth/refresh", { method: "POST", body: "{}" }, session.token);
+  return persistRotatedSession(next);
+}
+
 export async function refreshCloudSession(session: CloudSession): Promise<CloudSession | null> {
   try {
-    const next = await request<CloudSession>("/v1/auth/refresh", { method: "POST", body: "{}" }, session.token);
-    if (!next?.token || typeof next.expiresAt !== "number" || !next?.user) return null;
-    saveCloudSession(next);
-    try {
-      window.dispatchEvent(new CustomEvent("osler-cloud-session-refreshed", { detail: { session: next } }));
-    } catch {
-      // ignore
-    }
-    return next;
+    return await rotateSessionOrThrow(session);
   } catch {
     return null;
   }
+}
+
+/** Throwing core of the refresh-token rotation (see `refreshViaToken`). */
+async function rotateViaRefreshTokenOrThrow(refreshToken: string): Promise<CloudSession | null> {
+  const next = await request<AuthResponse>("/v1/auth/refresh-token", { method: "POST", body: JSON.stringify({ refreshToken }) });
+  return persistRotatedSession(next);
+}
+
+/**
+ * Spend the device's long-lived refresh token for a fresh session +
+ * refresh-token pair (single-use rotation server-side). Returns null on any
+ * failure — revoked, expired, or simply offline. Never throws.
+ */
+export async function refreshViaToken(): Promise<CloudSession | null> {
+  const token = readRefreshToken();
+  if (!token) return null;
+  try {
+    return await rotateViaRefreshTokenOrThrow(token);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort silent re-authentication: try the short-lived session rotation
+ * first, then the long-lived refresh token. Used at boot, by the proactive
+ * loop, and on sync 401s — this is what keeps users signed in for months
+ * without a password prompt. Returns null only when both paths fail (or
+ * there is nothing to rotate with); callers must decide whether the failure
+ * is authoritative (revoked) or transient (offline) before signing anyone out.
+ */
+export async function restoreCloudSession(stored: CloudSession | null): Promise<CloudSession | null> {
+  if (stored) {
+    const viaSession = await refreshCloudSession(stored);
+    if (viaSession) return viaSession;
+  }
+  return refreshViaToken();
+}
+
+/** True when the server explicitly rejected the credential (unknown, revoked,
+ *  expired past every grace) — as opposed to a network error, where the
+ *  credential may still be perfectly valid and must NOT be discarded. */
+export function isAuthoritativeAuthFailure(error: unknown): boolean {
+  return error instanceof CloudApiError && (error.status === 401 || error.status === 403 || error.status === 404);
 }
 
 /**
@@ -654,7 +761,10 @@ export async function updateCloudAccount(session: CloudSession, input: { display
 }
 
 export async function changeCloudPassword(session: CloudSession, input: { currentPassword?: string; password: string }): Promise<CloudSession> {
-  const next = await request<CloudSession>("/v1/account/password", { method: "POST", body: JSON.stringify(input) }, session.token);
+  // Present this device's refresh token so the server keeps it while killing
+  // every other device's silent re-auth path; the response carries a fresh
+  // pair that saveCloudSession persists (session + rotated refresh token).
+  const next = await request<AuthResponse>("/v1/account/password", { method: "POST", body: JSON.stringify({ ...input, refreshToken: readRefreshToken() }) }, session.token);
   saveCloudSession(next);
   return next;
 }
@@ -688,9 +798,10 @@ export async function revokeCloudSession(session: CloudSession, sessionId: strin
   await request(`/v1/account/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }, session.token);
 }
 
-/** Revoke every session except the caller's (sign out all other devices). */
+/** Revoke every session except the caller's (sign out all other devices —
+ *  their refresh tokens die too, so they land on the login screen). */
 export async function revokeOtherCloudSessions(session: CloudSession): Promise<void> {
-  await request("/v1/account/sessions/revoke-others", { method: "POST" }, session.token);
+  await request("/v1/account/sessions/revoke-others", { method: "POST", body: JSON.stringify({ refreshToken: readRefreshToken() }) }, session.token);
 }
 
 export async function deleteCloudAccount(session: CloudSession, input: { password?: string }): Promise<void> {
@@ -720,7 +831,10 @@ export async function confirmEmailVerify(token: string): Promise<{ ok: boolean; 
 
 export async function logoutCloudAccount(session: CloudSession | null): Promise<void> {
   try {
-    if (session) await request("/v1/auth/logout", { method: "POST", body: "{}" }, session.token);
+    // Send this device's refresh token so the server revokes it as well —
+    // otherwise a sibling tab could silently re-authenticate behind an
+    // explicit user logout.
+    if (session) await request("/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken: readRefreshToken() }) }, session.token);
   } finally {
     clearCloudSession();
   }
@@ -956,8 +1070,8 @@ export function startCloudSync(session: CloudSession): () => void {
     try {
       await storage.ensureCacheHydrated();
 
-      if (currentSession.expiresAt - Date.now() < REFRESH_AHEAD_MS) {
-        const refreshed = await refreshCloudSession(currentSession);
+      if (sessionNeedsRefresh(currentSession)) {
+        const refreshed = await restoreCloudSession(currentSession);
         if (refreshed) currentSession = refreshed;
       }
 
@@ -1058,17 +1172,54 @@ export function startCloudSync(session: CloudSession): () => void {
     } catch (error) {
       if (error instanceof CloudApiError) {
         if (error.status === 401) {
-          const refreshed = await refreshCloudSession(currentSession);
+          // The access token is dead — try both rotation paths before
+          // declaring the session over. Only an AUTHORITATIVE rejection
+          // (server said the credential itself is invalid) signs the user
+          // out; a network blip mid-rotation must never discard a session
+          // that is still valid server-side.
+          let refreshed: CloudSession | null = null;
+          let dead = false;
+          try {
+            refreshed = await rotateSessionOrThrow(currentSession);
+          } catch (err) {
+            if (!isAuthoritativeAuthFailure(err)) {
+              // Transient (offline / 5xx): back off and retry — the session
+              // may still be fine. Fall through to the retry scheduler below
+              // without clearing anything.
+            } else {
+              // Access rotation authoritatively rejected — the long-lived
+              // refresh token is the last chance (e.g. per-session revoke
+              // from another device keeps the refresh path alive).
+              const token = readRefreshToken();
+              if (token) {
+                try {
+                  refreshed = await rotateViaRefreshTokenOrThrow(token);
+                } catch (err2) {
+                  dead = isAuthoritativeAuthFailure(err2);
+                }
+              } else {
+                dead = true;
+              }
+            }
+          }
           if (refreshed) {
             currentSession = refreshed;
             for (const kind of Object.keys(serverUpdatedAt)) serverUpdatedAt[kind] = 0;
             for (const kind of SYNC_KINDS) dirtyKinds.add(kind as SyncKind);
             lastSyncAt = 0;
             forceReconcile = true;
-          } else {
-            clearCloudSession();
+          } else if (dead) {
+            // Irreversible expiry (revoked everywhere / password changed /
+            // year-old abandoned token): broadcast "expired" (not "logout")
+            // so sibling tabs attempt their own silent rotation first.
+            clearCloudSession({ notify: "expired" });
             window.dispatchEvent(new CustomEvent("osler-cloud-session-expired"));
             stopped = true;
+          } else {
+            // Transient failure — the `finally` block below re-queues the
+            // still-dirty kinds on the exponential backoff path; surface
+            // the offline state so the shell dot doesn't stick on syncing.
+            notifySyncStatus("offline");
           }
         } else if (error.status === 409) {
           // Our per-kind baselines are stale — re-fetch everything before the

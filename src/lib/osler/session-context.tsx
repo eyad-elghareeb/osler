@@ -16,8 +16,9 @@ import {
   pushAllToCloud,
   readCloudSession,
   readStoredCloudSession,
-  refreshCloudSession,
+  restoreCloudSession,
   SESSION_EXPIRED_FLAG,
+  sessionNeedsRefresh,
   startCloudSync,
   logoutCloudAccount,
   subscribeSessionChanges,
@@ -85,8 +86,14 @@ const LOCAL_SESSION_KEY = "osler-local-session";
  *      (sessionStorage first, then the localStorage mirror). Cloud sync
  *      itself is opt-in — it only starts if the user enabled it (see the
  *      sync effect below).
- *   2. If the persisted session is expired, rotate it via /v1/auth/refresh.
- *      Only a truly dead session falls through to the login screen.
+ *   2. If the persisted session is expired, silently re-authenticate via
+ *      `restoreCloudSession()` (short-lived rotation, then the year-long
+ *      refresh token). Only a truly dead credential falls through to the
+ *      login screen — and only with SESSION_EXPIRED_FLAG set so the login
+ *      screen explains why.
+ *   A proactive refresh loop keeps the token alive while the app is open, so
+ *   in practice the login screen is seen again only after an explicit sign-out,
+ *   a password change, or "sign out all devices".
  *   3. Otherwise check for a local-mode guest session (sessionStorage, then
  *      localStorage mirror).
  *   4. Nothing usable → RouteGuard redirects to /login. There is deliberately
@@ -235,20 +242,22 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
           if (!cancelled && cSession) {
             // Trust the stored session for initial render. If it turns out
             // stale/revoked, the cloud sync loop detects the 401 and fires
-            // `osler-cloud-session-expired`, which logs the user out.
+            // `osler-cloud-session-expired`, which degrades to local mode
+            // instead of logging the user out.
             setCloudSession(cSession);
             setUsername(cSession.user.displayName);
             setLoading(false);
             return;
           }
 
-          // 2. Expired/expiring persisted session — try the sliding refresh
-          //    before giving up. A genuinely revoked token (password change,
-          //    sign-out on another device) falls through to /login — we never
-          //    show a "logged in" shell without a usable token.
+          // 2. Expired/expiring persisted session — silent re-authentication:
+          //    short-lived rotation first, then the year-long refresh token.
+          //    Only a genuinely dead credential (revoked everywhere, password
+          //    change, year-old abandoned token) falls through to /login — we
+          //    never show a "logged in" shell without a usable token.
           const stored = readStoredCloudSession();
           if (!cancelled && stored) {
-            const refreshed = await refreshCloudSession(stored);
+            const refreshed = await restoreCloudSession(stored);
             if (!cancelled && refreshed) {
               setCloudSession(refreshed);
               setUsername(refreshed.user.displayName);
@@ -511,22 +520,74 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
     return startCloudSync(cloudSession);
   }, [cloudSession, syncPref]);
 
-  // Cloud session expiration listener (fired by sync on 401).
-  React.useEffect(() => {
-    const expire = () => {
-      try {
-        sessionStorage.setItem(SESSION_EXPIRED_FLAG, "1");
-      } catch {
-        // ignore
-      }
-      setCloudSession(null);
-      setUsername(null);
-      persistLocalUsername(null);
-      router.push("/login");
-    };
-    window.addEventListener("osler-cloud-session-expired", expire);
-    return () => window.removeEventListener("osler-cloud-session-expired", expire);
+  // Live mirror of the session for event handlers (which must not go stale
+  // between renders).
+  const cloudSessionRef = React.useRef<CloudSession | null>(null);
+  cloudSessionRef.current = cloudSession;
+
+  /**
+   * Final sign-out to the login screen. Reached ONLY when the credential is
+   * authoritatively dead everywhere (revoked on all devices, password
+   * changed, year-old abandoned refresh token): every silent rotation path
+   * was already exhausted, so the user must knowingly sign in again. The
+   * login screen reads SESSION_EXPIRED_FLAG to explain why.
+   */
+  const signOutToLogin = React.useCallback(() => {
+    try {
+      sessionStorage.setItem(SESSION_EXPIRED_FLAG, "1");
+    } catch {
+      // ignore
+    }
+    setCloudSession(null);
+    setUsername(null);
+    setPendingConflict(null);
+    setConflictResolving(false);
+    persistLocalUsername(null);
+    router.push("/login");
   }, [router, persistLocalUsername]);
+
+  // Cloud session expiration listener (fired by sync on 401, after it already
+  // exhausted both rotation paths — the session is genuinely dead).
+  React.useEffect(() => {
+    window.addEventListener("osler-cloud-session-expired", signOutToLogin);
+    return () => window.removeEventListener("osler-cloud-session-expired", signOutToLogin);
+  }, [signOutToLogin]);
+
+  // Proactive sliding refresh, independent of the sync loop: sync is opt-in
+  // per device, so a user with sync off would otherwise let their token rot
+  // until the 7-day TTL lapsed and wonder why they were signed out. This
+  // re-authenticates silently whenever the session drifts within the refresh
+  // window — short-lived rotation first, year-long refresh token second — on
+  // a 15-minute cadence plus every foreground return / reconnect.
+  // A failed refresh here is deliberately ignored (it fails identically
+  // offline): the sync 401 path is the only authority that declares a
+  // session dead, so a network blip can never sign anyone out.
+  React.useEffect(() => {
+    if (!cloudSession?.token) return;
+    let cancelled = false;
+    const maybeRefresh = () => {
+      if (cancelled || !navigator.onLine) return;
+      const stored = readStoredCloudSession() ?? cloudSessionRef.current;
+      if (!sessionNeedsRefresh(stored)) return;
+      void restoreCloudSession(stored);
+    };
+    const id = window.setInterval(maybeRefresh, 15 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") maybeRefresh();
+    };
+    const onOnline = () => maybeRefresh();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    // Also check immediately: a tab left open in the background for days
+    // should rotate on return, not wait for the next tick.
+    maybeRefresh();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [cloudSession?.token]);
 
   // Token-rotation listener (fired by `refreshCloudSession`). Keeps the
   // context's session in sync with the rotated credential so the app keeps
@@ -544,15 +605,27 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // Cross-tab session change listener (BroadcastChannel).
-  // When another tab logs out, it clears the shared localStorage session AND
-  // broadcasts `logout`. This tab keeps its per-tab sessionStorage entry so a
-  // logout on another tab doesn't kick this tab out mid-session — the next
-  // sync 401 (revoked server-side) handles this tab's logout.
+  // An explicit logout on another tab broadcasts `logout` and clears this
+  // tab too. A mid-use expiry broadcasts `expired` instead: this tab first
+  // attempts its own silent rotation (its per-tab sessionStorage copy may
+  // still be usable even after the sibling gave up) and only signs out to
+  // /login when that fails too. Local-guest-only tabs ignore it entirely.
   React.useEffect(() => {
     const unsub = subscribeSessionChanges((kind, name) => {
       if (kind === "logout") {
         setCloudSession(null);
         setUsername(null);
+      } else if (kind === "expired") {
+        if (!cloudSessionRef.current) return;
+        const stored = readStoredCloudSession();
+        void restoreCloudSession(stored).then((restored) => {
+          if (restored) {
+            setCloudSession(restored);
+            setUsername(restored.user.displayName);
+          } else if (cloudSessionRef.current) {
+            signOutToLogin();
+          }
+        });
       } else if (kind === "login" && name) {
         // Another tab logged in — the full session was written to the shared
         // localStorage mirror, so this tab's UI can safely surface the name
@@ -561,7 +634,7 @@ export function OslerSessionProvider({ children }: { children: React.ReactNode }
       }
     });
     return unsub;
-  }, [username]);
+  }, [username, signOutToLogin]);
 
   /**
    * Login — pure client-side. No cookie roundtrip, no server dependency.

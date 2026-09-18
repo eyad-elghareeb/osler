@@ -56,6 +56,13 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // session dies out naturally ~GRACE after its last refresh. Kept short: a
 // stolen token that expires must not remain a live credential for weeks.
 const SESSION_REFRESH_GRACE_MS = 48 * 60 * 60 * 1000;
+// Long-lived "remember me" credential: an opaque per-device token minted at
+// every sign-in. The client silently swaps it (with rotation) for a fresh
+// session whenever the session lapses — even months later — so returning
+// users stay signed in like Facebook/Google. Sliding: every rotation issues
+// a new token with a full TTL, so a device in regular use never expires;
+// an abandoned device's token dies a year after its last successful rotation.
+const REFRESH_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
 // MAX_DOCUMENT_BYTES / MAX_STORED_PAYLOAD_BYTES live in ./sync-docs (shared
 // with the segment orchestrator): a segmented kind spreads its merged doc
@@ -1030,6 +1037,71 @@ async function refreshSession(request: Request, env: Env): Promise<{ token: stri
   return issueSession(user, env, request.headers.get("user-agent"));
 }
 
+/**
+ * Mint an opaque long-lived refresh token for the user on this device.
+ * Stored as a sha256 hash (a DB leak must not yield usable credentials);
+ * the raw token is returned once and never stored. `sessionId` links the
+ * token to the session issued alongside it so single-session revocation
+ * ("sign out that device") also kills the device's refresh path.
+ */
+async function issueRefreshToken(env: Env, userId: string, sessionId: string | null, userAgent?: string | null): Promise<{ refreshToken: string; refreshExpiresAt: number }> {
+  const refreshToken = `${id()}${id()}`.replace(/-/g, "");
+  const refreshExpiresAt = now() + REFRESH_TOKEN_TTL_MS;
+  const ua = typeof userAgent === "string" && userAgent.trim() ? userAgent.trim().slice(0, 300) : null;
+  await env.DB.prepare(
+    "INSERT INTO refresh_tokens (id, user_id, token_hash, session_id, expires_at, created_at, revoked_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)"
+  ).bind(id(), userId, await sha256(refreshToken), sessionId, refreshExpiresAt, now(), ua).run();
+  return { refreshToken, refreshExpiresAt };
+}
+
+/**
+ * Sign-in payload: a short-lived session PLUS the device's refresh token.
+ * Every place that creates a session for a device (register, login, Google
+ * consume, password change) returns through here so the client can silently
+ * re-authenticate months later without another password prompt.
+ */
+async function issueSessionWithRefresh(user: UserRow, env: Env, userAgent?: string | null) {
+  const session = await issueSession(user, env, userAgent);
+  const claims = JSON.parse(decoder.decode(unb64url(session.token.split(".")[0]))) as { sid?: string };
+  const refresh = await issueRefreshToken(env, user.id, claims.sid ?? null, userAgent);
+  return { ...session, ...refresh };
+}
+
+/**
+ * Spend a refresh token through POST /v1/auth/refresh-token: validate the
+ * opaque token, revoke it (single-use rotation — a replayed token 401s, so
+ * token theft surfaces as a login prompt on the victim's device instead of
+ * a silent takeover), and return a brand-new session + refresh token pair.
+ * Returns null when the token is unknown, revoked, or past its TTL — the
+ * client must then send the user to the login screen for real.
+ */
+async function rotateViaRefreshToken(refreshToken: string, env: Env, userAgent?: string | null): Promise<Record<string, unknown> | null> {
+  if (typeof refreshToken !== "string" || refreshToken.length < 32 || refreshToken.length > 512) return null;
+  const row = await env.DB.prepare(
+    "SELECT rt.id, rt.user_id, u.* FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id WHERE rt.token_hash = ? AND rt.revoked_at IS NULL AND rt.expires_at > ?"
+  ).bind(await sha256(refreshToken), now()).first<Record<string, unknown> & { id: string; user_id: string }>();
+  if (!row) return null;
+  const { id: tokenId, user_id, ...userFields } = row;
+  await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?").bind(now(), tokenId).run();
+  return issueSessionWithRefresh(userFields as unknown as UserRow, env, userAgent);
+}
+
+/**
+ * Revoke every refresh token of the user EXCEPT the device's own (identified
+ * by the raw token the client presents, if any). Used by "sign out other
+ * devices" and password change: other devices lose their silent re-auth
+ * path and fall back to the login screen, while this device keeps working.
+ */
+async function revokeOtherRefreshTokens(env: Env, userId: string, keepRawToken?: string): Promise<void> {
+  if (typeof keepRawToken === "string" && keepRawToken.length >= 32) {
+    await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND token_hash != ?")
+      .bind(now(), userId, await sha256(keepRawToken)).run();
+  } else {
+    await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+      .bind(now(), userId).run();
+  }
+}
+
 // ─── Sync merging ────────────────────────────────────────────────────────────
 // mergeQbank / mergeFlashcards now live in ./sync-docs (pure, unit-tested).
 // The sync helpers take the USER ROW, not a bare id: users.sync_shard names
@@ -1454,6 +1526,7 @@ async function cleanupStale(env: Env, _log?: Logger): Promise<void> {
       env.DB.prepare("DELETE FROM password_reset_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM email_verify_tokens WHERE expires_at < ?").bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
+      env.DB.prepare("DELETE FROM refresh_tokens WHERE expires_at < ? OR revoked_at IS NOT NULL").bind(now()),
       // Lockout rows past their lock window are dead weight - drop them.
       env.DB.prepare("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < ?").bind(now() - LOGIN_LOCKOUT_MS),
       env.DB.prepare("DELETE FROM admin_audit WHERE created_at < ?").bind(cutoff),
@@ -4589,6 +4662,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(targetId).first<any>();
       if (!user) return json({ error: "User not found" }, 404, origin, log);
       await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), targetId).run();
+      await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), targetId).run();
       await auditLog(env, session.user.id, "revoke_sessions", targetId, { username: user.username }, log);
       return json({ ok: true }, 200, origin, log);
     }
@@ -4638,6 +4712,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
           env.DB.prepare("PRAGMA foreign_keys = ON;"),
           env.DB.prepare("UPDATE content_objects SET created_by = ? WHERE created_by = ?").bind(session.user.id, targetId),
           env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(targetId),
+          env.DB.prepare("DELETE FROM refresh_tokens WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(targetId),
           env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(targetId),
@@ -4666,6 +4741,7 @@ async function handleAdmin(request: Request, env: Env, session: Session, url: UR
       await env.DB.batch([
         env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(hashed.hash, hashed.salt, now(), targetId),
         env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), targetId),
+        env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), targetId),
       ]);
       await auditLog(env, session.user.id, "reset_password", targetId, { username: user.username }, log);
       return json({ ok: true }, 200, origin, log);
@@ -6001,7 +6077,7 @@ export default {
         if (!handoff) return json({ error: "This sign-in link is invalid or expired" }, 400, origin, log);
         await env.DB.prepare("UPDATE auth_handoffs SET used_at = ? WHERE id = ?").bind(now(), handoff.id).run();
         const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(handoff.user_id).first<any>();
-        return json(await issueSession(user, env, request.headers.get("user-agent")), 200, origin, log);
+        return json(await issueSessionWithRefresh(user, env, request.headers.get("user-agent")), 200, origin, log);
       }
 
       // ── Username availability ──
@@ -6037,7 +6113,7 @@ export default {
           const mailed = await issueVerifyEmail(env, userId, email);
           return json({ ok: true, verifySent: mailed }, 201, origin, log);
         }
-        return json(await issueSession(user, env, request.headers.get("user-agent")), 201, origin, log);
+        return json(await issueSessionWithRefresh(user, env, request.headers.get("user-agent")), 201, origin, log);
       }
 
       // ── Login ──
@@ -6080,12 +6156,18 @@ export default {
           await issueVerifyEmail(env, user.id, user.email);
           return json({ error: "Verify your email address to sign in — a fresh link is on its way.", code: "email_unverified" }, 403, origin, log);
         }
-        return json(await issueSession(user, env, request.headers.get("user-agent")), 200, origin, log);
+        return json(await issueSessionWithRefresh(user, env, request.headers.get("user-agent")), 200, origin, log);
       }
 
       // ── Logout ──
       if (request.method === "POST" && url.pathname === "/v1/auth/logout") {
         const session = await requireUser(request, env); if (session) await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?").bind(now(), session.sessionId).run();
+        // This device signs out fully: its refresh token dies too, so a
+        // sibling tab can't silently re-authenticate behind the logout.
+        const logoutBody = await readJson(request).catch(() => ({}));
+        if (typeof logoutBody.refreshToken === "string" && logoutBody.refreshToken.length >= 32) {
+          await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL").bind(now(), await sha256(logoutBody.refreshToken)).run();
+        }
         return json({ ok: true }, 200, origin, log);
       }
 
@@ -6099,6 +6181,19 @@ export default {
         const refreshed = await refreshSession(request, env);
         if (!refreshed) return json({ error: "Session is no longer valid — please sign in again" }, 401, origin, log);
         return json(refreshed, 200, origin, log);
+      }
+
+      // ── Long-lived refresh-token rotation ("remember me") ──
+      // Swaps the device's opaque refresh token for a brand-new session +
+      // refresh token pair. This is what keeps users signed in for months:
+      // the client calls it whenever the short-lived session lapses (boot,
+      // proactive loop, sync 401) without ever bothering the user.
+      if (request.method === "POST" && url.pathname === "/v1/auth/refresh-token") {
+        if (!rateLimit(ip, "auth:refresh")) return json({ error: "Too many attempts" }, 429, origin, log);
+        const body = await readJson(request);
+        const rotated = await rotateViaRefreshToken(String(body.refreshToken || ""), env, request.headers.get("user-agent"));
+        if (!rotated) return json({ error: "Session is no longer valid — please sign in again", code: "refresh_revoked" }, 401, origin, log);
+        return json(rotated, 200, origin, log);
       }
 
       // ── Password reset ──
@@ -6150,6 +6245,7 @@ export default {
           env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(password.hash, password.salt, now(), row.user_id),
           env.DB.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE id = ?").bind(now(), row.id),
           env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), row.user_id),
+          env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").bind(now(), row.user_id),
         ]);
         return json({ ok: true }, 200, origin, log);
       }
@@ -6615,8 +6711,12 @@ export default {
         return json({ sessions }, 200, origin, log);
       }
       if (request.method === "POST" && url.pathname === "/v1/account/sessions/revoke-others") {
+        const revokeBody = await readJson(request).catch(() => ({}));
         await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id != ? AND revoked_at IS NULL")
           .bind(now(), session.user.id, session.sessionId).run();
+        // Other devices lose their silent re-auth path too — otherwise
+        // "sign out all other devices" wouldn't sign them out at all.
+        await revokeOtherRefreshTokens(env, session.user.id, revokeBody.refreshToken);
         return json({ ok: true }, 200, origin, log);
       }
       if (request.method === "DELETE" && url.pathname.startsWith("/v1/account/sessions/")) {
@@ -6625,6 +6725,10 @@ export default {
         const result = await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL")
           .bind(now(), targetId, session.user.id).run();
         if ((result.meta?.changes ?? 0) === 0) return json({ error: "Session not found" }, 404, origin, log);
+        // Kill the refresh token minted alongside that session so the device
+        // can't silently re-authenticate behind the revocation.
+        await env.DB.prepare("UPDATE refresh_tokens SET revoked_at = ? WHERE session_id = ? AND revoked_at IS NULL")
+          .bind(now(), targetId).run();
         return json({ ok: true }, 200, origin, log);
       }
       if (request.method === "PATCH" && url.pathname === "/v1/account") {
@@ -6674,7 +6778,10 @@ export default {
           env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1, updated_at = ? WHERE id = ?").bind(password.hash, password.salt, now(), session.user.id),
           env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND id != ?").bind(now(), session.user.id, session.sessionId),
         ]);
-        return json(await issueSession(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>(), env, request.headers.get("user-agent")), 200, origin, log);
+        // A password change signs out every other device completely — its
+        // silent re-auth path dies here (this device gets a fresh pair below).
+        await revokeOtherRefreshTokens(env, session.user.id, body.refreshToken);
+        return json(await issueSessionWithRefresh(await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.user.id).first<any>(), env, request.headers.get("user-agent")), 200, origin, log);
       }
       if (request.method === "GET" && url.pathname === "/v1/account/export") return json({ account: await accountPayload(env, session.user), progress: await getAllDocuments(env, session.user), exportedAt: now() }, 200, origin, log);
       if (request.method === "DELETE" && url.pathname === "/v1/account") {
@@ -6684,6 +6791,7 @@ export default {
         await env.DB.batch([
           env.DB.prepare("PRAGMA foreign_keys = ON;"),
           env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(session.user.id),
+          env.DB.prepare("DELETE FROM refresh_tokens WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM auth_identities WHERE user_id = ?").bind(session.user.id),
           env.DB.prepare("DELETE FROM auth_handoffs WHERE user_id = ?").bind(session.user.id),
