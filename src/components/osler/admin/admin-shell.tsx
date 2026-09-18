@@ -284,7 +284,7 @@ function AdminShellInner({ children }: AdminShellProps) {
   return (
     <div
       className={cn(
-        "h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden",
+        "osler-shell-height h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden",
         rtl && "rtl",
       )}
     >

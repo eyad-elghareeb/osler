@@ -339,7 +339,7 @@ export function AppShell({ children }: AppShellProps) {
   // so keystrokes never re-render the nav bars or the mounted view.
 
   return (
-    <div className="h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden">
+    <div className="osler-shell-height h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden">
       {/* Top bar — desktop only on mobile. The mobile layout uses the
           scroll-away top bar (logo + search + user menu) plus the 4-tab
           bottom bar, so this header is hidden to reclaim screen space.

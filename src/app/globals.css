@@ -1071,6 +1071,21 @@ button.osler-stat-tile--compact:hover {
   padding-left:   env(safe-area-inset-left,   0px);
   padding-right:  env(safe-area-inset-right,  0px);
 }
+/* Standalone PWA shell height (iPadOS 26 experiment): the installed app
+ * reports 100dvh shorter than its window, leaving a black band below the
+ * shell. Standalone has no collapsing browser chrome, so the large viewport
+ * IS the window — pin the shell to it. Unlayered author CSS, so this wins
+ * over the Tailwind height utilities deterministically (no cascade-order
+ * guessing). Browser tabs are untouched (still dvh). */
+@media (display-mode: standalone) {
+  .osler-shell-height {
+    height: 100vh;
+    /* Window-truthful fallback: if iPadOS 26 also lies about vh, the
+     * WebKit-proprietary fill-available still measures the real window.
+     * Non-WebKit engines drop the unknown declaration and keep 100vh. */
+    height: -webkit-fill-available;
+  }
+}
 
 /* ── Mobile touch / scroll behavior ───────────────────────────────────────
  * Phones have their own overscroll physics (rubber-banding on iOS). For
