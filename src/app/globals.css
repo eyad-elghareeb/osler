@@ -1092,26 +1092,20 @@ button.osler-stat-tile--compact:hover {
     height: -webkit-fill-available;
   }
 }
-/* Standalone PWA top-bleed spacer (iPadOS 26 experiment): the top ~80px of a
- * fullscreen/maximized PWA window smears whatever our chrome paints there
- * (system glass zone over the webview edge — reproduces with zero filters,
- * opaque bars, and trivial DOM like /login, so it is not our rendering).
- * This paints a solid strip that keeps real chrome below the zone. The
- * max() self-retracts wherever env() reports a working inset (notched
- * iPhones keep their native behavior); the --primary variant matches the
- * quiz session bar. TEMPORARY probe — refine or remove with the verdict. */
-@media (display-mode: standalone) {
-  .osler-pwa-top-bleed {
-    /* Live-tunable via --osler-pwa-bleed (debug panel stepper); default is
-     * the smart formula (self-retracts on working insets). */
-    height: var(--osler-pwa-bleed, max(0px, 3.5rem - env(safe-area-inset-top, 0px)));
-    flex-shrink: 0;
-    background: var(--background);
-  }
-  .osler-pwa-top-bleed--primary {
-    background: var(--primary);
-  }
-}
+/* ── iPadOS 26 standalone-PWA top smear (documented Sep 2026, no fix) ─────
+ * WHAT: the top ~1rem of fullscreen/maximized PWA windows smears fixed top
+ * bars. Verified OS-side, not our rendering: reproduces with opaque bars,
+ * zero filters, and trivial DOM (/login), while the identical build renders
+ * sharp in Safari tabs and small windows. iOS 26.1+ ignores the
+ * status-bar-style meta (WebKit bug 301994) and Liquid Glass bleeds from
+ * system UI into web content (SO 79673815); env(top) reports 0px in
+ * fullscreen PWA. No shared CSS fix exists as of Sep 2026.
+ * VERDICT: live with it — a solid bleed spacer was proven to work (16px
+ * clears it) but rejected for the wasted vertical space. Revisit if Apple
+ * patches the regression or env() starts reporting.
+ * Kept hardening that stays: standalone shell pinned to 100vh (bottom
+ * band), single-owner safe-area insets, root 100vh for real cover
+ * engagement, deterministic dvh shell height. */
 
 /* ── Mobile touch / scroll behavior ───────────────────────────────────────
  * Phones have their own overscroll physics (rubber-banding on iOS). For

@@ -290,34 +290,6 @@ export function AppShell({ children }: AppShellProps) {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Standalone PWA: force WebKit to (re)compute safe-area insets on launch.
-  // iOS initializes env() lazily and cold start frequently resolves every
-  // inset to 0 (our iPadOS 26 readings); briefly flipping viewport-fit to
-  // auto and back to cover around two frames forces a recalculation without
-  // requiring device rotation (fullscreen-PWA community pattern for the
-  // WebKit delayed-env-init bug class). No-op everywhere else.
-  React.useEffect(() => {
-    if (typeof document === "undefined") return;
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-    if (!standalone) return;
-    const meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) return;
-    const original = meta.getAttribute("content") ?? "";
-    if (!original.includes("viewport-fit=cover")) return;
-    meta.setAttribute("content", original.replace("viewport-fit=cover", "viewport-fit=auto"));
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => meta.setAttribute("content", original));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      if (meta.getAttribute("content") !== original) meta.setAttribute("content", original);
-    };
-  }, []);
-
   const handleSearchSelect = React.useCallback(async (r: SearchResult) => {
     setSearchOpen(false);
     // The panel owns its query and unmounts on close, so it resets itself.
@@ -368,9 +340,6 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="osler-shell-height h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-background overflow-hidden">
-      {/* Standalone PWA top-bleed probe (see globals.css): solid strip that
-          keeps the header below the iPadOS 26 glass smear zone. */}
-      <div aria-hidden className="osler-pwa-top-bleed" />
       {/* Top bar — desktop only on mobile. The mobile layout uses the
           scroll-away top bar (logo + search + user menu) plus the 4-tab
           bottom bar, so this header is hidden to reclaim screen space.
@@ -397,7 +366,6 @@ export function AppShell({ children }: AppShellProps) {
               onPointerEnter={() => prefetch("dashboard")}
               onTouchStart={() => prefetch("dashboard")}
               onFocus={() => prefetch("dashboard")}
-              data-pwa-debug-tap
               className="flex items-center gap-2.5 shrink-0"
             >
               <OslerMark variant="line" className="size-6 text-primary shrink-0" />
@@ -581,7 +549,6 @@ export function AppShell({ children }: AppShellProps) {
           (library, flashcards, osce, videos, profile, settings, learn) the
           auto-pop fires so the user is reminded of their unfinished session. */}
       {!isDashboard && !isQbank && <AutoResumeSessionDialog />}
-      <PwaDebugOverlay />
     </div>
   );
 }
@@ -780,7 +747,6 @@ function MobileScrollAwayBar({
         {/* Logo + brand name (name hidden on very narrow screens) */}
         <button
           onClick={() => navigate("dashboard")}
-          data-pwa-debug-tap
           className="flex items-center gap-2.5 shrink-0 min-w-0"
         >
           <OslerMark variant="line" className="size-6 text-primary shrink-0" />
@@ -845,176 +811,5 @@ function MobileScrollAwayBar({
         />
       </div>
     </motion.div>
-  );
-}
-
-/**
- * TEMPORARY iPadOS 26 PWA diagnostic, armed via `?pwa-debug=1`. Overlays live
- * viewport + safe-area metrics so standalone presentation bugs can be read off
- * the device without a tethered Mac. English-only by design (dev tool, never
- * user-facing UI). REMOVE once the PWA blur/band investigation closes.
- */
-function PwaDebugOverlay() {
-  const [queryArmed] = React.useState(
-    () =>
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).has("pwa-debug"),
-  );
-  // No-URL fallback: triple-tap either brand logo (both carry
-  // data-pwa-debug-tap) toggles the panel — installed PWAs can't open links.
-  const [tapArmed, setTapArmed] = React.useState(false);
-  const armed = queryArmed || tapArmed;
-  const [dismissed, setDismissed] = React.useState(false);
-  const [tick, setTick] = React.useState(0);
-  const topProbe = React.useRef<HTMLDivElement>(null);
-  const bottomProbe = React.useRef<HTMLDivElement>(null);
-  const leftProbe = React.useRef<HTMLDivElement>(null);
-  const rightProbe = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!armed) return;
-    const refresh = () => setTick((n) => n + 1);
-    window.addEventListener("resize", refresh);
-    window.visualViewport?.addEventListener("resize", refresh);
-    const timer = window.setInterval(refresh, 1500);
-    return () => {
-      window.removeEventListener("resize", refresh);
-      window.visualViewport?.removeEventListener("resize", refresh);
-      window.clearInterval(timer);
-    };
-  }, [armed]);
-
-  // Triple-tap detector for the brand logos (PWA entry point).
-  React.useEffect(() => {
-    let taps = 0;
-    let timer = 0;
-    const onClick = (e: MouseEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (!el?.closest?.("[data-pwa-debug-tap]")) return;
-      taps += 1;
-      window.clearTimeout(timer);
-      if (taps >= 3) {
-        taps = 0;
-        setTapArmed((v) => !v);
-        setDismissed(false);
-        return;
-      }
-      timer = window.setTimeout(() => { taps = 0; }, 700);
-    };
-    document.addEventListener("click", onClick);
-    return () => {
-      document.removeEventListener("click", onClick);
-      window.clearTimeout(timer);
-    };
-  }, []);
-
-  // Live bleed-height bisector: −/+ write --osler-pwa-bleed (px override),
-  // tapping the value clears back to the smart default. Survives in-app
-  // navigation (AppShell persists); a full reload resets to default unless
-  // a value was stored this session.
-  const [bleed, setBleed] = React.useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
-    const stored = window.sessionStorage.getItem("osler-pwa-bleed");
-    const n = stored == null ? NaN : Number.parseInt(stored, 10);
-    return Number.isFinite(n) ? Math.min(120, Math.max(0, n)) : null;
-  });
-  React.useEffect(() => {
-    if (!armed || typeof document === "undefined") return;
-    if (bleed == null) {
-      document.documentElement.style.removeProperty("--osler-pwa-bleed");
-      window.sessionStorage.removeItem("osler-pwa-bleed");
-    } else {
-      document.documentElement.style.setProperty("--osler-pwa-bleed", `${bleed}px`);
-      window.sessionStorage.setItem("osler-pwa-bleed", String(bleed));
-    }
-  }, [armed, bleed]);
-  const stepBleed = (delta: number) =>
-    setBleed((prev) => {
-      const base = prev ?? 56;
-      return Math.min(120, Math.max(0, base + delta));
-    });
-
-  const rows = React.useMemo(() => {
-    if (!armed || typeof window === "undefined") return [] as [string, string][];
-    const vv = window.visualViewport;
-    return [
-      ["host", window.location.host],
-      [
-        "display-mode",
-        window.matchMedia("(display-mode: standalone)").matches ? "standalone" : "browser",
-      ],
-      [
-        "navigator.standalone",
-        String(
-          (window.navigator as unknown as { standalone?: boolean }).standalone ?? "n/a",
-        ),
-      ],
-      ["inner", `${window.innerWidth}x${window.innerHeight}`],
-      [
-        "visualViewport",
-        vv
-          ? `${Math.round(vv.width)}x${Math.round(vv.height)} @${Math.round(vv.offsetTop)},${Math.round(vv.offsetLeft)} scale ${vv.scale}`
-          : "n/a",
-      ],
-      ["doc-client", `${document.documentElement.clientWidth}x${document.documentElement.clientHeight}`],
-      ["dpr", String(window.devicePixelRatio)],
-      ["env-top", `${topProbe.current?.offsetHeight ?? -1}px`],
-      ["env-bottom", `${bottomProbe.current?.offsetHeight ?? -1}px`],
-      ["env-left", `${leftProbe.current?.offsetWidth ?? -1}px`],
-      ["env-right", `${rightProbe.current?.offsetWidth ?? -1}px`],
-      ["data-blur", document.documentElement.dataset.blur ?? "?"],
-      ["ua-tail", window.navigator.userAgent.slice(-72)],
-    ] as [string, string][];
-    // Probes measure the previous commit's DOM; the interval refresh covers it.
-  }, [armed, tick, dismissed]);
-
-  if (!armed || dismissed) return null;
-  return (
-    <>
-      {/* Safe-area probes — zero-size fixed divs sized purely by env(). */}
-      <div ref={topProbe} aria-hidden style={{ position: "fixed", top: 0, left: 0, width: 0, height: "env(safe-area-inset-top, 0px)", pointerEvents: "none" }} />
-      <div ref={bottomProbe} aria-hidden style={{ position: "fixed", bottom: 0, left: 0, width: 0, height: "env(safe-area-inset-bottom, 0px)", pointerEvents: "none" }} />
-      <div ref={leftProbe} aria-hidden style={{ position: "fixed", top: 0, left: 0, height: 0, width: "env(safe-area-inset-left, 0px)", pointerEvents: "none" }} />
-      <div ref={rightProbe} aria-hidden style={{ position: "fixed", top: 0, right: 0, height: 0, width: "env(safe-area-inset-right, 0px)", pointerEvents: "none" }} />
-      <div
-        role="status"
-        style={{
-          position: "fixed", left: 8, right: 8, bottom: 8, zIndex: 100,
-          maxHeight: "46dvh", overflowY: "auto", background: "rgba(0,0,0,0.92)",
-          color: "#fff", borderRadius: 12, padding: "10px 12px",
-          fontFamily: "ui-monospace, monospace", fontSize: 11, lineHeight: 1.7,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <strong>pwa-debug</strong>
-          <button type="button" onClick={() => setDismissed(true)} style={{ padding: "4px 10px", borderRadius: 8, background: "#333", color: "#fff" }}>
-            Hide
-          </button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <span style={{ color: "#8ab4ff" }}>bleed: </span>
-          <button type="button" onClick={() => stepBleed(-4)} style={{ padding: "4px 12px", borderRadius: 8, background: "#333", color: "#fff" }}>
-            −
-          </button>
-          <button
-            type="button"
-            title="Tap to reset to auto"
-            onClick={() => setBleed(null)}
-            style={{ minWidth: 64, textAlign: "center", padding: "4px 8px", borderRadius: 8, background: "#1c2b1c", color: "#fff" }}
-          >
-            {bleed == null ? "auto" : `${bleed}px`}
-          </button>
-          <button type="button" onClick={() => stepBleed(4)} style={{ padding: "4px 12px", borderRadius: 8, background: "#333", color: "#fff" }}>
-            +
-          </button>
-        </div>
-        {rows.map(([k, v]) => (
-          <div key={k}>
-            <span style={{ color: "#8ab4ff" }}>{k}: </span>
-            <span style={{ overflowWrap: "anywhere" }}>{v}</span>
-          </div>
-        ))}
-      </div>
-    </>
   );
 }

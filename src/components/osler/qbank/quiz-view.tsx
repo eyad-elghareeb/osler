@@ -1299,9 +1299,6 @@ export function QuizView({
           height by the top inset and the bottom action bar pads its own
           bottom inset, so a full safe-screen here would double-count both
           (on a notched iPhone h-12 + safe-pt alone leaves ~4px of content). */}
-      {/* Standalone PWA top-bleed probe (see globals.css): solid primary
-          strip that keeps the navy bar below the iPadOS 26 glass smear zone. */}
-      <div aria-hidden className="osler-pwa-top-bleed osler-pwa-top-bleed--primary" />
       {/* ── Top bar (exam-mode navy) ────────────────────────────────────────
           All icon buttons in this bar use size-7 (matching the graduation cap
           button) for visual consistency. The mobile-only navigator button uses
