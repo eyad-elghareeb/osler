@@ -7,6 +7,7 @@ import {
   ArrowDown,
   BookmarkCheck,
   BookOpen,
+  CheckCircle2,
   ClipboardCheck,
   Clock,
   Flag,
@@ -96,7 +97,11 @@ export function SessionStartDialog({
   const { t } = useI18n();
   const isBank = content.type === "bank" || content.type === "written" || content.type === "mixed";
   const chapters = React.useMemo(() => getChapters(content), [content]);
-  const [selectedChapters, setSelectedChapters] = React.useState<string[]>([]);
+  // True selection semantics: empty = nothing selected (start disabled).
+  // Default to every chapter selected so the dialog opens with the full pool.
+  const [selectedChapters, setSelectedChapters] = React.useState<string[]>(() =>
+    getChapters(content).map((c) => c.id),
+  );
 
   React.useEffect(() => {
     if (!open) return;
@@ -106,13 +111,33 @@ export function SessionStartDialog({
 
   const rawQuestions = React.useMemo(() => contentToQuestions(content), [content]);
 
+  // Per-chapter attempt progress — a block is "finished" once every question
+  // in it has a stored attempt record. Keyed by both chapterId and chapter
+  // title so declarations that only match one of the two still resolve.
+  const chapterAttempted = React.useMemo(() => {
+    const map = new Map<string, number>();
+    if (chapters.length === 0) return map;
+    const attemptedQids = new Set(storage.recordsForUids([item.uid]).map((r) => r.qid));
+    for (const q of rawQuestions) {
+      if (!q.id || !attemptedQids.has(q.id)) continue;
+      if (q.chapterId) map.set(q.chapterId, (map.get(q.chapterId) ?? 0) + 1);
+      if (q.chapter) map.set(q.chapter, (map.get(q.chapter) ?? 0) + 1);
+    }
+    return map;
+  }, [rawQuestions, chapters.length, item.uid]);
+
   const activeQuestions = React.useMemo(() => {
-    if (chapters.length === 0 || selectedChapters.length === 0) return rawQuestions;
+    if (chapters.length === 0) return rawQuestions;
+    if (selectedChapters.length === 0) return [];
+    // Full selection → untouched pool (keeps untagged questions available).
+    if (selectedChapters.length === chapters.length) return rawQuestions;
     const set = new Set(selectedChapters);
     return rawQuestions.filter(
       (q) => (q.chapter && set.has(q.chapter)) || (q.chapterId && set.has(q.chapterId)),
     );
   }, [rawQuestions, chapters, selectedChapters]);
+
+  const allChaptersSelected = selectedChapters.length === chapters.length;
 
   const totalQuestions = chapters.length > 0 ? activeQuestions.length : countQuestions(content);
   const passageCount = content.type === "bank" || content.type === "mixed" ? (content as BankContent).passages?.length ?? 0 : 0;
@@ -163,7 +188,10 @@ export function SessionStartDialog({
       questionCount: selectedCount,
       order,
       onlyMode,
-      chapters: chapters.length > 0 ? selectedChapters : undefined,
+      // Only carry a chapter filter for a PARTIAL selection: with every
+      // chapter selected (or none declared) the untouched pool — including
+      // questions outside any chapter — must reach the session builder.
+      chapters: chapters.length > 0 && !allChaptersSelected ? selectedChapters : undefined,
       timerMinutes: mode === "timed" ? Math.max(1, Math.min(720, timerMinutes || 1)) : undefined,
     });
   };
@@ -291,7 +319,8 @@ export function SessionStartDialog({
                           haptic("selection");
                           setSelectedChapters(chapters.map((c) => c.id));
                         }}
-                        className="text-primary hover:underline font-medium"
+                        disabled={allChaptersSelected}
+                        className="text-primary hover:underline font-medium disabled:opacity-40 disabled:hover:no-underline"
                       >
                         {t("qbank.chapters.selectAll")}
                       </button>
@@ -302,7 +331,8 @@ export function SessionStartDialog({
                           haptic("selection");
                           setSelectedChapters([]);
                         }}
-                        className="text-muted-foreground hover:text-foreground font-medium"
+                        disabled={selectedChapters.length === 0}
+                        className="text-muted-foreground hover:text-foreground font-medium disabled:opacity-40 disabled:hover:text-muted-foreground"
                       >
                         {t("qbank.chapters.clear")}
                       </button>
@@ -310,7 +340,9 @@ export function SessionStartDialog({
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto osler-scroll pr-1" data-walkthrough="launch-chapters">
                     {chapters.map((ch) => {
-                      const isSelected = selectedChapters.length === 0 || selectedChapters.includes(ch.id);
+                      const isSelected = selectedChapters.includes(ch.id);
+                      const attempted = chapterAttempted.get(ch.id) ?? 0;
+                      const isFinished = ch.count > 0 && attempted >= ch.count;
                       return (
                         <button
                           type="button"
@@ -344,8 +376,13 @@ export function SessionStartDialog({
                             />
                             <span className="truncate">{ch.title}</span>
                           </div>
-                          <span className="tabular-nums opacity-60 text-[11px] shrink-0 ms-2">
-                            {ch.count}
+                          <span className="flex items-center gap-1 shrink-0 ms-2">
+                            {isFinished && (
+                              <CheckCircle2 className="size-3.5 text-success" aria-label={t("qbank.chapters.finished")} />
+                            )}
+                            <span className={cn("tabular-nums text-[11px]", attempted > 0 && !isFinished && "text-warning")}>
+                              {attempted > 0 ? `${attempted}/${ch.count}` : ch.count}
+                            </span>
                           </span>
                         </button>
                       );
