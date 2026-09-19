@@ -11,6 +11,7 @@ import {
   FileText,
   ClipboardList,
   LifeBuoy,
+  Megaphone,
   ScrollText,
   LogOut,
   Moon,
@@ -260,6 +261,9 @@ function AdminShellInner({ children }: AdminShellProps) {
       : []),
     ...(isAdmin
       ? [{ href: "/admin/tickets", icon: LifeBuoy, labelKey: "admin.nav.tickets", badge: openTicketCount }]
+      : []),
+    ...(isAdmin
+      ? [{ href: "/admin/notifications", icon: Megaphone, labelKey: "admin.nav.notifications" }]
       : []),
   ];
   const systemItems: NavItemDef[] = [
