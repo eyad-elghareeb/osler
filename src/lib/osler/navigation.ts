@@ -83,6 +83,8 @@ export interface OslerRouteParams {
   article?: string;
   video?: string;
   section?: string;
+  thread?: string;
+  ticket?: string;
   /** Force-resume the active Q-Bank session on arrival (adds ?resume=1). */
   resume?: boolean;
 }
@@ -109,8 +111,14 @@ export function routeFor(
       return params?.video ? `/videos?video=${encodeURIComponent(params.video)}` : "/videos";
     case "profile":
       return "/profile";
-    case "settings":
-      return params?.section ? `/settings?section=${encodeURIComponent(params.section)}` : "/settings";
+    case "settings": {
+      const sp = new URLSearchParams();
+      if (params?.section) sp.set("section", params.section);
+      if (params?.thread) sp.set("thread", params.thread);
+      else if (params?.ticket) sp.set("ticket", params.ticket);
+      const qs = sp.toString();
+      return qs ? `/settings?${qs}` : "/settings";
+    }
     default:
       return "/";
   }

@@ -936,6 +936,23 @@ export async function fetchMySupportTickets(): Promise<unknown[] | null> {
   return result.tickets;
 }
 
+/** Fetch status and replies for specific ticket receipts (used for guests or
+ *  verifying locally filed ticket status). Returns null on failure. */
+export async function fetchSupportTicketsStatus(ids: string[]): Promise<unknown[] | null> {
+  if (!ids.length) return [];
+  try {
+    const session = readCloudSession();
+    const result = await request<{ tickets: unknown[] }>(
+      "/v1/support/tickets/status",
+      { method: "POST", body: JSON.stringify({ ids: ids.slice(0, 50) }) },
+      session?.token,
+    );
+    return result.tickets;
+  } catch {
+    return null;
+  }
+}
+
 /* ── Cloud sync ──────────────────────────────────────────────────────────── */
 
 const CLOUD_SYNC_PREF = "cloud-sync-enabled";

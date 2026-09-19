@@ -4373,6 +4373,19 @@ async function handleSupportTicketsMine(env: Env, session: Session, origin: stri
   return json({ tickets: (rows.results || []).map(mapTicketRow) }, 200, origin, log);
 }
 
+async function handleSupportTicketsStatus(request: Request, env: Env, origin: string, log: Logger): Promise<Response> {
+  const body = await readJson(request);
+  const ids = Array.isArray(body?.ids)
+    ? (body.ids as unknown[]).filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 64).slice(0, 50)
+    : [];
+  if (ids.length === 0) return json({ tickets: [] }, 200, origin, log);
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = await env.DB.prepare(
+    `SELECT * FROM support_tickets WHERE id IN (${placeholders})`
+  ).bind(...ids).all();
+  return json({ tickets: (rows.results || []).map(mapTicketRow) }, 200, origin, log);
+}
+
 /* ── Admin handler ── */
 async function handleAdmin(request: Request, env: Env, session: Session, url: URL, origin: string, log: Logger): Promise<Response | null> {
   const path = url.pathname;
@@ -6521,6 +6534,10 @@ export default {
         const session = await requireUser(request, env);
         if (!session) return json({ error: "Authentication required" }, 401, origin, log);
         return handleSupportTicketsMine(env, session, origin, log);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/support/tickets/status") {
+        if (!rateLimit(ip, "ticket")) return json({ error: "Too many requests" }, 429, origin, log);
+        return handleSupportTicketsStatus(request, env, origin, log);
       }
 
       // ── MCP OAuth 2.1 (browser-based client authorization) ──

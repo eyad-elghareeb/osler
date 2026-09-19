@@ -79,6 +79,16 @@ export const en = {
     "notif.contentBody": "Fresh study material was just published.",
     "notif.ticketTitle": "Support ticket updated",
     "notif.ticketBody": "An admin replied or changed the status of your report.",
+    "notif.ticketResolvedTitle": "Support ticket resolved",
+    "notif.ticketResolvedTitleWithSubject": "Ticket resolved: {subject}",
+    "notif.ticketResolvedBody": "Your support ticket has been marked as resolved.",
+    "notif.ticketInProgressTitle": "Support ticket in progress",
+    "notif.ticketInProgressTitleWithSubject": "Ticket in progress: {subject}",
+    "notif.ticketInProgressBody": "Your support ticket is currently being reviewed and worked on.",
+    "notif.ticketReplyTitle": "Reply on support ticket",
+    "notif.ticketReplyTitleWithSubject": "New reply: {subject}",
+    "notif.ticketReplyBody": "An admin replied to your support ticket.",
+    "notif.viewInSettings": "View in Settings",
 
     "learn.title": "Learn",
     "learn.subtitle":

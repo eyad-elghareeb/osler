@@ -19,7 +19,7 @@
 import { getConfig } from "@/lib/osler/config";
 import { currentContentVersion, onContentVersionChange } from "@/lib/osler/content-version";
 import { settings } from "@/lib/osler/storage";
-import { listMyTickets } from "@/lib/osler/support";
+import { listMyTickets, type TicketStatus } from "@/lib/osler/support";
 
 export type NotificationKind = "content" | "ticket" | "announcement";
 
@@ -36,6 +36,10 @@ export interface OslerNotification {
   kind: NotificationKind;
   /** Ticket id for ticket alerts (drives the thread deep-link). */
   ticketId?: string;
+  /** Ticket status for ticket alerts ("open" | "in_progress" | "resolved"). */
+  ticketStatus?: TicketStatus;
+  /** Subject of the ticket. */
+  ticketSubject?: string;
   /** Admin-authored announcement (displayed as-is, lang-picked at render). */
   title?: string;
   titleAr?: string;
@@ -146,6 +150,20 @@ export async function dismissNotification(id: string): Promise<void> {
   await writeItems(items.filter((n) => n.id !== id));
 }
 
+/** Register a newly filed ticket locally so subsequent status changes (to in_progress / resolved)
+ *  are recognized as diffs and immediately trigger notifications. */
+export async function registerTicketForNotifications(
+  ticketId: string,
+  status: TicketStatus = "open",
+  reply: string | null = null,
+): Promise<void> {
+  try {
+    const meta = await readMeta();
+    meta.ticketSnap[ticketId] = { status, reply };
+    await writeMeta(meta);
+  } catch {}
+}
+
 /** Resolve the cloud API base for the public announcements file. Null when
  *  the instance is bundled/local (announcements need a cloud backend). */
 function resolvedApiUrl(): string | null {
@@ -201,26 +219,73 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
   // 2. Ticket updates — status moved or an admin reply landed.
   try {
     const tickets = await listMyTickets();
+    const isFirstRun = Object.keys(meta.ticketSnap).length === 0;
     for (const ticket of tickets) {
       const prev = meta.ticketSnap[ticket.id];
       if (!prev) {
         meta.ticketSnap[ticket.id] = { status: ticket.status, reply: ticket.reply ?? null };
         changed = true;
-        continue;
+        // On very first run, avoid flooding historical notifications
+        if (isFirstRun) continue;
+        // If not first run, but a ticket wasn't in ticketSnap yet, only notify if it has updates beyond initial "open"
+        if (ticket.status === "open" && !ticket.reply) continue;
       }
-      const statusMoved = prev.status !== ticket.status;
-      const freshReply = (ticket.reply ?? null) && ticket.reply !== prev.reply;
+
+      const statusMoved = !prev || prev.status !== ticket.status;
+      const freshReply = !prev ? Boolean(ticket.reply) : Boolean(ticket.reply && ticket.reply !== prev.reply);
+
       if (statusMoved || freshReply) {
-        // threadId lands on TicketContext with the support-chat change;
-        // until then every ticket is its own thread.
         const threadId = (ticket.context as { threadId?: string } | undefined)?.threadId ?? ticket.id;
-        await pushNotification({
+
+        let title: string | undefined;
+        let titleAr: string | undefined;
+        let body: string | undefined = ticket.reply || undefined;
+        let bodyAr: string | undefined = ticket.reply || undefined;
+
+        if (ticket.status === "resolved") {
+          title = ticket.subject ? `Ticket resolved: ${ticket.subject}` : "Support ticket resolved";
+          titleAr = ticket.subject ? `تم حل البلاغ: ${ticket.subject}` : "تم حل بلاغ الدعم";
+          if (!body) {
+            body = "Your support ticket has been marked as resolved.";
+            bodyAr = "تم وضع علامة على بلاغك بأنه تم حله بنجاح.";
+          }
+        } else if (ticket.status === "in_progress") {
+          title = ticket.subject ? `Ticket in progress: ${ticket.subject}` : "Support ticket in progress";
+          titleAr = ticket.subject ? `البلاغ قيد المتابعة: ${ticket.subject}` : "بلاغ الدعم قيد المتابعة";
+          if (!body) {
+            body = "Your support ticket is currently being reviewed and worked on.";
+            bodyAr = "يجري الآن مراجعة بلاغك والعمل عليه من قبل الفريق.";
+          }
+        } else if (freshReply) {
+          title = ticket.subject ? `New reply: ${ticket.subject}` : "Reply on support ticket";
+          titleAr = ticket.subject ? `رد جديد: ${ticket.subject}` : "رد على بلاغ الدعم";
+          if (!body) {
+            body = "An admin replied to your support ticket.";
+            bodyAr = "أرسل أحد المشرفين رداً على بلاغك.";
+          }
+        } else {
+          title = ticket.subject ? `Ticket updated: ${ticket.subject}` : "Support ticket updated";
+          titleAr = ticket.subject ? `تحديث البلاغ: ${ticket.subject}` : "تحديث على بلاغ الدعم";
+          if (!body) {
+            body = "An admin updated your support ticket.";
+            bodyAr = "قام أحد المشرفين بتحديث بلاغك.";
+          }
+        }
+
+        const pushed = await pushNotification({
           id: `ticket-${ticket.id}-${ticket.status}-${(ticket.reply ?? "").length}`,
           kind: "ticket",
           ticketId: ticket.id,
+          ticketStatus: ticket.status,
+          ticketSubject: ticket.subject,
+          title,
+          titleAr,
+          body,
+          bodyAr,
           createdAt: Date.now(),
           link: { section: "support", threadId },
         });
+        if (pushed) changed = true;
       }
       meta.ticketSnap[ticket.id] = { status: ticket.status, reply: ticket.reply ?? null };
       changed = true;

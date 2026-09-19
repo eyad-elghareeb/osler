@@ -79,6 +79,16 @@ export const ar = {
     "notif.contentBody": "تم نشر مواد دراسية جديدة.",
     "notif.ticketTitle": "تحديث على بلاغ الدعم",
     "notif.ticketBody": "رد المشرفون أو غيّروا حالة بلاغك.",
+    "notif.ticketResolvedTitle": "تم حل بلاغ الدعم",
+    "notif.ticketResolvedTitleWithSubject": "تم حل البلاغ: {subject}",
+    "notif.ticketResolvedBody": "تم وضع علامة على بلاغك بأنه تم حله بنجاح.",
+    "notif.ticketInProgressTitle": "بلاغ الدعم قيد المتابعة",
+    "notif.ticketInProgressTitleWithSubject": "البلاغ قيد المتابعة: {subject}",
+    "notif.ticketInProgressBody": "يجري الآن مراجعة بلاغك والعمل عليه من قبل الفريق.",
+    "notif.ticketReplyTitle": "رد على بلاغ الدعم",
+    "notif.ticketReplyTitleWithSubject": "رد جديد: {subject}",
+    "notif.ticketReplyBody": "أرسل أحد المشرفين رداً على بلاغك.",
+    "notif.viewInSettings": "عرض في الإعدادات",
 
     "learn.title": "تعلّم",
     "learn.subtitle":

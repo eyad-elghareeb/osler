@@ -9,7 +9,7 @@
  * up in the admin queue.
  */
 
-import { fetchMySupportTickets, submitSupportTicket } from "@/lib/osler/cloud";
+import { fetchMySupportTickets, fetchSupportTicketsStatus, submitSupportTicket } from "@/lib/osler/cloud";
 import { settings } from "@/lib/osler/storage";
 import type { StringKey } from "@/lib/osler/i18n";
 
@@ -124,13 +124,41 @@ export async function listMyTickets(): Promise<SupportTicket[]> {
     if (Array.isArray(remote)) {
       const byId = new Map(local.map((t) => [t.id, t]));
       for (const r of remote) {
-        const rec = byId.get((r as SupportTicket).id);
-        if (!rec) continue;
-        rec.status = (r as SupportTicket).status ?? rec.status;
-        rec.reply = (r as SupportTicket).reply ?? rec.reply;
-        rec.synced = true;
+        const item = r as SupportTicket;
+        const rec = byId.get(item.id);
+        if (rec) {
+          rec.status = item.status ?? rec.status;
+          rec.reply = item.reply ?? rec.reply;
+          rec.synced = true;
+        } else {
+          local.push({ ...item, synced: true });
+        }
       }
       await writeReceipts(local);
+    } else if (local.length > 0) {
+      // Guest or local tickets: fetch status directly by receipt IDs
+      const statuses = await fetchSupportTicketsStatus(local.map((t) => t.id));
+      if (Array.isArray(statuses) && statuses.length > 0) {
+        const byId = new Map(statuses.map((s) => [(s as SupportTicket).id, s as SupportTicket]));
+        let modified = false;
+        for (const rec of local) {
+          const match = byId.get(rec.id);
+          if (match) {
+            if (match.status && match.status !== rec.status) {
+              rec.status = match.status;
+              modified = true;
+            }
+            if (match.reply !== undefined && match.reply !== rec.reply) {
+              rec.reply = match.reply;
+              modified = true;
+            }
+            rec.synced = true;
+          }
+        }
+        if (modified) {
+          await writeReceipts(local);
+        }
+      }
     }
   } catch {
     // Offline / cloud disabled — local receipts are still shown.
@@ -228,6 +256,10 @@ export async function fileTicket(input: {
   };
   const receipts = await readReceipts();
   await writeReceipts([ticket, ...receipts]);
+  try {
+    const { registerTicketForNotifications } = await import("@/lib/osler/notifications");
+    await registerTicketForNotifications(ticket.id, ticket.status);
+  } catch {}
   try {
     await submitSupportTicket({
       ...ticket,

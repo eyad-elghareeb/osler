@@ -39,6 +39,7 @@
   "exclude": [
     "node_modules",
     "cloudflare/worker",
-    "cloudflare/email-worker"
+    "cloudflare/email-worker",
+    "tauri-admin"
   ]
 }

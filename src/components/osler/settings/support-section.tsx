@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, LifeBuoy, MessageCircleReply, Plus, RefreshCw, Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,9 +41,17 @@ function formatTime(ts: number): string {
 
 export function SupportSettingsSection() {
   const { t } = useI18n();
+  const searchParams = useSearchParams();
   const [tickets, setTickets] = React.useState<SupportTicket[] | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [activeThreadId, setActiveThreadId] = React.useState<string | null>(null);
+
+  const queryThread = searchParams?.get("thread") || searchParams?.get("ticket");
+  React.useEffect(() => {
+    if (queryThread) {
+      setActiveThreadId(queryThread);
+    }
+  }, [queryThread]);
 
   const refresh = React.useCallback(() => {
     listMyTickets().then(setTickets).catch(() => setTickets([]));
@@ -71,7 +80,9 @@ export function SupportSettingsSection() {
     [tickets],
   );
 
-  const activeThread = threads?.find((th) => th.id === activeThreadId) ?? null;
+  const activeThread = threads?.find(
+    (th) => th.id === activeThreadId || th.tickets.some((t) => t.id === activeThreadId)
+  ) ?? null;
 
   return (
     <div className="space-y-6">

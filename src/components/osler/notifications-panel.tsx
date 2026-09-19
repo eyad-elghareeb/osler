@@ -1,7 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { Bell, CheckCheck, LifeBuoy, Megaphone, Sparkles, X } from "lucide-react";
+import { ArrowRight, Bell, CheckCheck, CheckCircle2, Clock, LifeBuoy, Megaphone, Sparkles, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,14 +9,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { useOslerRouter } from "@/lib/osler/navigation";
 import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/osler/ui-primitives";
 import { useNotifications } from "@/hooks/use-notifications";
-import { OPEN_SUPPORT_THREAD_EVENT } from "@/lib/osler/support";
+import { OPEN_SUPPORT_THREAD_EVENT, TICKET_STATUS_I18N } from "@/lib/osler/support";
 import type { OslerNotification } from "@/lib/osler/notifications";
+
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  open: "bg-warning-soft text-warning border-warning/30",
+  in_progress: "bg-info-soft text-info border-info/30",
+  resolved: "bg-success-soft text-success border-success/30",
+};
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -51,8 +57,8 @@ export function NotificationsPanel({
     haptic("light");
     markRead(n.id);
     onOpenChange(false);
-    navigate("settings", { section: "support" });
     const threadId = n.link?.threadId ?? n.ticketId;
+    navigate("settings", { section: "support", thread: threadId });
     if (threadId) {
       // The support section mounts async (code-split chunk) — retry a few
       // times so the deep-link lands even on a cold chunk load.
@@ -141,23 +147,51 @@ function NotificationRow({
   onDismiss: () => void;
 }) {
   const { t } = useI18n();
-  const Icon = KIND_ICON[item.kind];
+  const isTicket = item.kind === "ticket";
+  const isResolved = isTicket && item.ticketStatus === "resolved";
+  const isInProgress = isTicket && item.ticketStatus === "in_progress";
+
+  const Icon = isResolved
+    ? CheckCircle2
+    : isInProgress
+      ? Clock
+      : KIND_ICON[item.kind];
+
+  const iconClass = isResolved
+    ? "bg-success-soft text-success border border-success/20"
+    : isInProgress
+      ? "bg-info-soft text-info border border-info/20"
+      : "bg-muted text-muted-foreground";
+
   const title =
     item.kind === "content"
       ? t("notif.contentTitle")
-      : item.kind === "ticket"
-        ? t("notif.ticketTitle")
-        : lang === "ar" && item.titleAr
-          ? item.titleAr
-          : (item.title ?? "");
+      : lang === "ar" && item.titleAr
+        ? item.titleAr
+        : item.title
+          ? item.title
+          : isTicket
+            ? isResolved
+              ? (item.ticketSubject ? t("notif.ticketResolvedTitleWithSubject", { subject: item.ticketSubject }) : t("notif.ticketResolvedTitle"))
+              : isInProgress
+                ? (item.ticketSubject ? t("notif.ticketInProgressTitleWithSubject", { subject: item.ticketSubject }) : t("notif.ticketInProgressTitle"))
+                : t("notif.ticketTitle")
+            : "";
+
   const body =
     item.kind === "content"
       ? t("notif.contentBody")
-      : item.kind === "ticket"
-        ? t("notif.ticketBody")
-        : lang === "ar" && item.bodyAr
-          ? item.bodyAr
-          : (item.body ?? "");
+      : lang === "ar" && item.bodyAr
+        ? item.bodyAr
+        : item.body
+          ? item.body
+          : isTicket
+            ? isResolved
+              ? t("notif.ticketResolvedBody")
+              : isInProgress
+                ? t("notif.ticketInProgressBody")
+                : t("notif.ticketBody")
+            : "";
 
   return (
     <li
@@ -173,12 +207,17 @@ function NotificationRow({
         className="flex min-w-0 flex-1 items-start gap-3 text-start rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         aria-label={title}
       >
-        <span className="size-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-          <Icon className="size-4 text-muted-foreground" />
+        <span className={cn("size-8 rounded-lg flex items-center justify-center shrink-0", iconClass)}>
+          <Icon className="size-4" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold truncate">{title}</span>
+            {item.ticketStatus && (
+              <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4 font-normal", STATUS_BADGE_CLASS[item.ticketStatus])}>
+                {t(TICKET_STATUS_I18N[item.ticketStatus])}
+              </Badge>
+            )}
             {!item.readAt && <span className="size-2 rounded-full bg-primary shrink-0" aria-hidden />}
           </span>
           {body ? (
@@ -186,8 +225,14 @@ function NotificationRow({
               {body}
             </span>
           ) : null}
-          <span className="mt-1 block text-xs text-muted-foreground tabular-nums">
-            {formatDate(item.createdAt)}
+          <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+            <span>{formatDate(item.createdAt)}</span>
+            {isTicket && (
+              <span className="inline-flex items-center gap-0.5 font-medium text-primary">
+                <span>{t("notif.viewInSettings")}</span>
+                <ArrowRight className="size-3 rtl-flip-x" />
+              </span>
+            )}
           </span>
         </span>
       </button>
