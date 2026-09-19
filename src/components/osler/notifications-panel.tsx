@@ -172,10 +172,16 @@ function NotificationRow({
           ? item.title
           : isTicket
             ? isResolved
-              ? (item.ticketSubject ? t("notif.ticketResolvedTitleWithSubject", { subject: item.ticketSubject }) : t("notif.ticketResolvedTitle"))
+              ? item.ticketSubject
+                ? t("notif.ticketResolvedTitleWithSubject", { subject: item.ticketSubject })
+                : t("notif.ticketResolvedTitle")
               : isInProgress
-                ? (item.ticketSubject ? t("notif.ticketInProgressTitleWithSubject", { subject: item.ticketSubject }) : t("notif.ticketInProgressTitle"))
-                : t("notif.ticketTitle")
+                ? item.ticketSubject
+                  ? t("notif.ticketInProgressTitleWithSubject", { subject: item.ticketSubject })
+                  : t("notif.ticketInProgressTitle")
+                : item.ticketSubject
+                  ? t("notif.ticketUpdatedTitleWithSubject", { subject: item.ticketSubject })
+                  : t("notif.ticketUpdatedTitle")
             : "";
 
   const body =
@@ -190,7 +196,7 @@ function NotificationRow({
               ? t("notif.ticketResolvedBody")
               : isInProgress
                 ? t("notif.ticketInProgressBody")
-                : t("notif.ticketBody")
+                : t("notif.ticketUpdatedBody")
             : "";
 
   return (

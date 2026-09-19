@@ -88,6 +88,9 @@ export const en = {
     "notif.ticketReplyTitle": "Reply on support ticket",
     "notif.ticketReplyTitleWithSubject": "New reply: {subject}",
     "notif.ticketReplyBody": "An admin replied to your support ticket.",
+    "notif.ticketUpdatedTitle": "Support ticket updated",
+    "notif.ticketUpdatedTitleWithSubject": "Ticket updated: {subject}",
+    "notif.ticketUpdatedBody": "An admin updated your support ticket.",
     "notif.viewInSettings": "View in Settings",
 
     "learn.title": "Learn",

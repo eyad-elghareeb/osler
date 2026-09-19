@@ -88,6 +88,9 @@ export const ar = {
     "notif.ticketReplyTitle": "رد على بلاغ الدعم",
     "notif.ticketReplyTitleWithSubject": "رد جديد: {subject}",
     "notif.ticketReplyBody": "أرسل أحد المشرفين رداً على بلاغك.",
+    "notif.ticketUpdatedTitle": "تحديث على بلاغ الدعم",
+    "notif.ticketUpdatedTitleWithSubject": "تحديث البلاغ: {subject}",
+    "notif.ticketUpdatedBody": "قام أحد المشرفين بتحديث بلاغك.",
     "notif.viewInSettings": "عرض في الإعدادات",
 
     "learn.title": "تعلّم",

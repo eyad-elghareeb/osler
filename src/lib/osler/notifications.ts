@@ -264,41 +264,6 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
         const threadId = (ticket.context as { threadId?: string } | undefined)?.threadId ?? ticket.id;
         const notifId = `ticket-${ticket.id}-${ticket.status}-${(ticket.reply ?? "").length}`;
 
-        let title: string | undefined;
-        let titleAr: string | undefined;
-        let body: string | undefined = ticket.reply || undefined;
-        let bodyAr: string | undefined = ticket.reply || undefined;
-
-        if (ticket.status === "resolved") {
-          title = ticket.subject ? `Ticket resolved: ${ticket.subject}` : "Support ticket resolved";
-          titleAr = ticket.subject ? `تم حل البلاغ: ${ticket.subject}` : "تم حل بلاغ الدعم";
-          if (!body) {
-            body = "Your support ticket has been marked as resolved.";
-            bodyAr = "تم وضع علامة على بلاغك بأنه تم حله بنجاح.";
-          }
-        } else if (ticket.status === "in_progress") {
-          title = ticket.subject ? `Ticket in progress: ${ticket.subject}` : "Support ticket in progress";
-          titleAr = ticket.subject ? `البلاغ قيد المتابعة: ${ticket.subject}` : "بلاغ الدعم قيد المتابعة";
-          if (!body) {
-            body = "Your support ticket is currently being reviewed and worked on.";
-            bodyAr = "يجري الآن مراجعة بلاغك والعمل عليه من قبل الفريق.";
-          }
-        } else if (freshReply) {
-          title = ticket.subject ? `New reply: ${ticket.subject}` : "Reply on support ticket";
-          titleAr = ticket.subject ? `رد جديد: ${ticket.subject}` : "رد على بلاغ الدعم";
-          if (!body) {
-            body = "An admin replied to your support ticket.";
-            bodyAr = "أرسل أحد المشرفين رداً على بلاغك.";
-          }
-        } else {
-          title = ticket.subject ? `Ticket updated: ${ticket.subject}` : "Support ticket updated";
-          titleAr = ticket.subject ? `تحديث البلاغ: ${ticket.subject}` : "تحديث على بلاغ الدعم";
-          if (!body) {
-            body = "An admin updated your support ticket.";
-            bodyAr = "قام أحد المشرفين بتحديث بلاغك.";
-          }
-        }
-
         if (!meta.dismissedIds.includes(notifId)) {
           const pushed = await pushNotification({
             id: notifId,
@@ -306,10 +271,7 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
             ticketId: ticket.id,
             ticketStatus: ticket.status,
             ticketSubject: ticket.subject,
-            title,
-            titleAr,
-            body,
-            bodyAr,
+            ...(ticket.reply ? { body: ticket.reply, bodyAr: ticket.reply } : {}),
             createdAt: Date.now(),
             link: { section: "support", threadId },
           });
