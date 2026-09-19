@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, Plus, Trash2, Tags } from "lucide-react";
+import { CheckCircle2, ImagePlus, Plus, Trash2, Tags } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { cn } from "@/lib/utils";
+import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StructuredEditorProps, Field, CollapseContext, questionSnippet, useCollapseState, useFocusScroll, FOCUS_RING_CLASS, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
@@ -127,32 +128,42 @@ export function QuizEditor({ value, onChange, readOnly, r2KeyBase, rawR2Key, hid
   className="min-h-[120px]"
 />
             </Field>
-            <ImageListField
-              label="Stem image(s)"
-              images={q.images}
-              onChange={(v) => patchQuestion(i, { images: v })}
-              readOnly={readOnly}
-              r2KeyBase={r2KeyBase}
-              rawR2Key={rawR2Key}
-              hint="ecg.png, images/ecg.png, or an https:// CDN URL"
-            />
-            <ChoiceImagesEditor
-              choices={q.options ?? q.choices ?? []}
-              choiceImages={q.choiceImages}
-              onChange={(v) => patchQuestion(i, { choiceImages: v })}
-              readOnly={readOnly}
-              r2KeyBase={r2KeyBase}
-              rawR2Key={rawR2Key}
-            />
-            <ImageListField
-              label="Explanation image(s)"
-              images={q.explanationImages}
-              onChange={(v) => patchQuestion(i, { explanationImages: v })}
-              readOnly={readOnly}
-              r2KeyBase={r2KeyBase}
-              rawR2Key={rawR2Key}
-              hint="ecg.png, images/ecg.png, or an https:// CDN URL"
-            />
+            {/* Images section — collapsed by default; auto-expands for
+                questions that already carry images. */}
+            <AnimatedDisclosure
+              label={t("admin.structured.images")}
+              icon={ImagePlus}
+              defaultOpen={!!(q.images || q.choiceImages || q.explanationImages)}
+            >
+              <div className="space-y-3">
+                <ImageListField
+                  label="Stem image(s)"
+                  images={q.images}
+                  onChange={(v) => patchQuestion(i, { images: v })}
+                  readOnly={readOnly}
+                  r2KeyBase={r2KeyBase}
+                  rawR2Key={rawR2Key}
+                  hint="ecg.png, images/ecg.png, or an https:// CDN URL"
+                />
+                <ChoiceImagesEditor
+                  choices={q.options ?? q.choices ?? []}
+                  choiceImages={q.choiceImages}
+                  onChange={(v) => patchQuestion(i, { choiceImages: v })}
+                  readOnly={readOnly}
+                  r2KeyBase={r2KeyBase}
+                  rawR2Key={rawR2Key}
+                />
+                <ImageListField
+                  label="Explanation image(s)"
+                  images={q.explanationImages}
+                  onChange={(v) => patchQuestion(i, { explanationImages: v })}
+                  readOnly={readOnly}
+                  r2KeyBase={r2KeyBase}
+                  rawR2Key={rawR2Key}
+                  hint="ecg.png, images/ecg.png, or an https:// CDN URL"
+                />
+              </div>
+            </AnimatedDisclosure>
             <TagListField
               label="Tags"
               tags={q.tags ?? []}

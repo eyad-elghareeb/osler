@@ -703,6 +703,7 @@ export const ar = {
     "qbank.chapters.selectAll": "تحديد الكل",
     "qbank.chapters.clear": "مسح",
     "qbank.chapters.questions": "{n} أسئلة",
+    "qbank.chapters.finished": "مكتمل",
 
     "flash.home.title": "البطاقات التعليمية",
     "flash.home.subtitle": "رزم بالتكرار المتباعد عبر جميع التخصصات.",
@@ -2504,6 +2505,7 @@ export const ar = {
     "admin.structured.addStation": "إضافة محطة",
     "admin.structured.addVideo": "إضافة فيديو",
     "admin.structured.addImage": "إضافة صورة",
+    "admin.structured.images": "الصور",
     "admin.structured.addRow": "إضافة صف",
     "admin.structured.addTable": "إضافة جدول",
     "admin.structured.uploadImage": "رفع صورة",

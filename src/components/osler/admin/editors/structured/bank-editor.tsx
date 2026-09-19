@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Tags } from "lucide-react";
+import { ImagePlus, Tags } from "lucide-react";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { Input } from "@/components/ui/input";
+import { AnimatedDisclosure } from "@/components/osler/ui-primitives";
 import { StructuredEditorProps, Field, SectionLabel, CollapseContext, questionSnippet, useCollapseState, useFocusScroll, FOCUS_RING_CLASS, ListToolbar, arrayMove, ItemRow, TagListField, ImageListField, MilkdownEditor, ChaptersEditor } from "./shared";
 import { QuizEditor, ChoicesEditor } from "./quiz-editor";
 
@@ -275,24 +276,34 @@ export function BankFlatQuestionsEditor({ value, onChange, readOnly, r2KeyBase, 
   className="min-h-[120px]"
 />
               </Field>
-              <ImageListField
-                label="Stem image(s)"
-                images={q.images}
-                onChange={(v) => patchQuestion(i, { images: v })}
-                readOnly={readOnly}
-                r2KeyBase={r2KeyBase}
-                rawR2Key={rawR2Key}
-                hint="ecg.png, images/ecg.png, or an https:// CDN URL"
-              />
-              <ImageListField
-                label="Explanation image(s)"
-                images={q.explanationImages}
-                onChange={(v) => patchQuestion(i, { explanationImages: v })}
-                readOnly={readOnly}
-                r2KeyBase={r2KeyBase}
-                rawR2Key={rawR2Key}
-                hint="ecg.png, images/ecg.png, or an https:// CDN URL"
-              />
+              {/* Images section — collapsed by default; auto-expands for
+                  questions that already carry images. */}
+              <AnimatedDisclosure
+                label={t("admin.structured.images")}
+                icon={ImagePlus}
+                defaultOpen={!!(q.images || q.choiceImages || q.explanationImages)}
+              >
+                <div className="space-y-3">
+                  <ImageListField
+                    label="Stem image(s)"
+                    images={q.images}
+                    onChange={(v) => patchQuestion(i, { images: v })}
+                    readOnly={readOnly}
+                    r2KeyBase={r2KeyBase}
+                    rawR2Key={rawR2Key}
+                    hint="ecg.png, images/ecg.png, or an https:// CDN URL"
+                  />
+                  <ImageListField
+                    label="Explanation image(s)"
+                    images={q.explanationImages}
+                    onChange={(v) => patchQuestion(i, { explanationImages: v })}
+                    readOnly={readOnly}
+                    r2KeyBase={r2KeyBase}
+                    rawR2Key={rawR2Key}
+                    hint="ecg.png, images/ecg.png, or an https:// CDN URL"
+                  />
+                </div>
+              </AnimatedDisclosure>
               <TagListField
                 label="Tags"
                 tags={q.tags ?? []}

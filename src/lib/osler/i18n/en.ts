@@ -702,6 +702,7 @@ export const en = {
     "qbank.chapters.selectAll": "Select all",
     "qbank.chapters.clear": "Clear",
     "qbank.chapters.questions": "{n} questions",
+    "qbank.chapters.finished": "Finished",
 
     "flash.home.title": "Flashcards",
     "flash.home.subtitle": "Spaced-repetition decks across all specialties.",
@@ -2509,6 +2510,7 @@ export const en = {
     "admin.structured.addStation": "Add station",
     "admin.structured.addVideo": "Add video",
     "admin.structured.addImage": "Add image",
+    "admin.structured.images": "Images",
     "admin.structured.uploadImage": "Upload image",
     "admin.structured.dropOrPasteHint": "Tip: drag & drop or paste an image here",
     "admin.structured.basicFrontBack": "Basic (front/back)",
