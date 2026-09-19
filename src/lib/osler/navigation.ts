@@ -80,6 +80,8 @@ export function useCurrentView(): OslerView {
  */
 export interface OslerRouteParams {
   uid?: string;
+  /** QBank folder node uid — deep-links straight into a subfolder view. */
+  folder?: string;
   article?: string;
   video?: string;
   section?: string;
@@ -100,9 +102,13 @@ export function routeFor(
       return "/learn";
     case "library":
       return params?.article ? `/library?article=${encodeURIComponent(params.article)}` : "/library";
-    case "qbank":
-      if (params?.uid) return `/qbank?uid=${encodeURIComponent(params.uid)}${params.resume ? "&resume=1" : ""}`;
-      return params?.resume ? "/qbank?resume=1" : "/qbank";
+    case "qbank": {
+      const q = new URLSearchParams();
+      if (params?.uid) q.set("uid", params.uid);
+      if (params?.folder) q.set("folder", params.folder);
+      if (params?.resume) q.set("resume", "1");
+      return q.size > 0 ? `/qbank?${q.toString()}` : "/qbank";
+    }
     case "flashcards":
       return params?.uid ? `/flashcards?uid=${encodeURIComponent(params.uid)}` : "/flashcards";
     case "osce":

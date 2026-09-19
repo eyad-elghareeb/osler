@@ -482,3 +482,25 @@ export function saveSession(s: SessionData) {
   };
   sessions.save(saved);
 }
+/* ── Last-visited QBank folder (session-scoped) ─────────────────────────
+ * ContentTab persists the innermost folder uid it is showing; the studio
+ * reads it on exit so "back to QBank" lands in the same folder the user
+ * was browsing instead of resetting to the root grid. Session storage
+ * only — reopening the app starts fresh at the root.
+ */
+const LAST_FOLDER_KEY = "osler_qbank_last_folder";
+
+export function getLastFolderUid(): string | null {
+  try {
+    return sessionStorage.getItem(LAST_FOLDER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLastFolderUid(uid: string | null): void {
+  try {
+    if (uid) sessionStorage.setItem(LAST_FOLDER_KEY, uid);
+    else sessionStorage.removeItem(LAST_FOLDER_KEY);
+  } catch {}
+}

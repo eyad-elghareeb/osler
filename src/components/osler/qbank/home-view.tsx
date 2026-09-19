@@ -33,6 +33,7 @@ export function HomeView({
   onClearPendingCreateTestSource,
   onStartCustomSession,
   onResumeActive,
+  folderUid,
 }: {
   testMode: TestMode;
   onTestModeChange: (m: TestMode) => void;
@@ -69,6 +70,8 @@ export function HomeView({
   ) => void;
   /** Resume the active in-progress session in place (Tracker / in-session). */
   onResumeActive?: () => boolean;
+  /** Deep-linked folder (?folder=<uid>) — passed straight to the Content tab. */
+  folderUid?: string | null;
 }) {
   const [data, setData] = React.useState<{
     items: PackEntry[];
@@ -270,6 +273,7 @@ export function HomeView({
                     onLoadPack={loadPack}
                     onOpenPack={onOpenPack}
                     onPickForCreateTest={onPickForCreateTest}
+                    folderUid={folderUid}
                   />
                 </div>
               )}

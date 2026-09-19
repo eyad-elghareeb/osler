@@ -11,7 +11,7 @@ import { haptic } from "@/lib/osler/native";
 import { useI18n } from "@/components/osler/i18n-provider";
 import { NavigationStack } from "@/components/osler/navigation-stack";
 import { EmptyState, ComingSoonState, HubSkeleton, MetricBar } from "@/components/osler/ui-primitives";
-import { PackEntry, ENGINE_ICONS, countQuestions } from "./shared";
+import { PackEntry, ENGINE_ICONS, countQuestions, setLastFolderUid } from "./shared";
 import { routeFor } from "@/lib/osler/navigation";
 import { ctxLinkAttrs } from "@/lib/osler/deep-link";
 
@@ -187,17 +187,35 @@ export const PackCard = React.memo(function PackCard({
   );
 });
 
+/**
+ * Walk the tree and return the ancestor chain (root → target) for a node uid.
+ * Returns null when no node matches.
+ */
+function findFolderChain(nodes: ContentTreeNode[], uid: string, trail: ContentTreeNode[] = []): ContentTreeNode[] | null {
+  for (const node of nodes) {
+    if (node.uid === uid) return [...trail, node];
+    if (node.items?.length) {
+      const found = findFolderChain(node.items, uid, [...trail, node]);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export function ContentTab({
   data,
   onLoadPack,
   onOpenPack,
   onPickForCreateTest,
+  folderUid,
 }: {
   data: { items: PackEntry[]; trees: Record<string, ContentTreeNode[]> } | null;
   onLoadPack: (node: ContentTreeNode) => Promise<AnyContent | null>;
   onOpenPack?: (item: ContentTreeNode) => void;
   /** P1-2: leaf pack click hands off to Create Test instead of starting a quiz. */
   onPickForCreateTest?: (node: ContentTreeNode) => void;
+  /** Deep-link target (?folder=<uid>) — opens the subfolder view at this node. */
+  folderUid?: string | null;
 }) {
   const { t, rtl, contentFilter } = useI18n();
   const [selectedFolders, setSelectedFolders] = React.useState<ContentTreeNode[]>([]);
@@ -219,6 +237,22 @@ export function ContentTab({
     // Try quiz first, then bank, then written — they all share the same tree.
     return data.trees.quiz ?? data.trees.bank ?? data.trees.written ?? [];
   }, [data]);
+
+  // Deep link: resolve the folder uid into its ancestor chain once the tree
+  // is available. A leaf-pack uid opens its parent folder instead.
+  React.useEffect(() => {
+    if (!folderUid || qbankTree.length === 0) return;
+    if (selectedFolders[selectedFolders.length - 1]?.uid === folderUid) return;
+    const chain = findFolderChain(qbankTree, folderUid);
+    if (!chain) return;
+    const last = chain[chain.length - 1];
+    setSelectedFolders(last.items?.length ? chain : chain.slice(0, -1));
+  }, [folderUid, qbankTree]);
+
+  // Persist the innermost folder so exiting a session can land back here.
+  React.useEffect(() => {
+    setLastFolderUid(selectedFolders[selectedFolders.length - 1]?.uid ?? null);
+  }, [selectedFolders]);
 
   // Apply content-language filter to root nodes
   const filteredRootTree = React.useMemo(() => {

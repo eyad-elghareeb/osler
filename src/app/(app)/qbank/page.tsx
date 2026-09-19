@@ -18,6 +18,7 @@ import { QBankStudio } from "@/components/osler/qbank-studio";
  *   - `?resume=1`            force-resume the active in-progress session.
  *   - `?review=<sessionId>`  open a saved session in read-only review mode.
  *   - `?retake=<sessionId>`  restart a saved session with only its wrong questions.
+ *   - `?folder=<node-uid>`   open the Content tab inside the given folder.
  */
 export default function QBankPage() {
   return (
@@ -30,12 +31,14 @@ export default function QBankPage() {
 function QBankView() {
   const params = useSearchParams();
   const uid = params.get("uid");
+  const folder = params.get("folder");
   const resume = params.get("resume") === "1";
   const reviewSessionId = params.get("review");
   const retakeSessionId = params.get("retake");
   return (
     <QBankStudio
       uid={uid ?? null}
+      folder={folder}
       forceResume={resume}
       reviewSessionId={reviewSessionId ?? null}
       retakeSessionId={retakeSessionId ?? null}

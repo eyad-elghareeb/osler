@@ -36,7 +36,7 @@ import { useQuestionStats } from "@/hooks/use-question-stats";
 import { HomeView } from "./qbank/home-view";
 import { ResultsView } from "./qbank/results-view";
 import { QuizView } from "./qbank/quiz-view";
-import { nodeFromPack, QuizMode, TestMode, HomeTab, SessionData, SessionQuestion, contentToQuestions, archiveDisplacedActive, saveSession } from "./qbank/shared";
+import { nodeFromPack, QuizMode, TestMode, HomeTab, SessionData, SessionQuestion, contentToQuestions, archiveDisplacedActive, saveSession, getLastFolderUid } from "./qbank/shared";
 
 
 interface QBankStudioProps {
@@ -52,6 +52,9 @@ interface QBankStudioProps {
    *  the same activeItem/activeContent machinery instead of the page swapping
    *  component types (which unmounted the whole hub and reloaded its data). */
   uid?: string | null;
+  /** Deep-linked folder node (?folder=<uid>) — opens the Content tab inside
+   *  that folder so "back from a session" restores the exact browsing spot. */
+  folder?: string | null;
   /** Arrived via /qbank?review=SESSION_ID — open the saved session in
    *  read-only review mode. The session's questionRefs are rebuilt into a
    *  PoolQuestion[] and pushed through `startCustomSession({ isReview: true })`. */
@@ -74,12 +77,13 @@ export function QBankStudio({
   onOpenPack: propOnOpenPack,
   forceResume = false,
   uid,
+  folder,
   reviewSessionId,
   retakeSessionId,
 }: QBankStudioProps = {}) {
   const { navigate } = useOslerRouter();
   const router = useRouter();
-  const onExit = propOnExit || (() => navigate("qbank"));
+  const onExit = propOnExit || (() => navigate("qbank", { folder: getLastFolderUid() ?? undefined }));
   const onOpenPack = propOnOpenPack || ((item: ContentTreeNode) => navigate("qbank", { uid: item.uid }));
 
   // Self-load a pack by uid so the studio never unmounts when the URL gains
@@ -162,6 +166,12 @@ export function QBankStudio({
     } catch {}
     return "content";
   });
+  // A deep-linked folder (?folder=<uid>) always opens on the Content tab —
+  // the folder lives there, regardless of any stored tab handoff.
+  React.useEffect(() => {
+    if (folder) setHomeTab("content");
+  }, [folder]);
+
   const [startDialogOpen, setStartDialogOpen] = React.useState(false);
   const [startPromptUid, setStartPromptUid] = React.useState<string | null>(null);
   // Default to "all" (not "new") so a finished pack can always be reopened
@@ -929,13 +939,16 @@ export function QBankStudio({
     // see `!session && mode === "home"` as true again, and reopen the
     // dialog it was just asked to close. The effect's own `!activeItem`
     // branch clears startPromptUid once the navigation has truly landed.
-    // Always land on the bare /qbank URL: deep-link params (?uid / ?resume /
-    // ?review / ?retake) must not survive an exit, or the next mount replays
-    // them. Sessions resumed via ?resume=1 (and custom sessions) have no
-    // activeItem, which previously skipped the navigation entirely and left
-    // the stale query in the address bar.
+    // Always land on a bare home URL: session deep-link params (?uid /
+    // ?resume / ?review / ?retake) must not survive an exit, or the next
+    // mount replays them. The last-browsed folder IS carried forward
+    // (?folder=<uid>) so the user re-enters the exact folder they were
+    // studying from instead of restarting at the root grid. Sessions
+    // resumed via ?resume=1 (and custom sessions) have no activeItem,
+    // which previously skipped the navigation entirely and left the
+    // stale query in the address bar.
     if (activeItem || (typeof window !== "undefined" && !!window.location.search)) {
-      navigate("qbank");
+      navigate("qbank", { folder: getLastFolderUid() ?? undefined });
     }
   }, [activeItem?.uid, navigate]);
 
@@ -1488,6 +1501,7 @@ export function QBankStudio({
         onClearPendingCreateTestSource={() => setPendingCreateTestSourceUid(null)}
         onStartCustomSession={startCustomSession}
         onResumeActive={resumeActiveSession}
+        folderUid={folder}
       />
       {startDialogOpen && activeItem && activeContent && (activeContent.type === "quiz" || activeContent.type === "bank" || activeContent.type === "written") && (
         <SessionStartDialog
