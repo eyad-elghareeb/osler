@@ -547,6 +547,19 @@
 .osler-page-header--inline {
   @apply flex items-center gap-3 mb-6 md:mb-8;
 }
+/* Inline header actions row — action cluster trailing the title block. */
+.osler-page-header__actions {
+  @apply flex items-center gap-2 shrink-0;
+}
+/* Opt-in (`stackActions`): on phones the action row drops to its own line
+ * beneath the title and wraps internally, so a wide button set neither
+ * squeezes the heading nor overflows the viewport. Back inline from 640px. */
+.osler-page-header--inline--stack {
+  @apply flex-wrap;
+}
+.osler-page-header__actions--stack {
+  @apply basis-full flex-wrap sm:basis-auto;
+}
 .osler-page-header--inline .osler-page-header__title {
   @apply text-xl md:text-2xl mb-0;
 }

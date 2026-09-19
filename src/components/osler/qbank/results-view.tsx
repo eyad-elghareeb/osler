@@ -252,6 +252,7 @@ export function ResultsView({
         <PageHeader
           inline
           inlineIcon={Trophy}
+          stackActions
           title={t("qbank.home.testResults")}
           subtitle={`${item.title} · ${t("qbank.home.questions", { n: total })} · ${
             session.mode === "timed" ? t("qbank.session.timedMode") : t("qbank.session.tutorMode")

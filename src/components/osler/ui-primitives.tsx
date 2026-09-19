@@ -76,6 +76,9 @@ interface PageHeaderProps {
   inlineIconColor?: string;
   /** Optional right-aligned actions (buttons, badges, etc.). */
   actions?: React.ReactNode;
+  /** Inline variant only: on phones (<640px) the actions drop to their own row
+   *  below the title so a wide button set never squeezes the heading. */
+  stackActions?: boolean;
   className?: string;
 }
 
@@ -88,11 +91,18 @@ export function PageHeader({
   inlineIcon: InlineIcon,
   inlineIconColor,
   actions,
+  stackActions = false,
   className,
 }: PageHeaderProps) {
   if (inline) {
     return (
-      <div className={cn("osler-page-header--inline", className)}>
+      <div
+        className={cn(
+          "osler-page-header--inline",
+          stackActions && "osler-page-header--inline--stack",
+          className
+        )}
+      >
         {InlineIcon && (
           <div
             className="size-10 rounded-xl flex items-center justify-center shrink-0 border"
@@ -115,7 +125,16 @@ export function PageHeader({
           <h1 className="osler-page-header__title">{title}</h1>
           {subtitle && <p className="osler-page-header__subtitle">{subtitle}</p>}
         </div>
-        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+        {actions && (
+          <div
+            className={cn(
+              "osler-page-header__actions",
+              stackActions && "osler-page-header__actions--stack"
+            )}
+          >
+            {actions}
+          </div>
+        )}
       </div>
     );
   }
