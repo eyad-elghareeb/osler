@@ -16,6 +16,7 @@ import { haptic } from "@/lib/osler/native";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/osler/ui-primitives";
 import { useNotifications } from "@/hooks/use-notifications";
+import { OPEN_SUPPORT_THREAD_EVENT } from "@/lib/osler/support";
 import type { OslerNotification } from "@/lib/osler/notifications";
 
 function formatDate(ts: number): string {
@@ -58,7 +59,7 @@ export function NotificationsPanel({
       let attempts = 0;
       const timer = window.setInterval(() => {
         attempts += 1;
-        window.dispatchEvent(new CustomEvent("osler-open-support-thread", { detail: { threadId } }));
+        window.dispatchEvent(new CustomEvent(OPEN_SUPPORT_THREAD_EVENT, { detail: { threadId } }));
         if (attempts >= 10) window.clearInterval(timer);
       }, 300);
     }

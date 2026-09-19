@@ -162,6 +162,9 @@ export interface AdminSupportTicket {
     selectedAnswer?: string;
     articleTitle?: string;
     articleFile?: string;
+    /** Follow-up messages carry the root ticket's id — groups the
+     *  back-and-forth into one chat thread in the triage dialog. */
+    threadId?: string;
     question?: {
       stem: string;
       choices?: string[];

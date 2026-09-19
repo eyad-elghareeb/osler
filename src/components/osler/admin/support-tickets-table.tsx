@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -102,8 +102,10 @@ function ReportedQuestion({ question }: {
 }
 
 /** Compact list row — opens the triage modal on click. */
-function TicketRow({ ticket, onOpen }: {
+function TicketRow({ ticket, threadCount, onOpen }: {
   ticket: AdminSupportTicket;
+  /** Same-page messages sharing this ticket's thread (root + follow-ups). */
+  threadCount: number;
   onOpen: (ticket: AdminSupportTicket) => void;
 }) {
   const { t } = useI18n();
@@ -119,7 +121,14 @@ function TicketRow({ ticket, onOpen }: {
         <SourceIcon className="size-3.5 text-muted-foreground" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium truncate">{ticket.subject}</span>
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-medium truncate">{ticket.subject}</span>
+          {threadCount > 1 && (
+            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+              {t("support.chat.threadCount", { n: String(threadCount) })}
+            </span>
+          )}
+        </span>
         <span className="block text-xs text-muted-foreground truncate">
           {ticket.username || t("support.contextGuest")} · {formatDate(ticket.createdAt)} · {ticket.source} · {t(TICKET_CATEGORY_I18N[ticket.category])}
         </span>
@@ -133,10 +142,12 @@ function TicketRow({ ticket, onOpen }: {
   );
 }
 
-/** Full triage surface: message + context + attached question, with status,
- *  reply and delete controls. */
-function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
+/** Full triage surface: message + thread conversation + context + attached
+ *  question, with status, reply and delete controls. */
+function TicketDetailDialog({ ticket, thread, onClose, onUpdated, onDeleted }: {
   ticket: AdminSupportTicket;
+  /** Same-page tickets sharing this ticket's thread (root + follow-ups). */
+  thread: AdminSupportTicket[];
   onClose: () => void;
   onUpdated: (t: AdminSupportTicket) => void;
   onDeleted: (id: string) => void;
@@ -353,6 +364,31 @@ function TicketDetailDialog({ ticket, onClose, onUpdated, onDeleted }: {
 
           <p className="text-sm whitespace-pre-wrap break-words">{ticket.message}</p>
 
+          {/* Back-and-forth: other messages in this thread (follow-ups file
+              as linked tickets, so the whole conversation reads here). */}
+          {thread.filter((m) => m.id !== ticket.id).length > 0 && (
+            <div className="grid gap-2 rounded-lg border border-border bg-muted/40 p-3">
+              <div className="text-xs font-semibold text-muted-foreground">{t("support.chat.conversation")}</div>
+              {thread
+                .filter((m) => m.id !== ticket.id)
+                .sort((a, b) => a.createdAt - b.createdAt)
+                .map((m) => (
+                  <div key={m.id} className="grid gap-1 border-t border-border pt-2 first:border-t-0 first:pt-0">
+                    <div className="text-xs text-muted-foreground tabular-nums">
+                      {m.username || t("support.contextGuest")} · {formatDate(m.createdAt)}
+                    </div>
+                    <p className="text-sm whitespace-pre-wrap break-words">{m.message}</p>
+                    {m.reply && (
+                      <div className="rounded-md border border-primary/20 bg-primary-soft p-2">
+                        <div className="text-[11px] font-semibold text-primary mb-0.5">{t("support.replyLabel")}</div>
+                        <p className="text-sm whitespace-pre-wrap break-words">{m.reply}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+
           {ctxEntries.some(([, v]) => v) && (
             <div className="rounded-lg border border-border bg-muted/40 p-3 grid gap-1">
               {ctxEntries.filter(([, v]) => v).map(([label, v]) => (
@@ -469,6 +505,19 @@ export function SupportTicketsTable() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const activeTicket = tickets.find((tk) => tk.id === activeTicketId) ?? null;
+  // Same-page thread grouping (follow-ups carry context.threadId; roots are
+  // their own thread). Cross-page mates aren't visible here by design — the
+  // dialog labels what it shows as the loaded conversation.
+  const threadKeyOf = (tk: AdminSupportTicket) => tk.context?.threadId ?? tk.id;
+  const threadCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const tk of tickets) m.set(threadKeyOf(tk), (m.get(threadKeyOf(tk)) ?? 0) + 1);
+    return m;
+  }, [tickets]);
+  const activeThread = useMemo(
+    () => (activeTicket ? tickets.filter((tk) => threadKeyOf(tk) === threadKeyOf(activeTicket)) : []),
+    [tickets, activeTicket],
+  );
 
   return (
     <div className="space-y-4">
@@ -502,7 +551,7 @@ export function SupportTicketsTable() {
       ) : (
         <div className="space-y-2">
           {tickets.map((tk) => (
-            <TicketRow key={tk.id} ticket={tk} onOpen={(tk2) => setActiveTicketId(tk2.id)} />
+            <TicketRow key={tk.id} ticket={tk} threadCount={threadCounts.get(threadKeyOf(tk)) ?? 1} onOpen={(tk2) => setActiveTicketId(tk2.id)} />
           ))}
         </div>
       )}
@@ -525,6 +574,7 @@ export function SupportTicketsTable() {
         <TicketDetailDialog
           key={activeTicket.id}
           ticket={activeTicket}
+          thread={activeThread}
           onClose={() => setActiveTicketId(null)}
           onUpdated={(u) => setTickets((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
           onDeleted={(id) => {

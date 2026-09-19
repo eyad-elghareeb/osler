@@ -39,6 +39,10 @@ export interface TicketContext {
   articleTitle?: string;
   articleFile?: string;
   question?: TicketQuestionContext;
+  /** Follow-up messages carry the root ticket's id here so the whole
+   *  back-and-forth groups into one chat thread (no worker changes — each
+   *  message is still its own ticket row server-side). */
+  threadId?: string;
 }
 
 export interface SupportTicket {
@@ -132,6 +136,75 @@ export async function listMyTickets(): Promise<SupportTicket[]> {
     // Offline / cloud disabled — local receipts are still shown.
   }
   return [...local].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Deep-link event fired by the notification center (detail: { threadId })
+ *  so Settings → Support opens the right chat thread. The section mounts
+ *  async (code-split), so senders retry delivery a few times. */
+export const OPEN_SUPPORT_THREAD_EVENT = "osler-open-support-thread";
+
+export function openSupportThread(threadId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(OPEN_SUPPORT_THREAD_EVENT, { detail: { threadId } }));
+}
+
+/** Root thread id for a ticket — follow-ups point at the first report. */
+export function ticketThreadId(ticket: Pick<SupportTicket, "id" | "context">): string {
+  return ticket.context?.threadId ?? ticket.id;
+}
+
+export interface TicketThread {
+  id: string;
+  subject: string;
+  category: TicketCategory;
+  source: TicketSource;
+  /** Status of the latest message in the thread. */
+  status: TicketStatus;
+  /** Every message oldest-first (root report + follow-ups). */
+  tickets: SupportTicket[];
+  latestAt: number;
+  hasReply: boolean;
+}
+
+/** Group receipts into chat threads (newest activity first). */
+export function groupTicketsIntoThreads(tickets: SupportTicket[]): TicketThread[] {
+  const byId = new Map<string, SupportTicket[]>();
+  for (const t of tickets) {
+    const key = ticketThreadId(t);
+    const list = byId.get(key) ?? [];
+    list.push(t);
+    byId.set(key, list);
+  }
+  const threads: TicketThread[] = [];
+  for (const [id, list] of byId) {
+    const sorted = [...list].sort((a, b) => a.createdAt - b.createdAt);
+    const root = sorted[0];
+    const latest = sorted[sorted.length - 1];
+    threads.push({
+      id,
+      subject: root.subject.replace(/^Re:\s*/i, ""),
+      category: root.category,
+      source: root.source,
+      status: latest.status,
+      tickets: sorted,
+      latestAt: Math.max(...sorted.map((t) => t.createdAt)),
+      hasReply: sorted.some((t) => !!t.reply),
+    });
+  }
+  return threads.sort((a, b) => b.latestAt - a.latestAt);
+}
+
+/** Send a chat follow-up inside a thread: files a linked ticket carrying the
+ *  root context (pack/article pointers stay attached for the admins). */
+export async function fileFollowUp(thread: TicketThread, message: string): Promise<SupportTicket> {
+  const root = thread.tickets[0];
+  return fileTicket({
+    source: root.source,
+    category: root.category,
+    subject: `Re: ${thread.subject}`.slice(0, TICKET_SUBJECT_MAX),
+    message,
+    context: { ...root.context, threadId: thread.id },
+  });
 }
 
 /** File a new report: persist a local receipt immediately, then attempt
