@@ -10,6 +10,7 @@ import {
   Moon,
   LogOut,
   User as UserIcon,
+  Bell,
   ChevronDown,
   Search,
   Settings as SettingsIcon,
@@ -132,6 +133,7 @@ function directionFor(from: OslerView, to: OslerView): ViewTransitionDirection {
 }
 
 import { useOslerSession } from "@/lib/osler/session-context";
+import { useNotifications } from "@/hooks/use-notifications";
 import { useCurrentView, useOslerRouter } from "@/lib/osler/navigation";
 import { startContentVersionSync, refreshContentVersion } from "@/lib/osler/content-version";
 import { AutoResumeSessionDialog, warmLazySurfaces } from "./lazy-tools";
@@ -139,6 +141,11 @@ import { isConstrainedDevice } from "@/lib/osler/performance";
 
 const GlobalSearchPanel = dynamic(
   () => import("./global-search-panel").then((module) => ({ default: module.GlobalSearchPanel })),
+  { ssr: false, loading: () => null },
+);
+
+const NotificationsPanel = dynamic(
+  () => import("./notifications-panel").then((module) => ({ default: module.NotificationsPanel })),
   { ssr: false, loading: () => null },
 );
 
@@ -615,6 +622,8 @@ function UserMenu({
 }) {
   const { t } = useI18n();
   const { navigate } = useOslerRouter();
+  const { unread } = useNotifications();
+  const [notifOpen, setNotifOpen] = React.useState(false);
   // Avatar initials are visible text — fold them into the accessible name so
   // voice control ("click Profile P E") matches what sighted users see.
   const initials = (cloudSession?.user.displayName || username || "U").slice(0, 2).toUpperCase();
@@ -622,12 +631,20 @@ function UserMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={`${t("nav.profile")} (${initials})`}
-          className="flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0"
+          aria-label={`${t("nav.profile")} (${initials})${unread > 0 ? ` — ${unread} ${t("nav.notifications")}` : ""}`}
+          className="relative flex items-center gap-2 h-9 px-2 rounded-md hover:bg-muted/60 transition-colors shrink-0"
         >
           <div aria-hidden="true" className="size-7 rounded-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center text-xs font-semibold text-primary-foreground">
             {initials}
           </div>
+          {unread > 0 && (
+            <span
+              aria-hidden="true"
+              className="absolute top-0 end-0 min-w-5 h-5 px-1 rounded-full bg-destructive text-white text-[11px] font-semibold tabular-nums flex items-center justify-center"
+            >
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
           {!hideChevron && <ChevronDown className="size-3.5 text-muted-foreground" />}
         </button>
       </DropdownMenuTrigger>
@@ -639,6 +656,20 @@ function UserMenu({
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* preventDefault keeps the menu from stealing focus back when the
+            dialog opens in the same tick (Radix closes the menu on select). */}
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={(e) => { e.preventDefault(); haptic("light"); setNotifOpen(true); }}
+        >
+          <Bell className="size-4 me-2" />
+          <span className="flex-1">{t("nav.notifications")}</span>
+          {unread > 0 && (
+            <span className="min-w-5 h-5 px-1 rounded-full bg-destructive text-white text-[11px] font-semibold tabular-nums flex items-center justify-center">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </DropdownMenuItem>
         <DropdownMenuItem
           className="cursor-pointer"
           onClick={() => navigate("profile")}
@@ -668,6 +699,7 @@ function UserMenu({
           {t("nav.signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
+      {notifOpen && <NotificationsPanel open={notifOpen} onOpenChange={setNotifOpen} />}
     </DropdownMenu>
   );
 }

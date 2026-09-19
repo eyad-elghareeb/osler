@@ -66,6 +66,19 @@ export const ar = {
     "nav.adminPanel": "لوحة الإدارة",
     "nav.signOut": "تسجيل الخروج",
     "nav.localSession": "جلسة محلية",
+    "nav.notifications": "الإشعارات",
+
+    /* ── Notification center ── */
+    "notif.title": "الإشعارات",
+    "notif.desc": "محتوى جديد وتحديثات البلاغات وإعلانات المشرفين.",
+    "notif.empty": "لا جديد لديك",
+    "notif.emptyDesc": "المحتوى الجديد وتحديثات الدعم وإعلانات المشرفين ستظهر هنا.",
+    "notif.markAllRead": "تعليم الكل كمقروء",
+    "notif.dismiss": "إغلاق",
+    "notif.contentTitle": "محتوى جديد متاح",
+    "notif.contentBody": "تم نشر مواد دراسية جديدة.",
+    "notif.ticketTitle": "تحديث على بلاغ الدعم",
+    "notif.ticketBody": "رد المشرفون أو غيّروا حالة بلاغك.",
 
     "learn.title": "تعلّم",
     "learn.subtitle":

@@ -66,6 +66,19 @@ export const en = {
     "nav.adminPanel": "Admin panel",
     "nav.signOut": "Sign out",
     "nav.localSession": "Local session",
+    "nav.notifications": "Notifications",
+
+    /* ── Notification center ── */
+    "notif.title": "Notifications",
+    "notif.desc": "New content, ticket updates and admin announcements.",
+    "notif.empty": "You're all caught up",
+    "notif.emptyDesc": "New content, support updates and admin announcements will appear here.",
+    "notif.markAllRead": "Mark all read",
+    "notif.dismiss": "Dismiss",
+    "notif.contentTitle": "New content available",
+    "notif.contentBody": "Fresh study material was just published.",
+    "notif.ticketTitle": "Support ticket updated",
+    "notif.ticketBody": "An admin replied or changed the status of your report.",
 
     "learn.title": "Learn",
     "learn.subtitle":
