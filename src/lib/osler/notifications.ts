@@ -69,6 +69,7 @@ interface NotificationsMeta {
   lastContentVersion: string | null;
   ticketSnap: Record<string, { status: string; reply: string | null }>;
   seenAnnouncementIds: string[];
+  dismissedIds: string[];
 }
 
 async function readItems(): Promise<OslerNotification[]> {
@@ -88,7 +89,12 @@ async function writeItems(items: OslerNotification[]): Promise<void> {
 }
 
 async function readMeta(): Promise<NotificationsMeta> {
-  const fallback: NotificationsMeta = { lastContentVersion: null, ticketSnap: {}, seenAnnouncementIds: [] };
+  const fallback: NotificationsMeta = {
+    lastContentVersion: null,
+    ticketSnap: {},
+    seenAnnouncementIds: [],
+    dismissedIds: [],
+  };
   try {
     const raw = await settings.get(META_KEY);
     if (!raw) return fallback;
@@ -97,6 +103,7 @@ async function readMeta(): Promise<NotificationsMeta> {
       lastContentVersion: parsed.lastContentVersion ?? null,
       ticketSnap: parsed.ticketSnap && typeof parsed.ticketSnap === "object" ? parsed.ticketSnap : {},
       seenAnnouncementIds: Array.isArray(parsed.seenAnnouncementIds) ? parsed.seenAnnouncementIds : [],
+      dismissedIds: Array.isArray(parsed.dismissedIds) ? parsed.dismissedIds : [],
     };
   } catch {
     return fallback;
@@ -122,11 +129,22 @@ export function subscribeNotifications(cb: () => void): () => void {
 /** All notifications, newest first. Never throws. */
 export async function listNotifications(): Promise<OslerNotification[]> {
   const items = await readItems();
+  const meta = await readMeta();
+  if (meta.dismissedIds.length > 0) {
+    const dismissedSet = new Set(meta.dismissedIds);
+    const filtered = items.filter((n) => !dismissedSet.has(n.id));
+    if (filtered.length !== items.length) {
+      await writeItems(filtered);
+      return filtered.sort((a, b) => b.createdAt - a.createdAt);
+    }
+  }
   return [...items].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** Insert unless the id already exists (idempotent — safe to re-run polls). */
+/** Insert unless the id already exists or was dismissed (idempotent — safe to re-run polls). */
 export async function pushNotification(input: Omit<OslerNotification, "readAt">): Promise<boolean> {
+  const meta = await readMeta();
+  if (meta.dismissedIds.includes(input.id)) return false;
   const items = await readItems();
   if (items.some((n) => n.id === input.id)) return false;
   await writeItems([{ ...input, readAt: null }, ...items]);
@@ -148,6 +166,11 @@ export async function markAllNotificationsRead(): Promise<void> {
 export async function dismissNotification(id: string): Promise<void> {
   const items = await readItems();
   await writeItems(items.filter((n) => n.id !== id));
+  const meta = await readMeta();
+  if (!meta.dismissedIds.includes(id)) {
+    meta.dismissedIds = [...meta.dismissedIds, id].slice(-200);
+    await writeMeta(meta);
+  }
 }
 
 /** Register a newly filed ticket locally so subsequent status changes (to in_progress / resolved)
@@ -207,8 +230,11 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
   // 1. New content — the version stamp moved since we last saw it.
   try {
     const version = currentContentVersion();
+    const contentNotifId = `content-${version}`;
     if (version && meta.lastContentVersion && version !== meta.lastContentVersion) {
-      if (await pushNotification({ id: `content-${version}`, kind: "content", createdAt: Date.now() })) changed = true;
+      if (!meta.dismissedIds.includes(contentNotifId)) {
+        if (await pushNotification({ id: contentNotifId, kind: "content", createdAt: Date.now() })) changed = true;
+      }
     }
     if (version && version !== meta.lastContentVersion) {
       meta.lastContentVersion = version;
@@ -236,6 +262,7 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
 
       if (statusMoved || freshReply) {
         const threadId = (ticket.context as { threadId?: string } | undefined)?.threadId ?? ticket.id;
+        const notifId = `ticket-${ticket.id}-${ticket.status}-${(ticket.reply ?? "").length}`;
 
         let title: string | undefined;
         let titleAr: string | undefined;
@@ -272,20 +299,22 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
           }
         }
 
-        const pushed = await pushNotification({
-          id: `ticket-${ticket.id}-${ticket.status}-${(ticket.reply ?? "").length}`,
-          kind: "ticket",
-          ticketId: ticket.id,
-          ticketStatus: ticket.status,
-          ticketSubject: ticket.subject,
-          title,
-          titleAr,
-          body,
-          bodyAr,
-          createdAt: Date.now(),
-          link: { section: "support", threadId },
-        });
-        if (pushed) changed = true;
+        if (!meta.dismissedIds.includes(notifId)) {
+          const pushed = await pushNotification({
+            id: notifId,
+            kind: "ticket",
+            ticketId: ticket.id,
+            ticketStatus: ticket.status,
+            ticketSubject: ticket.subject,
+            title,
+            titleAr,
+            body,
+            bodyAr,
+            createdAt: Date.now(),
+            link: { section: "support", threadId },
+          });
+          if (pushed) changed = true;
+        }
       }
       meta.ticketSnap[ticket.id] = { status: ticket.status, reply: ticket.reply ?? null };
       changed = true;
@@ -297,10 +326,12 @@ export async function refreshNotifications(): Promise<OslerNotification[]> {
     const announcements = await fetchAnnouncements();
     const seen = new Set(meta.seenAnnouncementIds);
     for (const a of announcements) {
-      if (seen.has(a.id)) continue;
+      const notifId = `ann-${a.id}`;
+      if (seen.has(a.id) || seen.has(notifId) || meta.dismissedIds.includes(notifId)) continue;
       seen.add(a.id);
+      seen.add(notifId);
       await pushNotification({
-        id: `ann-${a.id}`,
+        id: notifId,
         kind: "announcement",
         title: a.title,
         titleAr: a.titleAr,
