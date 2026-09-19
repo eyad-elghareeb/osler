@@ -201,7 +201,16 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
     push("foreground", t.foreground);
     push("primary", t.primary);
     push("primary-foreground", t.primaryForeground);
+    // primary-bright: text usages (active nav, stat accents) read this token.
+    // If not explicitly provided in the custom palette, default to primary
+    // so dark custom palettes don't inherit the default blue primary-bright!
+    push("primary-bright", t.primaryBright ?? t.primary);
+    if (t.primaryHover) push("primary-hover", t.primaryHover);
+    if (t.primary) {
+      vars.push(`--primary-soft: color-mix(in oklch, ${safeColor(t.primary) ?? "var(--primary)"} ${t.variant === "light" ? "10%" : "12%"}, transparent);`);
+    }
     push("accent", t.accent);
+    push("accent-foreground", t.accentForeground);
     push("card", t.card);
     push("card-foreground", t.cardForeground);
     push("popover", t.popover);
@@ -211,12 +220,52 @@ function injectCustomThemeStyles(customThemes: CustomThemeConfig[]) {
     push("muted", t.muted);
     push("muted-foreground", t.mutedForeground);
     push("destructive", t.destructive);
+    push("destructive-foreground", t.destructiveForeground);
+    if (t.destructive) {
+      vars.push(`--destructive-soft: color-mix(in oklch, ${safeColor(t.destructive) ?? "var(--destructive)"} 14%, transparent);`);
+    }
     push("success", t.success);
+    push("success-foreground", t.successForeground);
+    if (t.success) {
+      vars.push(`--success-soft: color-mix(in oklch, ${safeColor(t.success) ?? "var(--success)"} ${t.variant === "light" ? "16%" : "14%"}, transparent);`);
+    }
     push("warning", t.warning);
+    push("warning-foreground", t.warningForeground);
+    if (t.warning) {
+      vars.push(`--warning-soft: color-mix(in oklch, ${safeColor(t.warning) ?? "var(--warning)"} ${t.variant === "light" ? "18%" : "16%"}, transparent);`);
+    }
     push("info", t.info);
+    push("info-foreground", t.infoForeground);
+    if (t.info) {
+      vars.push(`--info-soft: color-mix(in oklch, ${safeColor(t.info) ?? "var(--info)"} 14%, transparent);`);
+    }
     push("border", t.border);
     push("input", t.input);
     push("ring", t.ring);
+    // border-strong: elevated surfaces (raised cards, dialogs) use a slightly
+    // stronger border. Derive from border if provided; otherwise inherit from
+    // the dark/light base. The 14% / 20% split matches the built-in tokens.
+    if (t.border) {
+      const safeB = safeColor(t.border) ?? "var(--border)";
+      const strongOpacity = t.variant === "light" ? "20%" : "14%";
+      // For light themes, border is a solid color, so we use it directly with
+      // increased opacity; for dark themes, the border is usually
+      // `oklch(1 0 0 / 8%)` so we derive a stronger alpha.
+      vars.push(`--border-strong: color-mix(in oklch, ${safeB} ${strongOpacity}, transparent);`);
+    }
+    // chart-1..5: engine accent colors used in pack cards, charts, and engine
+    // badges. Derive from the theme's primary by rotating the hue ±30°–130°
+    // so the chart palette harmonises with the primary instead of always
+    // staying on the default navy spectrum. Each hue shift is fixed so the
+    // five per-engine colors remain visually distinct.
+    if (t.primary) {
+      const p = safeColor(t.primary) ?? "var(--primary)";
+      vars.push(`--chart-1: ${p};`);
+      vars.push(`--chart-2: color-mix(in oklch longer hue, ${p} 50%, oklch(0.65 0.18 145) 50%);`);
+      vars.push(`--chart-3: color-mix(in oklch longer hue, ${p} 50%, oklch(0.55 0.12 260) 50%);`);
+      vars.push(`--chart-4: color-mix(in oklch longer hue, ${p} 50%, oklch(0.78 0.16 80) 50%);`);
+      vars.push(`--chart-5: color-mix(in oklch longer hue, ${p} 50%, oklch(0.7 0.2 16) 50%);`);
+    }
     push("sidebar-primary", t.primary);
     push("sidebar-ring", t.ring);
     push("sidebar", t.sidebar);

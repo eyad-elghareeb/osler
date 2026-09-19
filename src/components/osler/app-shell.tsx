@@ -640,7 +640,7 @@ function UserMenu({
           {unread > 0 && (
             <span
               aria-hidden="true"
-              className="absolute top-0 end-0 min-w-5 h-5 px-1 rounded-full bg-destructive text-white text-[11px] font-semibold tabular-nums flex items-center justify-center"
+              className="absolute top-0 end-0 min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold tabular-nums flex items-center justify-center"
             >
               {unread > 99 ? "99+" : unread}
             </span>
@@ -665,7 +665,7 @@ function UserMenu({
           <Bell className="size-4 me-2" />
           <span className="flex-1">{t("nav.notifications")}</span>
           {unread > 0 && (
-            <span className="min-w-5 h-5 px-1 rounded-full bg-destructive text-white text-[11px] font-semibold tabular-nums flex items-center justify-center">
+            <span className="min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold tabular-nums flex items-center justify-center">
               {unread > 99 ? "99+" : unread}
             </span>
           )}

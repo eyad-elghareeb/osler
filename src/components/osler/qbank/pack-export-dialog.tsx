@@ -14,6 +14,7 @@ import { type PdfExportOptions } from "@/components/osler/pdf-export-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { PackEntry, countQuestions } from "./shared";
 
 
@@ -345,44 +346,29 @@ export function PackExportDialog({
           {/* Toggles */}
           <div className="flex items-center justify-between">
             <Label className="text-xs">{t("pdf.showExplanations")}</Label>
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setShowExplanations(!showExplanations); }}
-              className={cn(
-                "w-10 h-5.5 rounded-full transition-colors relative",
-                showExplanations ? "bg-primary" : "bg-muted"
-              )}
-            >
-              <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white transition-transform", showExplanations ? "left-5" : "left-0.5")} />
-            </button>
+            <Switch
+              checked={showExplanations}
+              onCheckedChange={(v) => { haptic("selection"); setShowExplanations(v); }}
+              aria-label={t("pdf.showExplanations")}
+            />
           </div>
 
           <div className="flex items-center justify-between">
             <Label className="text-xs">{t("pdf.includeCover")}</Label>
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setIncludeCover(!includeCover); }}
-              className={cn(
-                "w-10 h-5.5 rounded-full transition-colors relative",
-                includeCover ? "bg-primary" : "bg-muted"
-              )}
-            >
-              <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white transition-transform", includeCover ? "left-5" : "left-0.5")} />
-            </button>
+            <Switch
+              checked={includeCover}
+              onCheckedChange={(v) => { haptic("selection"); setIncludeCover(v); }}
+              aria-label={t("pdf.includeCover")}
+            />
           </div>
 
           <div className="flex items-center justify-between">
             <Label className="text-xs">{t("pdf.twoColumn")}</Label>
-            <button
-              type="button"
-              onClick={() => { haptic("selection"); setTwoCol(!twoCol); }}
-              className={cn(
-                "w-10 h-5.5 rounded-full transition-colors relative",
-                twoCol ? "bg-primary" : "bg-muted"
-              )}
-            >
-              <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white transition-transform", twoCol ? "left-5" : "left-0.5")} />
-            </button>
+            <Switch
+              checked={twoCol}
+              onCheckedChange={(v) => { haptic("selection"); setTwoCol(v); }}
+              aria-label={t("pdf.twoColumn")}
+            />
           </div>
 
           {/* Font size */}

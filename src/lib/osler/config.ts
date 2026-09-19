@@ -62,8 +62,14 @@ export interface CustomThemeConfig {
   primary?: string;
   /** Primary foreground color (oklch). */
   primaryForeground?: string;
+  /** Lifted primary accent for high-contrast text on dark surfaces (oklch). */
+  primaryBright?: string;
+  /** Primary hover color (oklch). */
+  primaryHover?: string;
   /** Secondary accent color (oklch). */
   accent?: string;
+  /** Foreground on accent surfaces (oklch). */
+  accentForeground?: string;
   /** Background color (oklch). */
   background?: string;
   /** Foreground (text) color (oklch). */
@@ -86,12 +92,20 @@ export interface CustomThemeConfig {
   mutedForeground?: string;
   /** Destructive color (oklch). */
   destructive?: string;
+  /** Foreground on destructive surfaces (oklch). */
+  destructiveForeground?: string;
   /** Positive status color (oklch). */
   success?: string;
+  /** Foreground on success surfaces (oklch). */
+  successForeground?: string;
   /** Caution status color (oklch). */
   warning?: string;
+  /** Foreground on warning surfaces (oklch). */
+  warningForeground?: string;
   /** Informational status color (oklch). */
   info?: string;
+  /** Foreground on info surfaces (oklch). */
+  infoForeground?: string;
   /** Border color (oklch). */
   border?: string;
   /** Input border color (oklch). */
